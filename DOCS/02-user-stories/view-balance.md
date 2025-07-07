@@ -1,7 +1,7 @@
-# User story: Zobrazení zůstatku a historie transakcí
+# User story: Zobrazení zůstatku
 
 ## Popis
-Jako **uživatel** chci vidět svůj Bitcoin zůstatek a historii transakcí, abych mohl snadno sledovat stav svých prostředků a ověřit příchozí nebo odchozí platby.
+Jako **uživatel** chci vidět aktuální zůstatek své Bitcoin peněženky, abych měl přehled o stavu svých prostředků.
 
 ## Důvod
-Možnost sledovat zůstatek a transakce je základní funkce každé peněženky.
+Zůstatek je základní informmace potřebná pro správu financí.
