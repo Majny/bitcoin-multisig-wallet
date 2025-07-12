@@ -17,10 +17,8 @@ Uživatel připojí svůj Trezor, aby mohl zobrazit zůstatek, histrii a spravov
 4. Aplikace zahájí spojení se zarížením Trezor.
 5. Zobrazí se obrazovka "Connecting to Trezor...".
 6. Uživatel musí na Trezoru potvrdit připojení / zadat PIN.
-7. Po úspěšném spojení se zobrazí seznam dostupných účtů / pěněženek.
-7. Uživatel si vybere účet, který chce načíst.
-8. Jakmile je účet načtený, aplikace zobrazí „Trezor Connected“ s tlačítkem „Continue“.
-9. Uživatel klikne na "Continue" a je přesměrován na hlavní dashboard. 
+7. Po úspěšném spojení se zobrazí „Trezor Connected“ s tlačítkem „Continue“.
+8. Uživatel klikne na "Continue" a přechází do dalšího kroku, kde si vybírá účet (viz UC-08)
 
 ---
 
@@ -30,5 +28,4 @@ Uživatel připojí svůj Trezor, aby mohl zobrazit zůstatek, histrii a spravov
 
 ## Postconditions
 - Trezor je úspěšně připojen.
-- Uživatel si zvolil účet / peněženku, kterou chce spravovat.- Aplikace načetla odpovídající zůstatek a transakce.
-- Uživatel může pracovat s peněženkou na hlavním dashboardu.
+- Uživatel může přejít na výběr účtu (UC-08). 
