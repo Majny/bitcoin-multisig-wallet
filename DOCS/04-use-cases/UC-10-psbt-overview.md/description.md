@@ -24,7 +24,7 @@ Uživatel si prohlíží přehled všech rozpracovaných PSBT transakcí v rámc
 ---
 
 ## Alternative Flow
-1A. Pokud vybraná multisig peněženka nemá žádné PSBT transakce, tak aplikace zobrazí informaci „No PSBTs available“ a nabídne možnost vytvořit nebo importovat novou PSBT.
+1A. Uživatel může vytvořit nový PSBTs pomocí "Create New PSBT" a bude vytvářet novou transakci (viz. UC-05).
 
 ---
 
