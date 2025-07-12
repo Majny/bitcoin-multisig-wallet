@@ -1,0 +1,29 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+
+U -> A : Otevře aplikaci
+A -> U : Zobrazí 'No Wallet Connected'
+U -> A : Klikne na 'Connect Trezor'
+
+A -> T : Pokus o připojení
+
+alt Trezor nelze připojit / nerozpoznán
+  T --> A : Chyba spojení
+  A -> U : Nabídne 'Retry' nebo 'Cancel'
+else Trezor rozpoznán
+  A -> U : Zobrazí 'Connecting to Trezor...'
+  U -> T : Potvrdí připojení / Zadá PIN
+
+  alt PIN správně
+    T --> A : Potvrzení OK
+    A -> U : Zobrazí 'Trezor Connected'
+    U -> A : Klikne na 'Continue'
+    A -> U : Přechod na výběr účtu (UC-08)
+  else PIN špatně / odmítnut
+    T --> A : Chyba ověření
+    A -> U : Zobrazí 'No Wallet Connected'
+  end
+end
+@enduml
