@@ -1,0 +1,17 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Backend" as B
+
+U -> A : Otevře hlavní dashboard
+
+A -> B : Načti historii transakcí pro vybraný účet
+
+alt Historie úspěšně načtena
+  B --> A : Seznam transakcí
+  A -> U : Zobrazí transakce s detaily
+else Chyba při načítání
+  B --> A : Chyba komunikace
+  A -> U : Zobrazí hlášení o chybě + tlačítko "Retry"
+end
+@enduml

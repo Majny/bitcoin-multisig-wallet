@@ -1,4 +1,3 @@
-
 # UC-07: Řazení UTXOs
 
 ## Popis
@@ -8,9 +7,8 @@ Uživatel si může seřadit seznam UTXOs podle různých kritérií, aby měl l
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor a vybraný účet.
+- Uživatel má připojený Trezor a vybraný účet (viz. UC-08).
 - Uživatel má v aplikaci deaktivovaný režim "Auto Select“ UTXOs a je v "Edit Selection".
-- Backend server je dostupný.
 - Uživatel má k dispozici alespoň jeden UTXO.
 
 ## Main Flow

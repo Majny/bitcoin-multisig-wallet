@@ -1,0 +1,40 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+participant "Backend" as B
+
+U -> A : Klikne na "Send"
+A -> U : Zobrazí formulář (adresa + částka)
+
+U -> A : Zadá adresu a částku
+
+alt Neplatná adresa nebo částka
+  A -> U : Zobrazí chybu a výzvu k opravě
+else Platné údaje
+
+  alt Auto Select aktivní
+    A -> A : Automaticky vybere UTXOs
+    U -> A : Zvolí poplatek (Low/Med/High)
+  else Auto Select vypnutý
+    A -> U : Přesměrování do Coin Control (viz UC-06)
+    U -> A : Ruční výběr UTXOs + nastavení poplatku
+  end
+
+  U -> A : Potvrzení transakce
+  A -> U : Zobrazí souhrn ke kontrole
+  U -> T : Potvrzení na Trezoru
+
+  alt Trezor potvrdí
+    T --> A : Podepsaná transakce
+    A -> B : Odeslání transakce do Bitcoin sítě
+    B --> A : OK
+    A -> U : Potvrzení o úspěšném odeslání
+    A -> U : Zobrazí transakci v historii
+  else Trezor odmítne nebo chyba
+    T --> A : Chyba / Odmítnutí
+    A -> U : Transakce nebyla odeslána
+  end
+
+end
+@enduml

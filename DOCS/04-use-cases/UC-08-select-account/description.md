@@ -7,7 +7,7 @@ Uživatel si po připojení Trezoru vybírá konkrétní účet, který chce pou
 - Uživatel
 
 ## Preconditions
-- Uživatel úspěšně připojil své zařízení Trezor.
+- Uživatel úspěšně připojil své zařízení Trezor (viz. UC-01).
 - Trezor poskytuje seznam dostupných účtů s jejich zůstatky.
 
 ## Main Flow

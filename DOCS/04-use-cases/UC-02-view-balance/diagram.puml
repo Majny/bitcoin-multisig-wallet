@@ -1,0 +1,17 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Backend" as B
+
+U -> A : Otevře dashboard
+A -> B : Načti zůstatek (BTC + měna)
+
+alt Úspěšné načtení
+  B --> A : Zůstatek (BTC + měna)
+  A -> U : Zobrazí zůstatek na účtu
+  A -> B : Opakuje načítání dle intervalu
+else Chyba komunikace
+  B --> A : Chyba (např. timeout)
+  A -> U : Zobrazí 'Unknown' + tlačítko 'Refresh'
+end
+@enduml

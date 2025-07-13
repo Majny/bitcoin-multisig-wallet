@@ -1,0 +1,31 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+
+U -> A : Klikne na "Edit Selection"
+A -> T : Načti dostupné UTXOs
+T --> A : Seznam UTXOs
+A -> U : Zobrazí seznam k výběru
+
+loop Uživatel mění kritérium řazení (viz. UC-07)
+  U -> A : Zvolí kritérium řazení
+  alt Kritérium zvoleno
+    A -> A : Seřadí seznam podle kritéria
+    A -> U : Zobrazí seřazený seznam
+  else Kritérium nezvoleno (2A)
+    A -> U : Zobrazí výchozí pořadí
+  end
+end
+
+U -> A : Vybere konkrétní UTXOs
+
+alt Výběr nedostatečný nebo prázdný
+  A -> U : Zobrazí chybovou hlášku
+else Výběr OK
+  A -> U : Zobrazí souhrn vybraných UTXOs
+  U -> A : Zadá přesný poplatek
+  U -> A : Potvrdí výběr
+  A --> A : Vrátí UTXOs + poplatek do UC-05
+end
+@enduml

@@ -1,0 +1,20 @@
+;@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+
+
+U -> A : Zobrazí seznam UTXOs
+A -> U : Zobrazí dostupné UTXOs
+
+loop Opakovatelný výběr
+  U -> A : Zvolí kritérium řazení (např. částka, stáří)
+  
+  alt Kritérium zvoleno
+    A -> A : Seřadí seznam podle kritéria
+    A -> U : Zobrazí seřazený seznam
+  else Kritérium nezvoleno (3A)
+    A -> U : Zůstává výchozí pořadí
+  end
+end
+
+@enduml

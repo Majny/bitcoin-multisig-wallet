@@ -7,8 +7,7 @@ Uživatel vytvoří a odešle Bitcoin transakci na zvolenou cílovou adresu.
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor a vybraný účet.
-- Backend server je dostupný.
+- Uživatel má připojený Trezor a vybraný účet (viz. UC-08).
 - Uživatel má dostatek prostředků pro pokrytí částky a poplatků.
 
 ## Main Flow
@@ -19,7 +18,7 @@ Uživatel vytvoří a odešle Bitcoin transakci na zvolenou cílovou adresu.
         - Aplikace automaticky vybere UTXOs.
         - Uživatel nastaví poplatek výběrem možností "Low / Medium / High".
     - Pokud **Auto Select není aktivní**:
-        - Aplikace přesměruje uživatele do **Coin Control** (viz UC-06), kde si ručně vybere UTXOs a nastaví přesný poplatek.
+        - Aplikace přesměruje uživatele do **Coin Control** (viz. UC-06), kde si ručně vybere UTXOs a nastaví přesný poplatek.
 4. Uživatel potvrdí transakci.
 5. Aplikace zobrazí souhrn transakce ke kontrole.
 6. Uživatel potvrdí transakci na Trezoru.

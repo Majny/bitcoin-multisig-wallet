@@ -1,17 +1,16 @@
 # UC-04: Přijetí BTC
 
 ## Popis
-Uživatel si vygeneruje Bitcoin adresu pro příjem prostředk na svůj účet.
+Uživatel si vygeneruje Bitcoin adresu pro příjem prostředků na svůj účet.
 
 ## Actors
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor a vybraný účet.
-- Backend server je dostupný.
+- Uživatel má připojený Trezor a vybraný účet (viz. UC-08).
 
 ## Main Flow
-1. Uživatel na hlavním dashboard klikne na tlačítko "Recieve".
+1. Uživatel na hlavním dashboard klikne na tlačítko "Recieve BTC".
 2. Aplikace zobrazí obrazovku pro příjem Bitcoinů s nově vygenerovanou přijímací adresou.
 3. Uživatel může zkopírovat adresu nebo vyfotit QR kód.
 4. Po příjmu prostředků se transakce automaticky zobrazí v historii transakce.

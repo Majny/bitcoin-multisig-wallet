@@ -1,0 +1,21 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+
+U -> A : Klikne na "Receive BTC"
+
+A -> T : Vygeneruj novou BTC adresu
+
+alt Adresa úspěšně vygenerována
+  T --> A : Nová BTC adresa
+  A -> U : Zobrazí adresu + QR kód
+  U -> A : Zkopíruje adresu nebo naskenuje QR
+  A -> T : Sleduj přijaté transakce
+  T --> A : Nová transakce přijata
+  A -> U : Zobrazí transakci v historii
+else Chyba při generování adresy
+  T --> A : Chyba
+  A -> U : Zobrazí chybové hlášení
+end
+@enduml

@@ -7,14 +7,12 @@ Uživatel si zobrazí historii transakcí své Bitcoin peněženky na vybraném 
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor a vybraný účet.
-- Backend server je dostupný a synchronizovaný.
+- Uživatel má připojený Trezor a vybraný účet (viz. UC-08).
 
 ## Main Flow
 1. Uživatel otevře hlavní dashboard aplikace.
 2. Aplikace zobrazí seznam transakcí pro vybraný účet.
 3. Seznam obsahuje základní informace o transakcích.
-4. Uživatel může kliknout na konkrétní transakci a zobrazit detailní informace.
 
 ---
 

@@ -1,5 +1,4 @@
-
-# UC-06: Coin Control
+;# UC-06: Coin Control
 
 ## Popis
 Uživatel si ručně vybere konkrétní UTXOs, které budou použity při vytváření Bitcoin transakce.
@@ -8,14 +7,13 @@ Uživatel si ručně vybere konkrétní UTXOs, které budou použity při vytvá
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor a vybraný účet.
+- Uživatel má připojený Trezor a vybraný účet (viz. UC-08).
 - Uživatel má v aplikaci deaktivovaný režim "Auto Select“ UTXOs.
-- Backend server je dostupný.
 - Uživatel má k dispozici alespoň jeden UTXO.
 
 ## Main Flow
 1. Uživatel klikne na "Edit Selection".
-2. Aplikace zobrazí seznam všech dostupných UTXOs pro vybraný účet.
+2. Aplikace zobrazí seznam všech dostupných UTXOs pro vybraný účet, které si uživatel může seřadit podle různých kritérií (viz. UC-07).
 3. Uživatel si zvolí konkrétní UTXOs, které chce použít pro aktuální transakci.
 4. Aplikace zobrazí souhrn zvolených UTXOs s jejich částkami.
 5. Uživatel nastaví přesnou výši poplatku.

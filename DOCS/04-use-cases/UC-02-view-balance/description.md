@@ -7,14 +7,13 @@ Uživatel si zobrazí aktuální zůstatek Bitcoin peněženky na vybraném úč
 - Uživatel
 
 ## Preconditions
-- Uživatel má úspěšně připojený Trezor a vybraný účet / peněženku.
-- Backend server je dostupný a správně synchronizovaný s Bitcoin sítí.
+- Uživatel má úspěšně připojený Trezor a vybraný účet (viz. UC-08).
 
 ## Main Flow
 1. Uživatel otevře hlavní dashboard aplikace.
 2. Aplikace zobrazí zůstatek Bitcoin peněženky na vybraném účtu.
 3. Aplikace automaticky aktualizuje zůstatek podle definovaného intervalu.
-4. Zůstatek se zobrazí i ve zvolení měně.
+4. Zůstatek se zobrazí i ve zvolené měně.
 
 ---
 
@@ -22,7 +21,7 @@ Uživatel si zobrazí aktuální zůstatek Bitcoin peněženky na vybraném úč
 2A. Zůstatek se nepodaří načíst kvůli chybě komunikace s backendem, aplikace zobrazí "Unknown" a nabídne možnost "Refresh".
 
 ## Postconditions
-- Uživatel vidí aktuální zůstatek své Bitcoin peněženky v BTCa zvolené měně.
+- Uživatel vidí aktuální zůstatek své Bitcoin peněženky v BTC a zvolené měně.
 - Aplikace pravidelně aktualizuje zůstatek.
 
 

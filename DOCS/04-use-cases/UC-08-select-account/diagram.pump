@@ -1,0 +1,23 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+
+U -> A : Připojen Trezor (viz UC-01)
+A -> T : Načti seznam účtů
+T --> A : Seznam účtů + zůstatky
+A -> U : Zobrazí seznam účtů
+
+U -> A : Vybere účet
+
+alt Pokračuje dál
+  A -> U : Zobrazí tlačítko "Continue"
+  U -> A : Klikne na "Continue"
+  A -> T : Načti zůstatek a historii pro účet
+  T --> A : Data pro dashboard
+  A -> U : Přesměrování na dashboard
+else Zruší výběr
+  U -> A : Klikne na "Cancel"
+  A -> U : Návrat na předchozí obrazovku
+end
+@enduml
