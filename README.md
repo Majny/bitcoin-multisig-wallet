@@ -21,10 +21,10 @@ Aplikace umožňuje pokročilým uživatelům plně kontrolovat své prostředky
 **Přehled dokumentace** najdete v souboru [`DOCS/01-overview.md`](./DOCS/01-overview.md).
 
 **User Stories**  
-User stories definující potřeby uživatele, jsou uvedeny v [`DOCS/02-user-stories/user-stories-overview.md`](./DOCS/02-user-stories/user-stories-overview.md).
+User stories definující potřeby uživatele, jsou uvedeny v [`DOCS/02-user-stories/us-overview.md`](./DOCS/02-user-stories/us-overview.md).
 
 **Use Cases**  
-Každý klíčový případ užití aplikace je popsán v [`DOCS/04-use-cases/`](./DOCS/04-use-cases/).
+Každý klíčový případ užití aplikace je popsán v [`DOCS/04-use-cases/uc-overview.md`](./DOCS/04-use-cases/uc-overview.md).
 
 **Use Case diagrams**  
 PlantUML diagramy jsou k dispozici v jednotlivých složkách v Use Case sekci.
