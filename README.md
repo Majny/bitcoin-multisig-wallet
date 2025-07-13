@@ -6,6 +6,11 @@ Aplikace umožňuje pokročilým uživatelům plně kontrolovat své prostředky
 
 ---
 
+**Autor:** Jakub Dvořák  
+**Vedoucí bakalářské práce:** RNDr. Filip Zavoral, Ph.D.
+
+---
+
 ## Struktura projektu
 
 | Složka | Popis |
@@ -23,10 +28,13 @@ Aplikace umožňuje pokročilým uživatelům plně kontrolovat své prostředky
 **User Stories**  
 User stories definující potřeby uživatele, jsou uvedeny v [`DOCS/02-user-stories/us-overview.md`](./DOCS/02-user-stories/us-overview.md).
 
+**Požadavky na systém**
+Funkční a nefunkční požadavky: [`DOCS/03-requirements/overview.md`](./DOCS/03-requirements/requirements-overview.md)
+
 **Use Cases**  
 Každý klíčový případ užití aplikace je popsán v [`DOCS/04-use-cases/uc-overview.md`](./DOCS/04-use-cases/uc-overview.md).
 
-**Use Case diagrams**  
+**Use Case diagram**  
 PlantUML diagramy jsou k dispozici v jednotlivých složkách v Use Case sekci.
 Hlavní diagram aplikace: [`overview.puml`](./DOCS/diagrams/UC/uc-overview.svg)
 
