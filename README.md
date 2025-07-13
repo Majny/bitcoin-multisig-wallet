@@ -8,9 +8,9 @@ Aplikace umožňuje pokročilým uživatelům plně kontrolovat své prostředky
 
 ## Struktura projektu
 
-| Složka / soubor | Popis |
+| Složka | Popis |
 |-----------------|--------|
-| `DOCS/`         | Kompletní dokumentace – user stories, use cases, diagramy, přehled systému. |
+| `DOCS/`         | Dokumentace – user stories, use cases, diagramy, přehled systému. |
 |APP/ Backend/    | TODO |
 | `README.md`     | Tento soubor. |
 
@@ -21,13 +21,13 @@ Aplikace umožňuje pokročilým uživatelům plně kontrolovat své prostředky
 **Přehled dokumentace** najdete v souboru [`DOCS/01-overview.md`](./DOCS/01-overview.md).
 
 **User Stories**  
-User stories definující potřeby uživatele, jsou uvedeny v [`DOCS/02-user-stories/`](./DOCS/02-user-stories/).
+User stories definující potřeby uživatele, jsou uvedeny v [`DOCS/02-user-stories/user-stories-overview.md`](./DOCS/02-user-stories/user-stories-overview.md).
 
 **Use Cases**  
 Každý klíčový případ užití aplikace je popsán v [`DOCS/04-use-cases/`](./DOCS/04-use-cases/).
 
 **Use Case diagrams**  
 PlantUML diagramy jsou k dispozici v jednotlivých složkách v Use Case sekci.
-Hlavní diagram aplikace: [`overview.puml`](./DOCS/diagrams/UC/uc-overview.puml)
+Hlavní diagram aplikace: [`overview.puml`](./DOCS/diagrams/UC/uc-overview.svg)
 
 
