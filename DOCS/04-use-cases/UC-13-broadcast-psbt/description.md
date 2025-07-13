@@ -4,10 +4,9 @@
 Uživatel odešle plně podepsanou PSBT transakci do Bitcoin sítě.
 
 ## Actors
-- Uživatel multisig peněženky
+- Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor (viz. UC-01).
 - Uživatel má vybranou multisig peněženku (viz. UC-O9).
 - Transakce má dostatek podpisů pro validní odeslání.
 - Uživatel otevřel detail této PSBT transakce (viz. UC-11).

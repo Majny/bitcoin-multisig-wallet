@@ -1,0 +1,16 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+
+U -> A : Otevře sekci "Multisig Wallets"
+A -> A : Načti seznam multisig peněženek
+A -> U : Zobrazí seznam peněženek s názvem, M-of-N a zůstatkem
+
+alt Uživatel vybere existující peněženku
+  U -> A : Klikne na požadovanou peněženku
+  A -> U : Uživateli se zobrazí peněženka
+else Uživatel klikne na "Import Wallet" (4A)
+  U -> A : Spustí import multisig peněženky
+  A -> A : Přechod do UC-14: Import Wallet
+end
+@enduml

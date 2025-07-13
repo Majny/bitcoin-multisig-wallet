@@ -1,0 +1,19 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Backend" as N
+
+A -> A : Zjistí, že transakce je plně podepsaná
+A -> U : Zobrazí tlačítko "Broadcast"
+U -> A : Klikne na "Broadcast"
+A -> N : Odeslání transakce do Bitcoin sítě
+
+alt Odeslání úspěšné
+  N --> A : Potvrzení o přijetí
+  A -> U : Zobrazí potvrzení
+  A -> A : Přesune transakci do historie
+else Odeslání selhalo (4A)
+  N --> A : Chyba při odeslání
+  A -> U : Zobrazí chybovou hlášku
+end
+@enduml

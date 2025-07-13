@@ -7,16 +7,17 @@ Uživatel importuje existující multisig peněženku pomocí descriptoru, aby m
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor.
+- Uživatel má připojený Trezor a vbraný účet (viz. UC-08).
 - Uživatel má připravený descriptor (nebo soubor s konfigurací multisig peněženky).
 
 ## Main Flow
-1. Uživatel přejde z hlavního mennu na obrazovku "Multisig Wallets“.
-2. Uživatel vloží descriptor (nebo nahraje soubor).
-3. Aplikace ověří validitu descriptoru.
-4. Pokud je descriptor validní, aplikace zobrazí název peněženky a základní parametry.
-5. Uživatel potvrdí import.
-6. Peněženka se objeví v seznamu dostupných multisig peněženek.
+1. Uživatel přejde z hlavního menu na obrazovku "Multisig Wallets“.
+2. Uživatel přejde na "Import Wallet".
+3. Uživatel vloží descriptor (nebo nahraje soubor).
+4. Aplikace ověří validitu descriptoru.
+5. Pokud je descriptor validní, aplikace zobrazí název peněženky a základní parametry.
+6. Uživatel potvrdí import.
+7. Peněženka se objeví v seznamu dostupných multisig peněženek.
 
 ---
 

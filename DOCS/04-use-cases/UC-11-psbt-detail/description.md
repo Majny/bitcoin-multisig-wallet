@@ -7,7 +7,6 @@ Uživatel si zobrazí detail vybrané PSBT transakce a rozhodne se, zda ji podep
 - Uživatel
 
 ## Preconditions
-- Uživatel má připojený Trezor.
 - Uživatel má vybranou multisig peněženku (viz UC-09).
 - Uživatel se přesunul do přehledu PSBT transakcí (viz UC-10).
 
@@ -18,14 +17,14 @@ Uživatel si zobrazí detail vybrané PSBT transakce a rozhodne se, zda ji podep
    - Počet potřebných a aktuálních podpisů.
    - Transakční poplatek.
 3. Uživatel má k dispozici následující možnosti:
-   - Podepsat transakci pomocí Trezoru.
+   - Podepsat transakci pomocí Trezoru (viz. UC-11).
    - Exportovat PSBT jako QR nebo text.
-   - Zpět na seznam PSBT (UC-10).
+   - Zpět na seznam PSBT (viz. UC-10).
 
 ---
 
 ## Alternative Flow
-3A. Pokud uživatel zvolí podpis, ale transakce je již kompletně podepsaná, tak aplikace nabídne možnost broadcastu.
+3A. Pokud uživatel zvolí podpis, ale transakce je již kompletně podepsaná, tak aplikace nabídne možnost broadcastu (viz. UC-13).
 
 ---
 

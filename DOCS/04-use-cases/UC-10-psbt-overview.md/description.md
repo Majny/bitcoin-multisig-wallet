@@ -17,7 +17,7 @@ Uživatel si prohlíží přehled všech rozpracovaných PSBT transakcí v rámc
    - Částku transakce.
    - Počet požadovaných podpisů (např. "Waiting for 2 signatures").
 3. Uživatel může:
-   - Otevřít detail PSBT transakce.
+   - Otevřít detail PSBT transakce (viz. UC-11).
    - Vytvořit novou PSBT transakci.
    - Importovat PSBT transakci pomocí QR kódu nebo textového vstupu.
 

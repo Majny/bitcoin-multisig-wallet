@@ -1,0 +1,25 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+
+U -> A : Vybere konkrétní PSBT
+A -> A : Načti detaily PSBT
+A -> U : Zobrazí vstupy, výstupy, podpisy, poplatek
+
+U -> A : Zvolí akci
+
+alt Podepsat transakci
+  alt Transakce ještě není kompletně podepsaná
+    A -> T : Zahájí podpis přes Trezor
+    T --> A : Vrátí podepsanou část
+    A -> U : Aktualizuje počet podpisů
+  else Transakce je už kompletně podepsaná (3A)
+    A -> U : Nabídne možnost broadcastu (viz UC-13)
+  end
+else Exportovat transakci
+  A -> U : Zobrazí PSBT jako QR nebo text
+else Zpět na seznam
+  A -> A : Přechod zpět do UC-10
+end
+@enduml

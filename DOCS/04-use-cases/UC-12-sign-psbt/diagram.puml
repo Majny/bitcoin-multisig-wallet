@@ -1,0 +1,30 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+participant "Trezor zařízení" as T
+
+U -> A : Klikne na "Sign PSBT"
+A -> T : Odeslání PSBT na Trezor
+
+alt Trezor dostupný
+  T -> U : Zobrazí detaily transakce
+  U -> T : Potvrdí podpis
+
+  alt Potvrzeno
+    T --> A : Vygenerovaný podpis
+    A -> A : Přidá podpis k PSBT
+    A -> A : Aktualizuje stav transakce
+
+    alt Je dosažen počet podpisů
+      A -> A : Označí jako "Broadcast“
+    end
+  else Odmítnuto (3A)
+    T --> A : Uživatel odmítl podpis
+    A -> U : Zobrazí info o odmítnutí
+  end
+
+else Trezor nedostupný nebo chyba (4A)
+  T --> A : Chyba komunikace
+  A -> U : Zobrazí chybu + možnosti "Retry" / "Cancel"
+end
+@enduml

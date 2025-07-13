@@ -1,0 +1,20 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+
+U -> A : Otevře přehled PSBT transakcí
+A -> A : Načti seznam PSBT transakcí pro multisig peněženku
+A -> U : Zobrazí seznam PSBT transakcí s datem, částkou, podpisy
+
+U -> A : Vybere akci
+
+alt Otevře detail transakce
+  A -> A : Přechod do UC-11: Detail PSBT transakce
+else Vytvoří novou transakci
+  U -> A : Klikne na "Create New PSBT"
+  A -> A : Přechod do UC-05: Odeslání BTC
+else Importuje transakci
+  U -> A : Spustí import (QR nebo text)
+  A -> A : Načte PSBT a přidá do seznamu
+end
+@enduml

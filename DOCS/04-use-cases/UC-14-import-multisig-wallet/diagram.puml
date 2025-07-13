@@ -1,0 +1,18 @@
+@startuml
+participant "Uživatel" as U
+participant "Aplikace" as A
+
+U -> A : Přejde na "Multisig Wallets"
+U -> A : Klikne na "Import Wallet"
+U -> A : Vloží descriptor nebo nahraje soubor
+A -> A : Ověří validitu descriptoru
+
+alt Descriptor validní
+  A -> U : Zobrazí název a parametry
+  U -> A : Potvrdí import
+  A -> A : Přidá peněženku do seznamu
+  A -> U : Potvrzení o úspěšném importu
+else Descriptor nevalidní (3A)
+  A -> U : Zobrazí chybové hlášení
+end
+@enduml
