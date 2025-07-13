@@ -1,33 +1,33 @@
-## Bitcoin mobilni aplikace s coin-control spopracujici s trezorem
+# Bitcoin Multisig Wallet – Bakalářská práce
 
-## USER STORIES (demo)
+Tento projekt je součástí bakalářské práce a představuje software a dokumentaci mobilní aplikace pro správu Bitcoin prostředků s podporou **multisig transakcí**, **coin control** a **hardware peněženky Trezor**.
 
-Urcite je potreba - minimalni produkt: 
-Jako uzivatel chci pripojit Trezor k aplikaci, abych mohl podepisovat transakce.
-Jako uzivatel chci videt sve UTXO a vybrat je pomoci coin-control.
-Jako uzivatel chci zadat adresu prijemce a castku v BTC nebo korunach.
-Jako uzivatel chci videt prehled transakce pred odeslanim a potvrdit ji na Trezoru.
-Jako uzivatel chci videt historii mych transakci.
-Jako uzivatel chci chranit aplikaci biometricky nebo pinem.
+Aplikace umožňuje pokročilým uživatelům plně kontrolovat své prostředky, vytvářet a podepisovat transakce v prostředí s důrazem na bezpečnost, soukromí a flexibilitu.
+
+---
+
+## Struktura projektu
+
+| Složka / soubor | Popis |
+|-----------------|--------|
+| `DOCS/`         | Kompletní dokumentace – user stories, use cases, diagramy, přehled systému. |
+|APP/ Backend/    | TODO |
+| `README.md`     | Tento soubor. |
+
+---
+
+## Dokumentace
+
+**Přehled dokumentace** najdete v souboru [`DOCS/01-overview.md`](./DOCS/01-overview.md).
+
+**User Stories**  
+User stories definující potřeby uživatele, jsou uvedeny v [`DOCS/02-user-stories/`](./DOCS/02-user-stories/).
+
+**Use Cases**  
+Každý klíčový případ užití aplikace je popsán v [`DOCS/04-use-cases/`](./DOCS/04-use-cases/).
+
+**Use Case diagrams**  
+PlantUML diagramy jsou k dispozici v jednotlivých složkách v Use Case sekci.
+Hlavní diagram aplikace: [`overview.puml`](./DOCS/diagrams/UC/uc-overview.puml)
 
 
-Dalsi moznosti:
-Jako uzivatel chci skenovat QR kod pro adresu.
-Jako uzivatel chci pridat poznamku k transakci.
-Jako uzivatel chci exportovat historii transakci.
-Jako uzivatel chci manualne nastavovat poplatek.
-
-
-## NA ROZMYSLENI
-
-Potrebuje uzivatel ucet? (Ne pro MVP)
-
-NE:
-Bude pouzivat Trezor jako ucet
-Neni potreba login
-Aplikace nebude ukladat zane informace
-
-ANO:
-Zalohovani
-Vice Trezoru?
-Notifikace pres email
