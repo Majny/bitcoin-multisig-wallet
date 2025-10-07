@@ -1,0 +1,113 @@
+@startuml
+' ===== Base look =====
+skinparam backgroundColor #FFFFFF
+skinparam handwritten false
+skinparam wrapWidth 240
+skinparam maxMessageSize 200
+skinparam defaultTextAlignment center
+skinparam shadowing false
+skinparam linetype ortho
+skinparam FontColor #000000
+skinparam ArrowFontColor #000000
+skinparam ArrowThickness 1.2
+skinparam RectangleBorderColor #000000
+skinparam RectangleFontColor #000000
+skinparam RectangleFontSize 13
+skinparam NoteBackgroundColor #F9FAFB
+skinparam NoteBorderColor #000000
+skinparam NoteFontColor #111111
+skinparam cloud {
+  BackgroundColor #E5E7EB
+  BorderColor #000000
+}
+skinparam database {
+  BackgroundColor #E5E7EB
+  BorderColor #000000
+}
+
+left to right direction
+
+rectangle "**Android App**\n*Jetpack Compose UI*" as AndroidApp
+rectangle "**Trezor**\nHW signer & authenticator" as Trezor
+cloud "**TOR Network**" as TorNet
+
+rectangle "**RPi @ Home**\n- bitcoind\n- RPC via onion\n- P2P přes Tor" as RPi {
+  rectangle "**Bitcoin Core**\n`bitcoind`\nRPC: 8332\nZMQ: 28332/28333" as Bitcoind
+}
+
+rectangle "**CLOUD**" as Cloud {
+  rectangle "**API Gateway**" as ApiGw
+  rectangle "**Auth & Pairing Service**" as AuthSvc
+  rectangle "**Wallet Registry (Source of Truth)**" as WalletReg
+  rectangle "**Wallet Importer**\n(deskriptory / BSMS / Sparrow export)" as WalletImporter
+  rectangle "**Explorer Service**" as Explorer
+  rectangle "**PSBT Builder/Bridge**" as Bridge
+  rectangle "**Node Proxy (Tor RPC)**" as NodeProxy
+  rectangle "**Signer Service (HWI)**" as Signer
+  rectangle "**Electrum/Esplora **" as Electrum
+  rectangle "**Notification Service**\n(FCM / webhooks)" as Notify
+  database "**PostgreSQL**" as PG
+  rectangle "**Redis**" as Redis
+  rectangle "**Object Storage (S3/MinIO)**" as S3
+  rectangle "**Observability**" as Obs
+}
+
+rectangle "**Multisig Coordinator**" as MsCoordinator
+
+' ===== Relations =====
+AndroidApp -down[#1D4ED8]-> ApiGw : REST
+AndroidApp ..[#6B7280,dotted]-> Trezor : USB/OTG
+Signer ..[#6B7280,dotted].. Trezor : USB backend
+
+ApiGw -[#1D4ED8]-> AuthSvc : pairing
+AuthSvc -[#10B981]-> PG : devices
+
+ApiGw -[#1D4ED8]-> WalletReg : wallets
+WalletReg -[#10B981]-> PG
+WalletImporter -[#1D4ED8]-> WalletReg : import policy/desc
+
+ApiGw -[#1D4ED8]-> Explorer : read
+Explorer -[#1D4ED8]-> WalletReg : descriptors
+Explorer -[#9333EA,dashed]-> Electrum : fallback read
+Explorer -[#9333EA,dashed]-> NodeProxy : fallback RPC
+Explorer -[#10B981]-> Redis : hot cache
+Explorer -[#10B981]-> PG   : projections
+
+ApiGw -[#1D4ED8]-> Bridge : PSBT
+Bridge -[#1D4ED8]-> WalletReg : descriptors
+Bridge -[#1D4ED8]-> NodeProxy : RPC wrapper (REST uvnitř cloudu)
+ApiGw -[#1D4ED8]-> WalletImporter : import policy/descriptor
+
+
+Bridge -[#1D4ED8]-> MsCoordinator : PSBT lifecycle
+MsCoordinator -[#10B981]-> PG
+MsCoordinator -[#10B981]-> Redis
+MsCoordinator -[#1D4ED8]-> Notify : status → notifikace
+
+ApiGw -[#1D4ED8]-> Signer : sign/displayaddress
+Signer -[#1D4ED8]-> WalletReg : publish descriptors
+Signer -[#10B981]-> PG : audit
+Signer -[#10B981]-> S3 : PSBT blobs
+
+NodeProxy -down[#EF4444,thickness=2]-> TorNet : Tor/Onion
+TorNet -down[#EF4444,thickness=2]-> Bitcoind : RPC 8332
+
+Obs -[#1D4ED8]-> ApiGw
+Obs -[#1D4ED8]-> Explorer
+Obs -[#1D4ED8]-> Bridge
+Obs -[#1D4ED8]-> MsCoordinator
+Obs -[#1D4ED8]-> Signer
+Obs -[#1D4ED8]-> NodeProxy
+
+
+
+' ===== Legend =====
+legend left
+|= Šipka |= Význam |
+| <color:#1D4ED8>■ modrá plná</color> | Sync **REST/HTTPS** volání |
+| <color:#9333EA>■ fialová čárkovaná</color> | **fallback** cesta |
+| <color:#6B7280>■ šedá tečkovaná</color> | **Lokální fyzické** spojení (USB) |
+| <color:#EF4444>■ červená tlustá</color> | **Tor/Onion** transport (Node → Core) |
+| <color:#10B981>■ zelená plná</color> | **Uložení/čtení** (DB/Redis/S3) |
+endlegend
+@enduml
