@@ -1,5 +1,4 @@
 @startuml
-' ===== Base look =====
 skinparam backgroundColor #FFFFFF
 skinparam handwritten false
 skinparam wrapWidth 240
@@ -54,43 +53,41 @@ rectangle "**CLOUD**" as Cloud {
 
 rectangle "**Multisig Coordinator**" as MsCoordinator
 
-' ===== Relations =====
-AndroidApp -down[#1D4ED8]-> ApiGw : REST
-AndroidApp ..[#6B7280,dotted]-> Trezor : USB/OTG
-Signer ..[#6B7280,dotted].. Trezor : USB backend
+AndroidApp -down[#1D4ED8]-> ApiGw
+AndroidApp ..[#6B7280,dotted]-> Trezor
+Signer ..[#6B7280,dotted].. Trezor
 
-ApiGw -[#1D4ED8]-> AuthSvc : pairing
-AuthSvc -[#10B981]-> PG : devices
+ApiGw -[#1D4ED8]-> AuthSvc
+AuthSvc -[#10B981]-> PG
 
-ApiGw -[#1D4ED8]-> WalletReg : wallets
+ApiGw -[#1D4ED8]-> WalletReg
 WalletReg -[#10B981]-> PG
-WalletImporter -[#1D4ED8]-> WalletReg : import policy/desc
+WalletImporter -[#1D4ED8]-> WalletReg
 
-ApiGw -[#1D4ED8]-> Explorer : read
-Explorer -[#1D4ED8]-> WalletReg : descriptors
-Explorer -[#9333EA,dashed]-> Electrum : fallback read
-Explorer -[#9333EA,dashed]-> NodeProxy : fallback RPC
-Explorer -[#10B981]-> Redis : hot cache
-Explorer -[#10B981]-> PG   : projections
+ApiGw -[#1D4ED8]-> Explorer
+Explorer -[#1D4ED8]-> WalletReg
+Explorer -[#9333EA,dashed]-> Electrum
+Explorer -[#9333EA,dashed]-> NodeProxy
+Explorer -[#10B981]-> Redis
+Explorer -[#10B981]-> PG
 
-ApiGw -[#1D4ED8]-> Bridge : PSBT
-Bridge -[#1D4ED8]-> WalletReg : descriptors
-Bridge -[#1D4ED8]-> NodeProxy : RPC wrapper (REST uvnitř cloudu)
-ApiGw -[#1D4ED8]-> WalletImporter : import policy/descriptor
+ApiGw -[#1D4ED8]-> Bridge
+Bridge -[#1D4ED8]-> WalletReg
+Bridge -[#1D4ED8]-> NodeProxy
+ApiGw -[#1D4ED8]-> WalletImporter
 
-
-Bridge -[#1D4ED8]-> MsCoordinator : PSBT lifecycle
+Bridge -[#1D4ED8]-> MsCoordinator
 MsCoordinator -[#10B981]-> PG
 MsCoordinator -[#10B981]-> Redis
-MsCoordinator -[#1D4ED8]-> Notify : status → notifikace
+MsCoordinator -[#1D4ED8]-> Notify
 
-ApiGw -[#1D4ED8]-> Signer : sign/displayaddress
-Signer -[#1D4ED8]-> WalletReg : publish descriptors
-Signer -[#10B981]-> PG : audit
-Signer -[#10B981]-> S3 : PSBT blobs
+ApiGw -[#1D4ED8]-> Signer
+Signer -[#1D4ED8]-> WalletReg
+Signer -[#10B981]-> PG
+Signer -[#10B981]-> S3
 
-NodeProxy -down[#EF4444,thickness=2]-> TorNet : Tor/Onion
-TorNet -down[#EF4444,thickness=2]-> Bitcoind : RPC 8332
+NodeProxy -down[#EF4444,thickness=2]-> TorNet
+TorNet -down[#EF4444,thickness=2]-> Bitcoind
 
 Obs -[#1D4ED8]-> ApiGw
 Obs -[#1D4ED8]-> Explorer
@@ -99,9 +96,6 @@ Obs -[#1D4ED8]-> MsCoordinator
 Obs -[#1D4ED8]-> Signer
 Obs -[#1D4ED8]-> NodeProxy
 
-
-
-' ===== Legend =====
 legend left
 |= Šipka |= Význam |
 | <color:#1D4ED8>■ modrá plná</color> | Sync **REST/HTTPS** volání |
