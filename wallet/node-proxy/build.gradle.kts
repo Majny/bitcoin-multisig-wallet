@@ -1,5 +1,7 @@
 plugins {
     kotlin("jvm") version "2.2.0"
+    application
+    id("com.github.johnrengelman.shadow") version "8.1.1"
 }
 
 group = "org.example"
@@ -44,4 +46,8 @@ tasks.test {
 }
 kotlin {
     jvmToolchain(21)
+}
+
+application {
+    mainClass.set("org.example.nodeproxy.MainKt")
 }
