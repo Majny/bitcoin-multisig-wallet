@@ -4,7 +4,6 @@ import com.fasterxml.jackson.annotation.JsonInclude
 import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.module.kotlin.jacksonObjectMapper
 import com.fasterxml.jackson.module.kotlin.readValue
-import io.github.cdimascio.dotenv.dotenv
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.*
@@ -15,8 +14,6 @@ import org.example.nodeproxy.dto.Allowlist
 import org.example.nodeproxy.dto.JsonRpcError
 import org.example.nodeproxy.dto.JsonRpcRequest
 import org.example.nodeproxy.dto.JsonRpcResponse
-import java.nio.file.Files
-import java.nio.file.Path
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicInteger
@@ -24,45 +21,37 @@ import kotlin.time.Duration.Companion.minutes
 
 data class Config(
     val rpcUrl: String,
-    val rpcUser: String?,
-    val rpcPass: String?,
+    val rpcUser: String,
+    val rpcPass: String,
     val apiKey: String?,
     val connectTimeoutMs: Long = 4_000,
     val socketTimeoutMs: Long = 8_000,
     val retries: Int = 2
 )
 
-private val env = runCatching { dotenv() }.getOrNull()
+private fun need(k: String): String =
+    System.getenv(k) ?: error("Missing env $k")
 
-private fun need(k: String) = env?.get(k) ?: System.getenv(k) ?: error("Missing env $k")
-private fun opt(k: String) = env?.get(k) ?: System.getenv(k)
-
-private fun readCookieAuthOrBasic(user: String?, pass: String?): String {
-    if (!user.isNullOrBlank() && !pass.isNullOrBlank()) {
-        return "Basic " + Base64.getEncoder().encodeToString("$user:$pass".toByteArray())
-    }
-    // TODO: cookie fallback: ~/.bitcoin/.cookie
-    val cookiePath = Path.of(System.getProperty("user.home"), ".bitcoin", ".cookie")
-    val cookie = Files.readString(cookiePath).trim()
-    return "Basic " + Base64.getEncoder().encodeToString(cookie.toByteArray())
-}
+private fun opt(k: String): String? =
+    System.getenv(k)
 
 object RpcClient {
     private val cfg = Config(
-        rpcUrl = need("RPC_URL"),          // na RPi: http://127.0.0.1:8332/
-        rpcUser = opt("RPC_USER"),         // if missing -> cookie fallback
-        rpcPass = opt("RPC_PASS"),
-        apiKey = opt("API_KEY"),
+        rpcUrl = need("RPC_URL"),          // např. http://127.0.0.1:8332/
+        rpcUser = need("RPC_USER"),        // backend
+        rpcPass = need("RPC_PASS"),        // heslo z rpcauth.py
+        apiKey  = opt("API_KEY"),
         connectTimeoutMs = (opt("UPSTREAM_CONNECT_TIMEOUT_MS") ?: "4000").toLong(),
-        socketTimeoutMs = (opt("UPSTREAM_SOCKET_TIMEOUT_MS")  ?: "8000").toLong(),
-        retries = (opt("UPSTREAM_RETRIES") ?: "2").toInt()
+        socketTimeoutMs  = (opt("UPSTREAM_SOCKET_TIMEOUT_MS")  ?: "8000").toLong(),
+        retries          = (opt("UPSTREAM_RETRIES") ?: "2").toInt()
     )
 
     private val mapper = jacksonObjectMapper()
         .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
         .setSerializationInclusion(JsonInclude.Include.NON_NULL)
 
-    private val authHeader = readCookieAuthOrBasic(cfg.rpcUser, cfg.rpcPass)
+    private val authHeader = "Basic " + Base64.getEncoder()
+        .encodeToString("${cfg.rpcUser}:${cfg.rpcPass}".toByteArray())
 
     private val http = HttpClient(CIO) {
         expectSuccess = false
@@ -83,6 +72,7 @@ object RpcClient {
         }
     }
 
+    // jednoduchý per-key rate-limit: N req/min
     private val windowMs = 1.minutes.inWholeMilliseconds
     private val limitPerWindow = 60
     private val counters = ConcurrentHashMap<String, Pair<Long, AtomicInteger>>() // key -> (windowStart, count)
@@ -107,7 +97,10 @@ object RpcClient {
 
     suspend fun call(req: JsonRpcRequest): JsonRpcResponse<Any?> {
         if (!Allowlist.isAllowed(req.method)) {
-            return JsonRpcResponse(error = JsonRpcError(-32601, "Method not allowed: ${req.method}"), id = req.id)
+            return JsonRpcResponse(
+                error = JsonRpcError(-32601, "Method not allowed: ${req.method}"),
+                id = req.id
+            )
         }
 
         val body = mapper.writeValueAsString(req)
@@ -118,20 +111,33 @@ object RpcClient {
                 val r: HttpResponse = http.post { setBody(body) }
                 val text = r.bodyAsText()
 
-                runCatching { return mapper.readValue<JsonRpcResponse<Any?>>(text) }.onFailure {
+                // zkus deserialize do JsonRpcResponse
+                runCatching {
+                    return mapper.readValue<JsonRpcResponse<Any?>>(text)
+                }.onFailure {
                     if (r.status.isSuccess()) {
-                        return JsonRpcResponse(error = JsonRpcError(-32000, "Invalid upstream JSON"), id = req.id)
+                        return JsonRpcResponse(
+                            error = JsonRpcError(-32000, "Invalid upstream JSON"),
+                            id = req.id
+                        )
                     }
                 }
 
                 if (!r.status.isSuccess()) {
-                    return JsonRpcResponse(error = JsonRpcError(r.status.value, "Upstream HTTP ${r.status.value}"), id = req.id)
+                    return JsonRpcResponse(
+                        error = JsonRpcError(r.status.value, "Upstream HTTP ${r.status.value}"),
+                        id = req.id
+                    )
                 }
             } catch (t: Throwable) {
                 last = t
                 if (attempt < cfg.retries) Thread.sleep(150L * (attempt + 1))
             }
         }
-        return JsonRpcResponse(error = JsonRpcError(-32000, "Upstream error: ${last?.message ?: "unknown"}"), id = req.id)
+
+        return JsonRpcResponse(
+            error = JsonRpcError(-32000, "Upstream error: ${last?.message ?: "unknown"}"),
+            id = req.id
+        )
     }
 }

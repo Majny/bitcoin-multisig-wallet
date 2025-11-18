@@ -25,7 +25,6 @@ fun Application.module() {
     install(ContentNegotiation) { jackson() }
     install(StatusPages) {
         exception<Throwable> { call, cause ->
-            // Parse error / invalid JSON body
             call.respond(
                 HttpStatusCode.BadRequest,
                 mapOf(
@@ -54,24 +53,25 @@ fun Application.module() {
     }
 
     routing {
-        // 1) JSON-RPC passthrough
+        // JSON-RPC passthrough
         post("/rpc") {
             val req = call.receive<JsonRpcRequest>()
             val out = RpcClient.call(req)
             call.respond(HttpStatusCode.OK, out)
         }
 
-        // 2) TX endpoints
+        // testmempoolaccept
         post("/tx/test") {
             data class TxReq(val hex: String, val id: Any? = 1)
             val b = call.receive<TxReq>()
-            require(b.hex.length <= 1_000_000) { "tx too large" } // ~500 kB raw
+            require(b.hex.length <= 1_000_000) { "tx too large" }
             val out = RpcClient.call(
                 JsonRpcRequest(method = "testmempoolaccept", params = listOf(listOf(b.hex)), id = b.id)
             )
             call.respond(out)
         }
 
+        // sendrawtransaction
         post("/tx/broadcast") {
             data class TxReq(val hex: String, val id: Any? = 1)
             val b = call.receive<TxReq>()
@@ -82,9 +82,12 @@ fun Application.module() {
             call.respond(out)
         }
 
-        // 3) Health
+        // Healthcheck – jednoduchý, nesahá na Core
         get("/healthz") {
-            call.respond(mapOf("status" to "ok", "ts" to Instant.now().toString()))
+            call.respond(
+                HttpStatusCode.OK,
+                mapOf("status" to "ok", "ts" to Instant.now().toString())
+            )
         }
     }
 }
