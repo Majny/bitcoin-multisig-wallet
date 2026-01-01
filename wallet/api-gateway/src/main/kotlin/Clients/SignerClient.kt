@@ -1,14 +1,13 @@
 package cz.majny.wallet.gateway.clients
 
 import cz.majny.wallet.gateway.config.AppConfig
-import cz.majny.wallet.gateway.dto.*
-import cz.majny.wallet.gateway.plugins.UpstreamException
+import cz.majny.wallet.gateway.dto.SignPsbtRequest
+import cz.majny.wallet.gateway.dto.SignPsbtResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
-import io.ktor.http.*
 import io.ktor.client.statement.*
-
+import io.ktor.http.*
 
 interface SignerClient {
     suspend fun signPsbt(req: SignPsbtRequest): SignPsbtResponse
@@ -19,11 +18,15 @@ class SignerClientImpl(private val cfg: AppConfig) : SignerClient {
     fun attach(http: HttpClient) { client = http }
 
     override suspend fun signPsbt(req: SignPsbtRequest): SignPsbtResponse {
-        val resp = client.post("${cfg.signerBaseUrl}/hwi/signpsbt") {
-            contentType(ContentType.Application.Json)
-            setBody(req)
-        }
-        if (!resp.status.isSuccess()) throw UpstreamException("signer", resp.status, resp.bodyAsText())
+        requireAttached(this::client.isInitialized, "signer")
+
+        val resp: HttpResponse = upstreamRequest("signer") {
+            client.post("${cfg.signerBaseUrl}/hwi/signpsbt") {
+                contentType(ContentType.Application.Json)
+                setBody(req)
+            }
+        }.ensureSuccess("signer")
+
         return resp.body()
     }
 }
