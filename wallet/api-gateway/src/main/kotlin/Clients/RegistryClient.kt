@@ -1,28 +1,73 @@
 package cz.majny.wallet.gateway.clients
 
-import cz.majny.wallet.gateway.config.AppConfig
-import cz.majny.wallet.gateway.dto.WalletSummarySerializable
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.request.*
+import cz.majny.wallet.gateway.dto.*
+import io.ktor.client.HttpClient
+import io.ktor.client.call.body
+import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 
 interface RegistryClient {
-    suspend fun listWallets(deviceId: String): List<WalletSummarySerializable>
+    suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse
+
+    suspend fun createWallet(req: CreateWalletRequest)
+
+    suspend fun getWallet(walletId: String): WalletDetail
+
+    suspend fun attachMember(walletId: String, req: MemberAttach)
+
+    suspend fun listWallets(deviceId: String): List<RegistryWalletSummary>
 }
 
-class RegistryClientImpl(private val cfg: AppConfig) : RegistryClient {
-    private lateinit var client: HttpClient
-    fun attach(http: HttpClient) { client = http }
+class RegistryClientImpl(
+    private val baseUrl: String
+) : RegistryClient {
 
-    override suspend fun listWallets(deviceId: String): List<WalletSummarySerializable> {
-        requireAttached(this::client.isInitialized, "registry")
+    private var http: HttpClient? = null
 
-        val resp = upstreamRequest("registry") {
-            client.get("${cfg.registryBaseUrl}/wallets") {
-                parameter("device_id", deviceId)
-            }
-        }.ensureSuccess("registry")
+    fun attach(http: HttpClient) {
+        this.http = http
+    }
 
-        return resp.body()
+    private fun client(): HttpClient =
+        requireNotNull(http) {
+            "RegistryClientImpl is not attached. Call deps.attachHttpClients(application) first."
+        }
+
+    override suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse {
+        return client().post("$baseUrl/registry/devices") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }.body()
+    }
+
+    override suspend fun createWallet(req: CreateWalletRequest) {
+        val resp = client().post("$baseUrl/registry/wallets") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+
+        resp.bodyAsText()
+    }
+
+    override suspend fun getWallet(walletId: String): WalletDetail {
+        return client().get("$baseUrl/registry/wallets/$walletId").body()
+    }
+
+    override suspend fun attachMember(walletId: String, req: MemberAttach) {
+        val resp = client().post("$baseUrl/registry/wallets/$walletId/members/attach") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
+        }
+        resp.bodyAsText()
+    }
+
+    override suspend fun listWallets(deviceId: String): List<RegistryWalletSummary> {
+        return client().get("$baseUrl/registry/wallets") {
+            url { parameters.append("device_id", deviceId) }
+        }.body()
     }
 }
