@@ -1,0 +1,34 @@
+package cz.majny.wallet.gateway.config
+
+data class AppConfig(
+    val port: Int,
+    val authBaseUrl: String,
+    val registryBaseUrl: String,
+    val explorerBaseUrl: String,
+    val signerBaseUrl: String,
+    val psbtBaseUrl: String,
+    val jwtIssuer: String,
+    val jwtAudience: String,
+    val jwksUrl: String,
+) {
+    companion object {
+        fun fromEnv(): AppConfig {
+            fun env(name: String, default: String) = System.getenv(name) ?: default
+            val authBase = env("AUTH_BASE_URL", "http://localhost:8081")
+
+            return AppConfig(
+                port = env("PORT", "8080").toInt(),
+
+                authBaseUrl = env("AUTH_BASE_URL", "http://localhost:8081"),
+                registryBaseUrl = env("REGISTRY_BASE_URL", "http://localhost:8082"),
+                explorerBaseUrl = env("EXPLORER_BASE_URL", "http://localhost:8083"),
+                signerBaseUrl = env("SIGNER_BASE_URL", "http://localhost:8084"),
+                psbtBaseUrl = env("PSBT_BASE_URL", "http://localhost:8085"),
+
+                jwtIssuer = env("JWT_ISSUER", "wallet-auth"),
+                jwtAudience = env("JWT_AUDIENCE", "wallet-gateway"),
+                jwksUrl = env("JWKS_URL", "$authBase/auth/.well-known/jwks.json"),
+            )
+        }
+    }
+}
