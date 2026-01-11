@@ -19,23 +19,38 @@ data class RsaKeyMaterial(
 
 object RsaKeys {
 
+    /**
+     * PRODUCT PHASE
+     * - JWT_RSA_PRIVATE_PEM and JWT_RSA_PUBLIC_PEM via ENV
+     *
+     * DEV PHASE
+     * JWT_DEV_ALLOW_GENERATE_KEYS=true
+     */
     fun fromEnvOrGenerate(): RsaKeyMaterial {
         val kid = System.getenv("JWT_KID") ?: "dev-kid"
         val privPem = System.getenv("JWT_RSA_PRIVATE_PEM")
         val pubPem = System.getenv("JWT_RSA_PUBLIC_PEM")
 
-        return if (!privPem.isNullOrBlank() && !pubPem.isNullOrBlank()) {
+        if (!privPem.isNullOrBlank() && !pubPem.isNullOrBlank()) {
             val priv = parsePkcs8PrivateKey(privPem)
             val pub = parseX509PublicKey(pubPem)
-            RsaKeyMaterial(kid, priv, pub)
-        } else {
-            val kp = generate()
-            RsaKeyMaterial(
-                keyId = kid,
-                privateKey = kp.private as RSAPrivateKey,
-                publicKey = kp.public as RSAPublicKey
+            return RsaKeyMaterial(kid, priv, pub)
+        }
+
+        val allowGenerate = (System.getenv("JWT_DEV_ALLOW_GENERATE_KEYS") ?: "false").equals("true", true)
+        if (!allowGenerate) {
+            error(
+                "Missing JWT_RSA_PRIVATE_PEM/JWT_RSA_PUBLIC_PEM. " +
+                        "For local set JWT_DEV_ALLOW_GENERATE_KEYS=true, "
             )
         }
+
+        val kp = generate()
+        return RsaKeyMaterial(
+            keyId = kid,
+            privateKey = kp.private as RSAPrivateKey,
+            publicKey = kp.public as RSAPublicKey
+        )
     }
 
     private fun generate(): KeyPair {
