@@ -1,11 +1,13 @@
 package cz.majny.wallet.gateway.clients
 
 import cz.majny.wallet.gateway.config.AppConfig
-import cz.majny.wallet.gateway.dto.*
+import cz.majny.wallet.gateway.dto.RefreshTokenRequest
+import cz.majny.wallet.gateway.dto.RefreshTokenResponse
+import cz.majny.wallet.gateway.dto.TrezorLoginRequest
+import cz.majny.wallet.gateway.dto.TrezorLoginResponse
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import io.ktor.http.*
 
 interface AuthClient {
@@ -20,7 +22,7 @@ class AuthClientImpl(private val cfg: AppConfig) : AuthClient {
     override suspend fun trezorLogin(req: TrezorLoginRequest): TrezorLoginResponse {
         requireAttached(this::client.isInitialized, "auth")
 
-        val resp: HttpResponse = upstreamRequest("auth") {
+        val resp = upstreamRequest("auth") {
             client.post("${cfg.authBaseUrl}/auth/trezor/login") {
                 contentType(ContentType.Application.Json)
                 setBody(req)
@@ -33,7 +35,7 @@ class AuthClientImpl(private val cfg: AppConfig) : AuthClient {
     override suspend fun refresh(req: RefreshTokenRequest): RefreshTokenResponse {
         requireAttached(this::client.isInitialized, "auth")
 
-        val resp: HttpResponse = upstreamRequest("auth") {
+        val resp = upstreamRequest("auth") {
             client.post("${cfg.authBaseUrl}/auth/token/refresh") {
                 contentType(ContentType.Application.Json)
                 setBody(req)
