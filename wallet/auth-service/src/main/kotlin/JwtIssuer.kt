@@ -5,6 +5,7 @@ import com.auth0.jwt.algorithms.Algorithm
 import java.security.interfaces.RSAPrivateKey
 import java.time.Instant
 import java.util.Date
+import java.util.UUID
 
 class JwtIssuer(
     private val issuer: String,
@@ -18,6 +19,7 @@ class JwtIssuer(
     fun issueAccessToken(deviceId: String, fingerprint: String?): String {
         val now = Instant.now()
         val exp = now.plusSeconds(accessTtlSeconds)
+        val jti = UUID.randomUUID().toString()
 
         val builder = JWT.create()
             .withKeyId(kid)
@@ -25,7 +27,9 @@ class JwtIssuer(
             .withIssuer(issuer)
             .withAudience(audience)
             .withSubject(deviceId)
+            .withJWTId(jti)
             .withIssuedAt(Date.from(now))
+            .withNotBefore(Date.from(now.minusSeconds(2))) // tolerance clock-skew
             .withExpiresAt(Date.from(exp))
             .withClaim("device_id", deviceId)
 
