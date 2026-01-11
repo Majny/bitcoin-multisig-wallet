@@ -7,11 +7,8 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
-import cz.majny.wallet.authservice.RsaKeyMaterial
-import cz.majny.wallet.authservice.RsaKeys
-import cz.majny.wallet.authservice.JwtIssuer
+import java.nio.charset.StandardCharsets
 import java.util.UUID
-import java.util.concurrent.ConcurrentHashMap
 
 @Serializable
 data class TrezorLoginRequest(
@@ -49,11 +46,16 @@ data class TrezorLoginResponse(
 data class RefreshTokenRequest(val refreshToken: String)
 
 @Serializable
-data class RefreshTokenResponse(val accessToken: String)
+data class RefreshTokenResponse(
+    val accessToken: String,
+    val refreshToken: String
+)
 
-private val refreshIndex = ConcurrentHashMap<String, Pair<String, String?>>()
-
-fun Application.configureAuthRoutes(jwt: JwtIssuer, keys: RsaKeyMaterial) {
+fun Application.configureAuthRoutes(
+    jwt: JwtIssuer,
+    keys: RsaKeyMaterial,
+    refreshStore: RefreshStore
+) {
     routing {
         route("/auth") {
 
@@ -65,20 +67,27 @@ fun Application.configureAuthRoutes(jwt: JwtIssuer, keys: RsaKeyMaterial) {
             post("/trezor/login") {
                 val req = call.receive<TrezorLoginRequest>()
 
-                // MVP deviceId (později DB/registry)
-                val deviceId = "dev-${req.fingerprint}"
+                if (req.fingerprint.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing_fingerprint"))
+                    return@post
+                }
+                if (req.xpub.isBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing_xpub"))
+                    return@post
+                }
+
+                val deviceId = deterministicDeviceId(req.fingerprint)
 
                 val access = jwt.issueAccessToken(deviceId, req.fingerprint)
-                val refresh = UUID.randomUUID().toString()
+                val refresh = refreshStore.issue(deviceId, req.fingerprint)
 
-                refreshIndex[refresh] = deviceId to req.fingerprint
-
+                // TODO: remove wallet
                 call.respond(
                     TrezorLoginResponse(
                         accessToken = access,
                         refreshToken = refresh,
                         user = UserSummarySerializable(
-                            id = "user-1",
+                            id = "user-$deviceId",
                             displayName = "User",
                             trezorFingerprint = req.fingerprint,
                             wallets = listOf(
@@ -86,7 +95,7 @@ fun Application.configureAuthRoutes(jwt: JwtIssuer, keys: RsaKeyMaterial) {
                                     id = "wallet-1",
                                     label = "My First Wallet",
                                     type = "SINGLE_SIG",
-                                    balanceSats = 123_456
+                                    balanceSats = 0L
                                 )
                             )
                         )
@@ -96,17 +105,28 @@ fun Application.configureAuthRoutes(jwt: JwtIssuer, keys: RsaKeyMaterial) {
 
             post("/token/refresh") {
                 val req = call.receive<RefreshTokenRequest>()
-                val entry = refreshIndex[req.refreshToken]
 
-                if (entry == null) {
-                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid_refresh"))
+                val rotated = refreshStore.rotate(req.refreshToken)
+                if (rotated == null) {
+                    call.respond(HttpStatusCode.Unauthorized, mapOf("error" to "invalid_or_expired_refresh"))
                     return@post
                 }
 
-                val (deviceId, fp) = entry
+                val (deviceId, fp, newRefresh) = rotated
                 val access = jwt.issueAccessToken(deviceId, fp)
-                call.respond(RefreshTokenResponse(accessToken = access))
+
+                call.respond(
+                    RefreshTokenResponse(
+                        accessToken = access,
+                        refreshToken = newRefresh
+                    )
+                )
             }
         }
     }
+}
+
+private fun deterministicDeviceId(fingerprint: String): String {
+    val name = "trezor:$fingerprint"
+    return UUID.nameUUIDFromBytes(name.toByteArray(StandardCharsets.UTF_8)).toString()
 }
