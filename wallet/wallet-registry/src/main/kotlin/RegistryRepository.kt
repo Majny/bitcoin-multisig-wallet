@@ -1,0 +1,184 @@
+package cz.majny.wallet.registry
+
+import cz.majny.wallet.registry.api.*
+import cz.majny.wallet.registry.schema.*
+import org.jetbrains.exposed.sql.*
+import org.jetbrains.exposed.sql.transactions.transaction
+import java.time.OffsetDateTime
+
+class RegistryRepository {
+
+    fun upsertDevice(req: UpsertDeviceRequest): DeviceResponse = transaction {
+        val existing = DevicesTable
+            .selectAll()
+            .where { DevicesTable.deviceId eq req.deviceId }
+            .singleOrNull()
+
+        if (existing == null) {
+            DevicesTable.insert {
+                it[deviceId] = req.deviceId
+                it[fingerprint] = req.fingerprint
+                it[model] = req.model
+                it[label] = req.label
+                it[createdAt] = OffsetDateTime.now()
+            }
+        } else {
+            DevicesTable.update({ DevicesTable.deviceId eq req.deviceId }) {
+                it[fingerprint] = req.fingerprint
+                it[model] = req.model
+                it[label] = req.label
+            }
+        }
+
+        DeviceResponse(
+            deviceId = req.deviceId,
+            fingerprint = req.fingerprint,
+            model = req.model,
+            label = req.label
+        )
+    }
+
+    fun createWallet(req: CreateWalletRequest): WalletDetail = transaction {
+        if (req.type == "MULTI_SIG") {
+            require(req.m != null && req.n != null) { "MULTI_SIG requires m and n" }
+            require(req.cosigners.isNotEmpty()) { "MULTI_SIG requires cosigners" }
+        }
+
+        WalletsTable.insert {
+            it[walletId] = req.walletId
+            it[network] = req.network
+            it[type] = req.type
+            it[scriptType] = req.scriptType
+            it[m] = req.m
+            it[n] = req.n
+            it[accountIndex] = req.accountIndex
+            it[birthHeight] = req.birthHeight
+            it[label] = req.label
+            it[receiveDescriptor] = req.receiveDescriptor
+            it[changeDescriptor] = req.changeDescriptor
+            it[createdAt] = OffsetDateTime.now()
+        }
+
+        // cosigners (multisig)
+        req.cosigners.forEach { c ->
+            val exists = CosignersTable
+                .selectAll()
+                .where { CosignersTable.cosignerId eq c.cosignerId }
+                .singleOrNull()
+
+            if (exists == null) {
+                CosignersTable.insert {
+                    it[cosignerId] = c.cosignerId
+                    it[fingerprint] = c.fingerprint
+                    it[originPath] = c.originPath
+                    it[xpubRoot] = c.xpubRoot
+                    it[createdAt] = OffsetDateTime.now()
+                }
+            }
+
+            WalletCosignersTable.insert {
+                it[walletId] = req.walletId
+                it[idx] = c.idx
+                it[cosignerId] = c.cosignerId
+            }
+        }
+
+        req.members.forEach { mem ->
+            WalletMembersTable.insertIgnore {
+                it[walletId] = req.walletId
+                it[deviceId] = mem.deviceId
+                it[cosignerIdx] = mem.cosignerIdx
+                it[createdAt] = OffsetDateTime.now()
+            }
+        }
+
+        getWallet(req.walletId) ?: error("Wallet insert failed")
+    }
+
+    fun attachMember(walletId: String, deviceId: String, cosignerIdx: Int?) = transaction {
+        WalletMembersTable.insertIgnore {
+            it[WalletMembersTable.walletId] = walletId
+            it[WalletMembersTable.deviceId] = deviceId
+            it[WalletMembersTable.cosignerIdx] = cosignerIdx
+            it[createdAt] = OffsetDateTime.now()
+        }
+    }
+
+    fun listWalletsForDevice(deviceId: String): List<WalletSummary> = transaction {
+        (WalletsTable innerJoin WalletMembersTable)
+            .select(
+                WalletsTable.walletId,
+                WalletsTable.network,
+                WalletsTable.type,
+                WalletsTable.scriptType,
+                WalletsTable.m,
+                WalletsTable.n,
+                WalletsTable.label
+            )
+            .where { WalletMembersTable.deviceId eq deviceId }
+            .map { row ->
+                WalletSummary(
+                    walletId = row[WalletsTable.walletId],
+                    network = row[WalletsTable.network],
+                    type = row[WalletsTable.type],
+                    scriptType = row[WalletsTable.scriptType],
+                    m = row[WalletsTable.m],
+                    n = row[WalletsTable.n],
+                    label = row[WalletsTable.label]
+                )
+            }
+    }
+
+    fun getWallet(walletId: String): WalletDetail? = transaction {
+        val w = WalletsTable
+            .selectAll()
+            .where { WalletsTable.walletId eq walletId }
+            .singleOrNull() ?: return@transaction null
+
+        val cosigners = (WalletCosignersTable innerJoin CosignersTable)
+            .select(
+                WalletCosignersTable.idx,
+                CosignersTable.cosignerId,
+                CosignersTable.fingerprint,
+                CosignersTable.originPath,
+                CosignersTable.xpubRoot
+            )
+            .where { WalletCosignersTable.walletId eq walletId }
+            .map { row ->
+                CosignerInWallet(
+                    idx = row[WalletCosignersTable.idx],
+                    cosignerId = row[CosignersTable.cosignerId],
+                    fingerprint = row[CosignersTable.fingerprint],
+                    originPath = row[CosignersTable.originPath],
+                    xpubRoot = row[CosignersTable.xpubRoot]
+                )
+            }
+            .sortedBy { it.idx }
+
+        val members = WalletMembersTable
+            .select(WalletMembersTable.deviceId, WalletMembersTable.cosignerIdx)
+            .where { WalletMembersTable.walletId eq walletId }
+            .map { row ->
+                MemberAttach(
+                    deviceId = row[WalletMembersTable.deviceId],
+                    cosignerIdx = row[WalletMembersTable.cosignerIdx]
+                )
+            }
+
+        WalletDetail(
+            walletId = w[WalletsTable.walletId],
+            network = w[WalletsTable.network],
+            type = w[WalletsTable.type],
+            scriptType = w[WalletsTable.scriptType],
+            m = w[WalletsTable.m],
+            n = w[WalletsTable.n],
+            accountIndex = w[WalletsTable.accountIndex],
+            birthHeight = w[WalletsTable.birthHeight],
+            label = w[WalletsTable.label],
+            receiveDescriptor = w[WalletsTable.receiveDescriptor],
+            changeDescriptor = w[WalletsTable.changeDescriptor],
+            cosigners = cosigners,
+            members = members
+        )
+    }
+}
