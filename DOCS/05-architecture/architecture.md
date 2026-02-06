@@ -1,6 +1,6 @@
 # Architektura: komponenty, API a use‑casy
 
-> Cíl: Android bitcoin aplikace s **coin‑control** a **multisig**. Všechny podpisy probíhají na **Trezoru**. Backend komunikuje s **Bitcoin Core** na RPi **výhradně přes Tor (.onion RPC)**.
+> Cíl: Android bitcoin aplikace s **coin‑control** a **multisig**. Všechny podpisy probíhají na **Trezoru**. Backend komunikuje s **Bitcoin Core** na RPi **výhradně přes Tailscale VPN**.
 
 ---
 
@@ -10,17 +10,26 @@
 
 * **Trezor**
 
-  * Uchovává seed (BIP‑39, novější verze SLIP-39 TODO).
-  * Podepisuje **PSBT** (BIP‑174). Model T umí pamatovat *multisig policy* pro ověřování. TODO (zjistit, jak tohle pořádně funguje a jak podpora jiných trezorů)
+  * Uchovává seed (BIP-39, novější verze SLIP-39 TODO).
+  * Podepisuje **PSBT** (BIP-174). Model T umí pamatovat *multisig policy* pro ověřování. TODO (zjistit, jak tohle pořádně funguje a jak podpora jiných trezorů).
   * Identita pro backend: **master fingerprint** + xpub pro dané derivace.
   * Volitelná passphrase vytváří hidden wallet.
-  * Nejspíš se bude hodit pro připojení: https://trezor.io/guides/trezorctl/using-trezorctl-commands
+  * Používá **Trezor Connect Mobile** přes Trezor Suite (deeplink).
 
 * **Android App**
 
-  * UI (Jetpack Compose), coin‑control, přehled multisigů, PSBT workflow.
-  * Párování účtu = identifikace Trezoru přes backend pomocí jeho master fingerprintu a odvozeného xpubu
-  * Transport: HTTPS → **API Gateway**.
+  * UI (Jetpack Compose), coin-control, přehled multisigů, PSBT workflow.
+  * **Trezor Connect Mobile flow:**
+    * Appka otevře Trezor Suite Mobile přes deeplink (`https://connect.trezor.io/...`).
+    * Suite zobrazí výzvu k potvrzení na Trezoru a po úspěchu zavolá zpět **deeplink** do appky (`bitcoinwallet://trezor-callback?...`).
+    * Appka dostane JSON `{ success, payload: { fingerprint, xpub, path, device_model, device_label, ... }}`.
+  * Párování účtu = identifikace Trezoru přes backend pomocí jeho master fingerprintu a odvozeného xpubu (end-point `/auth/trezor/login`).
+  * Podepisování transakcí:
+    * Backend připraví PSBT (`/wallets/{id}/tx/prepare`).
+    * Appka pošle PSBT do Trezor Suite (Trezor Connect), získá podepsanou PSBT.
+    * Podepsanou PSBT pošle zpět na backend (`/wallets/{id}/tx/submit`).
+  * Transport: HTTPS → **API Gateway** (Android používá `MobileSigner` klienta postaveného na Ktoru).
+
 
 
 ### 1.2 Cloud backend
@@ -31,16 +40,17 @@
 * **Wallet Importer** – import/export policy/deskriptorů (Sparrow/Specter/BSMS/descriptor strings). TODO, zjistit jestli je potřeba toto rešit
 * **Explorer Service** – čtení UTXO/historie/fee/chain info (cache), ZMQ invalidace.
 * **PSBT Builder/Bridge** – stavba PSBT, coin selection, fee, finalize, broadcast.
-* **Signer Service (HWI)** – práce s Trezorem přes HWI (fp/xpub, displayaddress, signpsbt).
 * **Multisig Coordinator** – sleduje stav PSBT u multisigů (K‑z‑N), orchestrace podpisů, notifikace.
 * **Notification Service** – FCM/webhooky (nevim jestli bude potřeba, spíše ne).
-* **Node Proxy (Tor RPC)** – jediná služba, která mluví na Core přes **Tor SOCKS5** a onion RPC. Má **allowlist RPC** a ochrany (max tx size/feerate, HTTP/1.1 + Connection: close, retry/backoff, audit).
+* **Node Proxy (Tailscale RPC)** – jediná služba, která mluví na Core přes **Tailscale VPN**. Má **allowlist RPC** a ochrany (max tx size/feerate, HTTP/1.1 + Connection: close, retry/backoff, audit).
 * **Infra úložiště**: PostgreSQL (perzistence), Redis (cache/rate‑limit), S3 (PSBT blobs), Observability (Prometheus/Grafana/Loki/Jaeger).
+
+> **Poznámka:** Podepisování transakcí probíhá **výhradně na telefonu** přes Trezor Connect Mobile (deeplink do Trezor Suite). Backend nikdy nemá přístup k privátním klíčům ani k Trezoru.
 
 ### 1.3 RPi s Bitcoin Core
 
-* **Bitcoin Core (`bitcoind`)** – full node, `rpcbind=127.0.0.1`, `proxy=127.0.0.1:9050`, `rpcauth=…`, `txindex=1`.
-* **Tor** – onion service pro RPC. Core není z internetu přímo dosažitelné.
+* **Bitcoin Core (`bitcoind`)** – full node, `rpcbind=100.79.139.14` (Tailscale IP), `rpcauth=…`, `txindex=1`.
+* **Tailscale** – VPN mesh síť pro bezpečnou komunikaci. Core není z internetu přímo dosažitelné, pouze přes Tailscale.
 
 ---
 
@@ -59,10 +69,9 @@
   * `POST /api/v1/wallets/import` → import policy/descriptor (předá Wallet Importer)
   * `GET  /api/v1/wallets/{id}/utxos` → data z Exploreru
   * `POST /api/v1/psbt` → vytvoření PSBT (Bridge)
-  * `POST /api/v1/psbt/{id}/sign` → podpis (Signer)
+  * `POST /api/v1/psbt/{id}/submit` → přijetí podepsané PSBT z appky (Bridge)
   * `POST /api/v1/psbt/{id}/broadcast` → broadcast (Bridge → Node Proxy)
 * **Spojení**
-  * API Gateway → Signer Service: Aplikace zavolá Gateway, ta přepošle dotaz správné službě.
   * API Gateway → Auth & Pairing Service: vydání/obnova tokenů přes pairing s Trezorem.
   * API Gateway → Wallet Registry: CRUD nad peněženkami a přidělování adres.
   * API Gateway → Explorer Service: čtení UTXO/historie/fee.
@@ -74,24 +83,27 @@
 
 * **Role**: Zajišťuje párování Trezoru s backendem a vystavení tokenů pro ověřený přístup. 
 * **Funkce**:
-  * Párování Trezoru:
-    * Přes Signer Service získá fingerprint a xpub z připojeného Trezoru. 
-    * Vytvoří záznam device_id v databázi devices(device_id, fingerprint, model, created_at). 
-    * Slouží k tomu, aby backend dokázal rozpoznat konkrétní fyzický Trezor. 
+  * Párování Trezoru (mobilní varianta):
+    * Android appka si přes Trezor Connect Mobile vyčte `fingerprint`, `xpub`, `derivationPath`, `deviceModel`, `deviceLabel`.
+    * Přes MobileSigner zavolá `POST /auth/trezor/login`.
+    * Auth služba podle fingerprintu a xpubu založí/aktualizuje záznam zařízení (`device_id`) a případně i uživatele.
   * Tokeny a autentizace:
-    * Po úspěšném párování vygeneruje krátkodobý access token (JWT) a dlouhodobý refresh token. 
-    * Tokeny jsou svázány s device_id. 
-    * Slouží k autorizaci všech následných požadavků z aplikace. 
+    * Po úspěšném loginu vygeneruje krátkodobý access token (JWT) a dlouhodobý refresh token.
+    * Tokeny jsou svázány s `device_id` a uživatelem.
   * Správa zařízení:
-    * Eviduje známé Trezory (model, firmware, fingerprint). 
+    * Eviduje známé Trezory (model, firmware, fingerprint).
     * Umožňuje ověřit, že zařízení odpovídá záznamu v systému.
-* **API** (teoretický pokus TODO)
-  * `POST /pairing/start` → vyžádá si od Signeru `enumerate`/`getxpub` (pro vybranou cestu), vytvoří `device_id`.
-  * `POST /token/refresh` → vrátí access JWT.
+* **API** (mobilní flow – první verze)
+  * `POST /auth/trezor/login`
+    * Vstup: `{ fingerprint, xpub, derivationPath, deviceModel, deviceLabel }` (z Trezor Connect).
+    * Výstup: `{ accessToken, refreshToken?, user: { id, displayName, trezorFingerprint, wallets[] } }`.
+  * `POST /auth/token/refresh`
+    * Vstup: `{ refreshToken }`.
+    * Výstup: `{ accessToken }`.
 * **Spojení**
-  * Auth → Signer Service: zjištění identity zařízení (HWI enumerate/getxpub), Příklad: „Vyčti fingerprint a xpub z připojeného Trezoru“. 
-  * Auth → PostgreSQL: perzistence device, klíčů pro JWT/refresh 
-  * Auth → API Gateway: vrací výsledky (tokens) volajícímu
+  * Auth → PostgreSQL: perzistence devices, users, refresh tokenů, klíčů pro JWT.
+  * Auth → Wallet Registry: (volitelně) vytvoření výchozí watch-only wallet pro nově spárovaný Trezor.
+  * Auth → API Gateway: Gateway volá Auth pro login a refresh a vrací odpověď appce.
 
 
 ### 2.3 Wallet Registry (Source of Truth)
@@ -110,7 +122,7 @@
   * Wallet Registry → PostgreSQL — zdroj pravdy pro wallets/cosigners/members
   * Wallet Registry → Explorer/Bridge/Signer — čtou deskriptory/členství
 
-### 2.4 Wallet Importer
+### 2.4 Wallet Importer5
 
 * **Role**: Wallet Importer zajišťuje, že systém umí přijmout peněženky z různých externích nástrojů (např. Sparrow, Bitcoin Core, ..) a převést je do jednotného interního formátu, který používá Wallet Registry.
 * **Funkce**:
@@ -144,7 +156,7 @@
 * **Data**: Redis (hot cache), PG (projekce na transakce/UTXO).
 * **Spojení**
   * Explorer → Wallet Registry: získání descriptor setu a členství; Příklad: „Načti ext/int descriptor pro wallet X“. 
-  * Explorer → Node Proxy: fallback/primární RPC na Core; Příklad: „getblockfilter/getrawtransaction přes Tor“. 
+  * Explorer → Node Proxy: fallback/primární RPC na Core; Příklad: „getblockfilter/getrawtransaction přes Tailscale".
   * Explorer → Electrum/Esplora: rychlé čtení UTXO/historie 
   * Explorer → Redis: hot cache výsledků 
   * Explorer → PostgreSQL: projekce historie/utxo
@@ -184,23 +196,26 @@
   * Validace přes testmempoolaccept před broadcastem.
 * **Závislosti**: Registry (deskriptory), Explorer (UTXO), Node Proxy (RPC), Coordinator (multisig stav).
 
-### 2.7 Signer Service (HWI)
+### 2.x MobileSigner (Android HTTP klient)
 
-* **Role**: Zajišťuje komunikaci s Trezorem připojeným k backendu přes USB. Používá rozhraní HWI – Hardware Wallet Interface, které umožňuje bezpečné podepisování transakcí.
+* **Role**: Tenký HTTP klient v Android appce (Ktor), který mluví s API Gateway a backendovými službami. Schovává URL endpointů a datové struktury.
 * **Funkce**:
-  * Každé volání probíhá přes HWI CLI (např. hwi --device fingerprint ...) nebo HWI knihovnu. 
-  * Backend dostává pouze veřejné informace (xpub, fingerprint) a částečně podepsané PSBT. 
-  * Signer funguje jako „proxy“ mezi PSBT Builderem a fyzickým zařízením.
-* **API** TODO
-  * `POST /hwi/identity` → `{ fingerprint, model }`
-  * `POST /hwi/getxpub` body: `{ path }` → `{ xpub_root, origin, fingerprint }`
-  * `POST /hwi/displayaddress` body: `{ descriptor, index }`
-  * `POST /hwi/signpsbt` body: `{ psbt }` → `{ psbt_partial }`
+  * `loginWithTrezor(identity: TrezorDeviceIdentity): UserSession`
+    * Volá `POST /auth/trezor/login`.
+    * Tělo: `{ fingerprint, xpub, derivationPath, deviceModel, deviceLabel }`.
+    * Odpověď: JWT access token + shrnutí uživatele a peněženek.
+  * `preparePsbt(request: PreparePsbtRequest): PreparedPsbt`
+    * Volá `POST /wallets/{walletId}/tx/prepare`.
+    * Tělo: `{ amountSats, destinationAddress, feeRateSatsPerVb, selectedInputs[] }`.
+    * Odpověď: `{ psbtId, psbtBase64 }`.
+  * `submitSignedPsbt(request: SubmitSignedPsbtRequest): SubmitSignedPsbtResult`
+    * Volá `POST /wallets/{walletId}/tx/submit`.
+    * Tělo: `{ psbtId, signedPsbtBase64 }`.
+    * Odpověď: `{ status, txId? }` (např. `accepted`, `broadcasted`, `waiting_for_cosigners`).
 * **Spojení**
-  * Signer → Trezor (HWI / Connect / Android USB): operace identity, displayaddress, sign
-  * Signer → Wallet Registry: validace, že PSBT odpovídá descriptorům 
-  * Signer → PostgreSQL: kdo podepsal co a kdy 
-  * Signer → S3: uložení PSBT blobu
+  * MobileSigner → API Gateway (HTTPS/JSON).
+  * MobileSigner používá JWT access token jako `Authorization: Bearer ...`.
+
 
 ### 2.8 Multisig Coordinator
 
@@ -225,23 +240,27 @@
 * **Role**: FCM/webhooky při změně stavu PSBT, při příchozí transakci apod.
 * **API**: `POST /notify/device` / `POST /notify/webhook`.
 
-### 2.10 Node Proxy (Tor RPC)
+### 2.10 Node Proxy (na RPi)
 
-* **Role**: Bezpečný a izolovaný most mezi backendem a Bitcoin Core, který komunikuje výhradně přes Tor onion RPC. Slouží jako jediný schválený vstupní bod do Core a chrání ho před přímým přístupem z internetu.
+* **Role**: Bezpečný a izolovaný most mezi cloud backendem a Bitcoin Core. **Běží na Raspberry Pi** vedle Bitcoin Core a vystavuje REST API přes Tailscale VPN.
 * **Funkce**:
-  * Node Proxy běží jako interní microservice, který směruje RPC požadavky přes SOCKS5 proxy na 127.0.0.1:9050 do onion služby Core (bitcoind). 
-  * Backendové služby (Explorer, PSBT Bridge) komunikují s Node Proxy místo přímého volání Core. 
+  * Node Proxy běží na RPi a naslouchá na Tailscale IP (`100.79.139.14`).
+  * Cloud backend (Explorer, PSBT Bridge) volá Node Proxy přes Tailscale VPN.
+  * Node Proxy volá Bitcoin Core na `localhost:8332` (JSON-RPC).
+  * **Discovery peněženek**: při párování Trezoru ověřuje aktivitu účtů pomocí `scantxoutset` nebo `listunspent`.
 * **Allowlist RPC metod**: 
   * Node Proxy povoluje pouze omezenou sadu RPC příkazů – čtecí i zápisové operace jsou přísně řízené. 
-  * READ: getblockchaininfo, getblockhash, getblock, getrawtransaction, scantxoutset (s limitem), estimatesmartfee. 
+  * READ: getblockchaininfo, getblockhash, getblock, getrawtransaction, scantxoutset (pro discovery), estimatesmartfee, listunspent.
   * WRITE: pouze testmempoolaccept (ověření transakce) a sendrawtransaction (odeslání do mempoolu)
-* **API (interní REST)** TODO
+* **API (REST přes Tailscale)** TODO
   * `POST /rpc` body: `{ method, params }` → odpověď 1:1 s Core.
+  * `POST /wallet/scan` body: `{ descriptor }` → Core `scantxoutset` → vrátí balance a UTXO.
   * `POST /tx/test` body: `{ hex }` → Core `testmempoolaccept`.
   * `POST /tx/broadcast` body: `{ hex }` → Core `sendrawtransaction`.
 * **Ochrany**: rate‑limit (req/min, bytes/min), max tx size (např. 500 kB), .. TODO
 * **Spojení**
-  * Node Proxy → Tor (SOCKS5) → Bitcoin Core: jediný výstup do nody 
+  * Cloud Backend → Tailscale VPN → Node Proxy (100.79.139.14): příchozí požadavky
+  * Node Proxy → Bitcoin Core (localhost:8332): JSON-RPC volání
   * Node Proxy → Observability: RPC metriky/latence/chyby TODO
 
 ### 2.11 Infra (PG/Redis/S3/Observability)
@@ -263,16 +282,16 @@
 | From → To                    | Protokol       | Účel                                     |
 |------------------------------| -------------- | ---------------------------------------- |
 | Android App → API Gateway    | HTTPS/JSON     | Všechny klientské akce                   |
+| Android App ↔ Trezor Suite   | Deeplink       | Podepisování PSBT přes Trezor Connect    |
 | API Gateway → AuthSvc        | HTTP           | Pairing, tokeny                          |
 | API Gateway → WalletReg      | HTTP           | CRUD peněženek, členství                 |
 | API Gateway → WalletImporter | HTTP           | Import policy/descriptor                 |
 | API Gateway → Explorer       | HTTP           | Read (UTXO/history/fees/chain)           |
 | API Gateway → Bridge         | HTTP           | Tvorba/úprava/finalize/broadcast PSBT    |
-| API Gateway → Signer         | HTTP           | displayaddress, signpsbt, identity/xpub  |
 | API Gateway → MsCoordinator  | HTTP           | Registrace PSBT, stav                    |
 | Explorer → Node Proxy        | HTTP (interní) | Fallback Core RPC                        |
 | Bridge → Node Proxy          | HTTP (interní) | `testmempoolaccept`/`sendrawtransaction` |
-| Node Proxy → Core (RPi)      | Tor (SOCKS5)   | Onion RPC 8332                           |
+| Node Proxy → Core (RPi)      | Tailscale VPN  | RPC 8332 (100.79.139.14)                 |
 | Explorer ← ZMQ (Core)        | SUB            | `hashblock`/`rawtx` invalidace cache     |
 
 ---
@@ -296,20 +315,26 @@
 
 **Actors:** Uživatel
 
-**Preconditions:** Trezor je fyzicky dostupný (pro backend Signer).
+**Preconditions:** Trezor je připojen k telefonu (USB/Bluetooth) a Trezor Suite Mobile je nainstalována.
 
 **Main Flow**
 
-1. **App → Gateway**: `POST /auth/pairing/start`.
-2. **Gateway → Signer**: `POST /hwi/identity` → `{ fingerprint, model }`.
-3. **Gateway → Signer**: `POST /hwi/getxpub { path:"m/84h/0h/0h" }` pro singlesig account‑0; pro multisig `m/48h/0h/0h/2h`.
-4. **Gateway → Registry**: založ/aktualizuj `device` a (pokud chce uživatel rovnou wallet) vytvoř z xpub watch‑only wallet.
-5. **Gateway → AuthSvc**: vystav `device_id`, `access/refresh JWT`.
-6. **App**: ukládá access token a pokračuje na výběr účtu (UC‑08).
+1. **App**: otevře deeplink do Trezor Suite Mobile pro získání seznamu účtů (`getAccountInfo` nebo `getPublicKey` pro všechny derivace).
+2. **Trezor Suite**: zobrazí výzvu, uživatel potvrdí na Trezoru.
+3. **Trezor Suite → App**: callback se seznamem účtů `{ accounts[]: { fingerprint, xpub, derivationPath, scriptType }, deviceModel, deviceLabel }`.
+4. **App → Gateway → Explorer**: `POST /wallets/discover { descriptors[] }` – ověří, které účty mají aktivitu (UTXO/historie).
+5. **Explorer → Node Proxy → Core**: pro každý descriptor zavolá `scantxoutset` nebo `listunspent` pro kontrolu aktivity.
+6. **Explorer → App**: vrátí seznam aktivních účtů s balance `{ activeAccounts[]: { descriptor, balance, txCount } }`.
+7. **App → Gateway**: `POST /auth/trezor/login` s daty z callbacku + informací o aktivních účtech.
+8. **Gateway → AuthSvc → Registry**: založ/aktualizuj `device` a vytvoř watch-only wallety pro aktivní účty.
+9. **Gateway → App**: vrátí `{ accessToken, refreshToken, user, wallets[] }`.
+10. **App**: uloží tokeny a pokračuje na výběr účtu (UC‑08).
 
-**Alternative**: PIN/confirm selže → **App** zobrazí retry/cancel.
+**Alternative**: 
+- Uživatel odmítne na Trezoru → **App** zobrazí retry/cancel.
+- Žádný účet nemá aktivitu → **App** nabídne vytvoření nového účtu (prázdná peněženka).
 
-**Postconditions**: Zařízení je spárováno (device\_id), případně vytvořená/registrovaná wallet.
+**Postconditions**: Zařízení je spárováno (device\_id), aktivní wallety jsou registrovány.
 
 ---
 
@@ -344,9 +369,10 @@
 
 **Main Flow**
 
-1. **App → Gateway → Registry**: `GET /wallets/{id}` (descriptor) → vygeneruj next index.
-2. **App → Gateway → Signer**: `POST /hwi/displayaddress { descriptor, index }` → uživatel ověří adresu **na Trezoru**.
-3. **App** zobrazí adresu/QR. Po přijetí vstupu **Explorer** přes ZMQ rychle signalizuje novou tx.
+1. **App → Gateway → Registry**: `GET /wallets/{id}/address/next` → vygeneruj next index, vrátí adresu.
+2. **App**: zobrazí adresu/QR.
+3. (Volitelně) **App → Trezor Suite**: deeplink pro `getAddress` s `showOnTrezor=true` → uživatel ověří adresu **na Trezoru**.
+4. Po přijetí vstupu **Explorer** přes ZMQ rychle signalizuje novou tx.
 
 ---
 
@@ -359,11 +385,12 @@
 1. **App** vyplní cílové výstupy, mód výběru vstupů (Auto vs. Coin‑control).
 2. **App → Gateway → Bridge**: `POST /psbt { wallet_id, outputs[], inputs? (z UC‑06), fee_policy }`.
 3. **Bridge**: načte deskriptory (Registry), utxo (Explorer), provede coin selection, vytvoří PSBT.
-4. **App** zobrazí rekapitulaci; **App → Gateway → Signer**: `POST /hwi/signpsbt { psbt }`.
-5. **Signer**: po potvrzení na Trezoru vrátí **partial** podpisy.
-6. **Bridge/MsCoordinator**: `POST /ms/psbt/{id}/addsig`; vyhodnotí stav (K‑z‑N).
-7. Pokud **singlesig** nebo již komplet **multisig**: **Bridge** `finalizepsbt` (Node Proxy → Core) → `complete=true` → `sendrawtransaction`.
-8. **Explorer** přes ZMQ/mempool brzy ukáže neconfirm TX v historii.
+4. **App** zobrazí rekapitulaci; otevře **Trezor Suite** přes deeplink s PSBT (`signTransaction`).
+5. **Trezor Suite**: uživatel potvrdí na Trezoru, Suite vrátí podepsanou PSBT callbackem.
+6. **App → Gateway → Bridge**: `POST /psbt/{id}/submit { signedPsbtBase64 }`.
+7. **Bridge/MsCoordinator**: vyhodnotí stav (K‑z‑N), případně `finalizepsbt`.
+8. Pokud **singlesig** nebo již komplet **multisig**: **Bridge** `finalizepsbt` (Node Proxy → Core) → `complete=true` → `sendrawtransaction`.
+9. **Explorer** přes ZMQ/mempool brzy ukáže neconfirm TX v historii.
 
 **Alternative**
 
@@ -435,10 +462,12 @@
 
 **Main Flow**
 
-1. **App → Signer**: `POST /hwi/signpsbt { psbt }`.
-2. Trezor zobrazí detaily, uživatel potvrdí.
-3. **Signer → MsCoordinator**: `POST /ms/psbt/{id}/addsig`.
-4. **Bridge** (nebo MsCoordinator) zkusí `finalizepsbt` → pokud `complete=true`, označí jako připravené k broadcastu.
+1. **App**: otevře **Trezor Suite** přes deeplink s PSBT (`signTransaction`).
+2. **Trezor Suite**: zobrazí detaily, uživatel potvrdí na Trezoru.
+3. **Trezor Suite → App**: callback s podepsanou PSBT.
+4. **App → Gateway → Bridge**: `POST /psbt/{id}/submit { signedPsbtBase64 }`.
+5. **Bridge → MsCoordinator**: `POST /ms/psbt/{id}/addsig` (pro multisig).
+6. **Bridge** (nebo MsCoordinator) zkusí `finalizepsbt` → pokud `complete=true`, označí jako připravené k broadcastu.
 
 **Alternative**: odmítnuto / chyba komunikace → App nabídne retry.
 
