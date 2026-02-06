@@ -137,6 +137,27 @@ class MobileSigner(
         )
     }
 
+    /**
+     * POST {backendBaseUrl}/accounts/scan
+     *
+     * Scans multiple derivation paths to find accounts with blockchain activity.
+     * Used during account discovery to show user which accounts have funds.
+     */
+    suspend fun scanAccounts(
+        fingerprint: String,
+        accounts: List<AccountToScan>
+    ): ScanAccountsResponse {
+        return client.post("$backendBaseUrl/accounts/scan") {
+            contentType(ContentType.Application.Json)
+            setBody(
+                ScanAccountsRequest(
+                    fingerprint = fingerprint,
+                    accounts = accounts
+                )
+            )
+        }.body()
+    }
+
     companion object {
         private fun defaultClient(): HttpClient =
             HttpClient(Android) {
@@ -294,4 +315,35 @@ data class SubmitSignedPsbtBackendRequest(
 data class SubmitSignedPsbtBackendResponse(
     val status: String,
     val txId: String? = null
+)
+
+/* ---------- ACCOUNT DISCOVERY ---------- */
+
+@Serializable
+data class AccountToScan(
+    val xpub: String,
+    val derivationPath: String
+)
+
+@Serializable
+data class ScanAccountsRequest(
+    val fingerprint: String,
+    val accounts: List<AccountToScan>
+)
+
+@Serializable
+data class ScanAccountsResponse(
+    val fingerprint: String,
+    val accounts: List<ScannedAccount>
+)
+
+@Serializable
+data class ScannedAccount(
+    val derivationPath: String,
+    val xpub: String,
+    val hasActivity: Boolean,
+    val utxoCount: Int,
+    val totalSats: Long,
+    val scriptType: String,
+    val network: String
 )

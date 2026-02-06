@@ -13,7 +13,8 @@ object Allowlist {
         "deriveaddresses",
         "decoderawtransaction",
         "decodepsbt",
-        "finalizepsbt"
+        "finalizepsbt",
+        "scantxoutset"  // for account discovery
     )
 
     private val write = setOf(

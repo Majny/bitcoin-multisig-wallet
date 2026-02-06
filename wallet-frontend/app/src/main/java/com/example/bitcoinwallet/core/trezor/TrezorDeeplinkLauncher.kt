@@ -13,7 +13,37 @@ class TrezorDeeplinkLauncher(
     private val callbackScheme: String = "bitcoinwallet", // callback for manifest
     private val callbackHost: String = "trezor-callback",
 ) {
-    fun openGetPublicKey(context: Context, derivationPath: String = "m/84'/0'/0'" /*  TODO: add for cycle for derivation path */): Boolean {
+
+    companion object {
+        /**
+         * Standard BIP derivation paths for Bitcoin.
+         * Purpose: 84 = Native SegWit (bech32), 86 = Taproot, 49 = Nested SegWit, 44 = Legacy
+         * Coin type: 0 = mainnet, 1 = testnet
+         */
+        val MAINNET_DERIVATION_PATHS = listOf(
+            "m/84'/0'/0'",  // Native SegWit account 0
+            "m/84'/0'/1'",  // Native SegWit account 1
+            "m/84'/0'/2'",  // Native SegWit account 2
+            "m/86'/0'/0'",  // Taproot account 0
+            "m/86'/0'/1'",  // Taproot account 1
+        )
+
+        val TESTNET_DERIVATION_PATHS = listOf(
+            "m/84'/1'/0'",  // Native SegWit testnet account 0
+            "m/84'/1'/1'",  // Native SegWit testnet account 1
+            "m/86'/1'/0'",  // Taproot testnet account 0
+        )
+
+        /**
+         * Get the next derivation path to scan.
+         * Used for sequential account discovery.
+         */
+        fun getDerivationPath(purpose: Int, coinType: Int, accountIndex: Int): String {
+            return "m/$purpose'/$coinType'/$accountIndex'"
+        }
+    }
+
+    fun openGetPublicKey(context: Context, derivationPath: String = "m/84'/0'/0'"): Boolean {
         val paramsJson = JSONObject().apply {
             put("coin", "btc")
             put("path", derivationPath)
@@ -37,6 +67,44 @@ class TrezorDeeplinkLauncher(
         } catch (e: ActivityNotFoundException) {
             Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
             false
+        }
+    }
+
+    /**
+     * Opens Trezor Suite to get public keys for multiple derivation paths.
+     * Returns the request ID for tracking the callback.
+     */
+    fun openGetPublicKeyBatch(
+        context: Context,
+        derivationPaths: List<String>,
+        currentIndex: Int = 0
+    ): String? {
+        if (currentIndex >= derivationPaths.size) return null
+
+        val path = derivationPaths[currentIndex]
+        val paramsJson = JSONObject().apply {
+            put("coin", "btc")
+            put("path", path)
+        }.toString()
+
+        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        // Encode remaining paths and current index in callback
+        val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&batchIndex=$currentIndex&batchTotal=${derivationPaths.size}"
+
+        val uri = Uri.parse(connectBaseUrl).buildUpon()
+            .appendQueryParameter("method", "getPublicKey")
+            .appendQueryParameter("params", paramsJson)
+            .appendQueryParameter("callback", callbackUrl)
+            .build()
+
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+
+        return try {
+            context.startActivity(intent)
+            requestId
+        } catch (e: ActivityNotFoundException) {
+            Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            null
         }
     }
 }

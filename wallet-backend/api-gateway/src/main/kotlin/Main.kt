@@ -25,6 +25,7 @@ fun main() {
             explorer = ExplorerClientImpl(cfg),
             signer = SignerClientImpl(cfg),
             psbt = PsbtClientImpl(cfg),
+            nodeProxy = NodeProxyClientImpl(cfg),
         )
 
         installGatewayDeps(deps)

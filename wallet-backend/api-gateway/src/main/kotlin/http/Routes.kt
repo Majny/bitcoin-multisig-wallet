@@ -14,6 +14,8 @@ fun Application.configureRouting() {
             walletRoutes()
             explorerRoutes()
             psbtRoutes()
+            nodeProxyRoutes()
+            accountDiscoveryRoutes()
         }
     }
 }

@@ -2,6 +2,7 @@ package cz.majny.wallet.gateway
 
 import cz.majny.wallet.gateway.clients.AuthClientImpl
 import cz.majny.wallet.gateway.clients.ExplorerClientImpl
+import cz.majny.wallet.gateway.clients.NodeProxyClientImpl
 import cz.majny.wallet.gateway.clients.PsbtClientImpl
 import cz.majny.wallet.gateway.clients.RegistryClientImpl
 import cz.majny.wallet.gateway.clients.SignerClientImpl
@@ -17,4 +18,5 @@ fun GatewayDeps.attachHttpClients(application: Application) {
     (explorer as? ExplorerClientImpl)?.attach(http)
     (signer as? SignerClientImpl)?.attach(http)
     (psbt as? PsbtClientImpl)?.attach(http)
+    (nodeProxy as? NodeProxyClientImpl)?.attach(http)
 }

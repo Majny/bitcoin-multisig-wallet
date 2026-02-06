@@ -12,6 +12,7 @@ data class GatewayDeps(
     val explorer: ExplorerClient,
     val signer: SignerClient,
     val psbt: PsbtClient,
+    val nodeProxy: NodeProxyClient,
 )
 
 private val GatewayDepsKey = AttributeKey<GatewayDeps>("GatewayDeps")
