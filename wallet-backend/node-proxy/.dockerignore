@@ -1,0 +1,19 @@
+# Build outputs
+build/
+.gradle/
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+
+# Local config (použijeme docker env vars)
+local.properties
+.env
+
+# Git
+.git/
+.gitignore
+
+# Docs
+*.md
