@@ -13,6 +13,7 @@ data class GatewayDeps(
     val signer: SignerClient,
     val psbt: PsbtClient,
     val blockchain: BlockchainClient,
+    val price: PriceClient,
 )
 
 private val GatewayDepsKey = AttributeKey<GatewayDeps>("GatewayDeps")

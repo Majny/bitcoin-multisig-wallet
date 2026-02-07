@@ -8,6 +8,7 @@ data class AppConfig(
     val signerBaseUrl: String,
     val psbtBaseUrl: String,
     val blockchainBaseUrl: String,
+    val priceBaseUrl: String,
     val jwtIssuer: String,
     val jwtAudience: String,
     val jwksUrl: String,
@@ -26,6 +27,7 @@ data class AppConfig(
                 signerBaseUrl = env("SIGNER_BASE_URL", "http://localhost:8084"),
                 psbtBaseUrl = env("PSBT_BASE_URL", "http://localhost:8085"),
                 blockchainBaseUrl = env("BLOCKCHAIN_BASE_URL", "http://localhost:8086"),
+                priceBaseUrl = env("PRICE_BASE_URL", "http://localhost:8087"),
 
                 jwtIssuer = env("JWT_ISSUER", "wallet-auth"),
                 jwtAudience = env("JWT_AUDIENCE", "wallet-gateway"),

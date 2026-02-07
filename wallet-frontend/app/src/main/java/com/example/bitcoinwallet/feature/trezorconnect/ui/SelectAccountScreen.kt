@@ -8,9 +8,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.bitcoinwallet.core.signer.WalletSummary
+import com.example.bitcoinwallet.ui.theme.*
 
 @Composable
 fun SelectAccountScreen(
@@ -34,13 +34,13 @@ fun SelectAccountScreen(
             Text(
                 text = "Select Account",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = TextPrimary,
                 modifier = Modifier.align(Alignment.Center)
             )
 
             Text(
                 text = "X",
-                color = Color.White,
+                color = TextPrimary,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -60,7 +60,7 @@ fun SelectAccountScreen(
             if (wallets.isEmpty()) {
                 Text(
                     text = "No accounts returned from backend.",
-                    color = Color(0xFFB0B0B0),
+                    color = TextSecondary,
                     modifier = Modifier.padding(16.dp)
                 )
             } else {
@@ -77,14 +77,14 @@ fun SelectAccountScreen(
                         Column(Modifier.weight(1f)) {
                             Text(
                                 text = w.label?.takeIf { it.isNotBlank() } ?: "Account #${i + 1}",
-                                color = Color.White,
+                                color = TextPrimary,
                                 style = MaterialTheme.typography.titleMedium
                             )
                             Spacer(Modifier.height(2.dp))
 
                             Text(
                                 text = "${w.network} · ${w.scriptType}",
-                                color = Color(0xFFB0B0B0),
+                                color = TextSecondary,
                                 style = MaterialTheme.typography.bodyMedium
                             )
 
@@ -92,7 +92,7 @@ fun SelectAccountScreen(
                                 Spacer(Modifier.height(2.dp))
                                 Text(
                                     text = "Multisig ${w.m}-of-${w.n}",
-                                    color = Color(0xFFB0B0B0),
+                                    color = TextSecondary,
                                     style = MaterialTheme.typography.bodySmall
                                 )
                             }
@@ -105,7 +105,7 @@ fun SelectAccountScreen(
                     }
 
                     if (i != wallets.lastIndex) {
-                        Divider(color = Color(0xFF2A2A2A), thickness = 1.dp)
+                        Divider(color = DividerColor, thickness = 1.dp)
                     }
                 }
             }
@@ -119,7 +119,7 @@ fun SelectAccountScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B4450))
+            colors = ButtonDefaults.buttonColors(containerColor = ButtonSecondary)
         ) {
             Text("Confirm", style = MaterialTheme.typography.titleMedium)
         }

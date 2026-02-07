@@ -1,0 +1,51 @@
+package cz.majny.wallet.price
+
+import cz.majny.wallet.price.client.CoinGeckoClient
+import cz.majny.wallet.price.config.AppConfig
+import cz.majny.wallet.price.http.priceRoutes
+import io.ktor.serialization.kotlinx.json.*
+import io.ktor.server.application.*
+import io.ktor.server.engine.*
+import io.ktor.server.netty.*
+import io.ktor.server.plugins.calllogging.*
+import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
+import io.ktor.http.*
+import kotlinx.serialization.json.Json
+
+fun main() {
+    val coinGeckoClient = CoinGeckoClient()
+    
+    embeddedServer(Netty, port = AppConfig.PORT) {
+        install(ContentNegotiation) {
+            json(Json {
+                prettyPrint = true
+                ignoreUnknownKeys = true
+            })
+        }
+        
+        install(CallLogging)
+        
+        install(StatusPages) {
+            exception<Throwable> { call, cause ->
+                call.application.environment.log.error("Unhandled exception", cause)
+                call.respond(
+                    HttpStatusCode.InternalServerError,
+                    mapOf("error" to (cause.message ?: "Unknown error"))
+                )
+            }
+        }
+        
+        routing {
+            priceRoutes(coinGeckoClient)
+        }
+        
+        environment.monitor.subscribe(ApplicationStopped) {
+            coinGeckoClient.close()
+        }
+    }.start(wait = true)
+    
+    println("Price Service started on port ${AppConfig.PORT}")
+}

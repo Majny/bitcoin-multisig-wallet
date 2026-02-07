@@ -15,6 +15,7 @@ fun Application.configureRouting() {
             explorerRoutes()
             psbtRoutes()
             blockchainRoutes()  // Proxies to blockchain-service
+            priceRoutes()       // Proxies to price-service
             accountDiscoveryRoutes()
         }
     }

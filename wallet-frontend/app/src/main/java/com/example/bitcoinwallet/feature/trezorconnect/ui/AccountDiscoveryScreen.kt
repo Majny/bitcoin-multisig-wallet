@@ -11,10 +11,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.bitcoinwallet.core.signer.ScannedAccount
+import com.example.bitcoinwallet.ui.theme.*
 import java.text.NumberFormat
 import java.util.Locale
 
@@ -42,13 +42,13 @@ fun AccountDiscoveryScreen(
             Text(
                 text = "Discover Accounts",
                 style = MaterialTheme.typography.headlineSmall,
-                color = Color.White,
+                color = TextPrimary,
                 modifier = Modifier.align(Alignment.Center)
             )
 
             Text(
                 text = "✕",
-                color = Color.White,
+                color = TextPrimary,
                 style = MaterialTheme.typography.titleMedium,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -63,7 +63,7 @@ fun AccountDiscoveryScreen(
         Text(
             text = "Select accounts to import. Accounts with activity are pre-selected.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFB0B0B0)
+            color = TextSecondary
         )
 
         Spacer(Modifier.height(18.dp))
@@ -77,12 +77,12 @@ fun AccountDiscoveryScreen(
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Color(0xFF4A90D9))
+                    CircularProgressIndicator(color = AccentBlue)
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = "Scanning blockchain for account activity...",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFB0B0B0)
+                        color = TextSecondary
                     )
                 }
             }
@@ -103,7 +103,7 @@ fun AccountDiscoveryScreen(
                     Text(
                         text = errorMessage,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFFE57373)
+                        color = ErrorRed
                     )
                 }
             }
@@ -123,7 +123,7 @@ fun AccountDiscoveryScreen(
                     )
 
                     if (index != accounts.lastIndex) {
-                        HorizontalDivider(color = Color(0xFF2A2A2A), thickness = 1.dp)
+                        HorizontalDivider(color = DividerColor, thickness = 1.dp)
                     }
                 }
             }
@@ -140,7 +140,7 @@ fun AccountDiscoveryScreen(
                 onClick = onCancel,
                 modifier = Modifier.weight(1f).height(54.dp),
                 colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = Color.White
+                    contentColor = TextPrimary
                 )
             ) {
                 Text("Cancel")
@@ -150,7 +150,7 @@ fun AccountDiscoveryScreen(
                 onClick = onConfirm,
                 enabled = !isLoading && selectedAccounts.isNotEmpty(),
                 modifier = Modifier.weight(1f).height(54.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2B4450))
+                colors = ButtonDefaults.buttonColors(containerColor = ButtonSecondary)
             ) {
                 Text("Import ${selectedAccounts.size} Account(s)")
             }
@@ -175,7 +175,7 @@ private fun AccountItem(
             .fillMaxWidth()
             .clickable { onToggle() }
             .background(
-                if (isSelected) Color(0xFF1A2A35) else Color.Transparent
+                if (isSelected) SelectedBackground else androidx.compose.ui.graphics.Color.Transparent
             )
             .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -184,8 +184,8 @@ private fun AccountItem(
             checked = isSelected,
             onCheckedChange = { onToggle() },
             colors = CheckboxDefaults.colors(
-                checkedColor = Color(0xFF4A90D9),
-                uncheckedColor = Color(0xFF666666)
+                checkedColor = AccentBlue,
+                uncheckedColor = TextMuted
             )
         )
 
@@ -197,7 +197,7 @@ private fun AccountItem(
             ) {
                 Text(
                     text = getAccountLabel(account),
-                    color = Color.White,
+                    color = TextPrimary,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
@@ -206,7 +206,7 @@ private fun AccountItem(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = "●",
-                        color = Color(0xFF4CAF50),
+                        color = ReceiveGreen,
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -216,13 +216,13 @@ private fun AccountItem(
 
             Text(
                 text = "${account.network} · ${getScriptTypeName(account.scriptType)}",
-                color = Color(0xFFB0B0B0),
+                color = TextSecondary,
                 style = MaterialTheme.typography.bodyMedium
             )
 
             Text(
                 text = account.derivationPath,
-                color = Color(0xFF888888),
+                color = TextMuted,
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -231,19 +231,19 @@ private fun AccountItem(
             if (account.hasActivity) {
                 Text(
                     text = balanceFormatted,
-                    color = Color.White,
+                    color = TextPrimary,
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Medium
                 )
                 Text(
                     text = "${account.utxoCount} UTXO${if (account.utxoCount != 1) "s" else ""}",
-                    color = Color(0xFFB0B0B0),
+                    color = TextSecondary,
                     style = MaterialTheme.typography.bodySmall
                 )
             } else {
                 Text(
                     text = "No activity",
-                    color = Color(0xFF888888),
+                    color = TextMuted,
                     style = MaterialTheme.typography.bodySmall
                 )
             }

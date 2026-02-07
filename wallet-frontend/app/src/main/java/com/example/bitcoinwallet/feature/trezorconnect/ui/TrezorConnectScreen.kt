@@ -11,8 +11,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.bitcoinwallet.ui.theme.*
 
 @Composable
 fun TrezorConnectScreen(
@@ -29,7 +29,7 @@ fun TrezorConnectScreen(
         Text(
             text = "Bitcoin Wallet",
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.White
+            color = TextPrimary
         )
 
         Spacer(Modifier.height(48.dp))
@@ -37,7 +37,7 @@ fun TrezorConnectScreen(
         Icon(
             imageVector = Icons.Default.Lock,
             contentDescription = null,
-            tint = Color.White,
+            tint = TextPrimary,
             modifier = Modifier.size(180.dp)
         )
 
@@ -46,7 +46,7 @@ fun TrezorConnectScreen(
         Text(
             text = "No Wallet Connected",
             style = MaterialTheme.typography.titleLarge,
-            color = Color.White
+            color = TextPrimary
         )
 
         Spacer(Modifier.height(8.dp))
@@ -54,7 +54,7 @@ fun TrezorConnectScreen(
         Text(
             text = "Please connect your Trezor device\nto load your Bitcoin balance\nand transactions.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFB0B0B0)
+            color = TextSecondary
         )
 
         Spacer(Modifier.weight(1f))
@@ -64,7 +64,7 @@ fun TrezorConnectScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B8F2A))
+            colors = ButtonDefaults.buttonColors(containerColor = TrezorGreen)
         ) {
             Text("Connect Trezor", style = MaterialTheme.typography.titleMedium)
         }

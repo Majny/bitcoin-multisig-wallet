@@ -7,6 +7,7 @@ import cz.majny.wallet.gateway.plugins.configureAuth
 import cz.majny.wallet.gateway.plugins.configureErrorHandling
 import cz.majny.wallet.gateway.plugins.configureHttpClient
 import cz.majny.wallet.gateway.plugins.configureSerialization
+import cz.majny.wallet.gateway.plugins.httpClient
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 
@@ -18,6 +19,8 @@ fun main() {
         configureErrorHandling()
         configureHttpClient()
 
+        val client = httpClient // Get the configured HttpClient
+
         val deps = GatewayDeps(
             config = cfg,
             auth = AuthClientImpl(cfg),
@@ -26,6 +29,7 @@ fun main() {
             signer = SignerClientImpl(cfg),
             psbt = PsbtClientImpl(cfg),
             blockchain = BlockchainClientImpl(baseUrl = cfg.blockchainBaseUrl),
+            price = HttpPriceClient(baseUrl = cfg.priceBaseUrl, httpClient = client),
         )
 
         installGatewayDeps(deps)

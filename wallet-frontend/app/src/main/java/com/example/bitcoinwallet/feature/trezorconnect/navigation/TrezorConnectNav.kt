@@ -12,6 +12,7 @@ import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
 import com.example.bitcoinwallet.feature.trezorconnect.ui.ResolveWalletScreen
 import com.example.bitcoinwallet.feature.trezorconnect.ui.SelectAccountScreen
 import com.example.bitcoinwallet.feature.trezorconnect.ui.TrezorConnectScreen
+import com.example.bitcoinwallet.feature.wallet.navigation.WalletRoutes
 
 object TrezorRoutes {
     const val Graph = "trezor_graph"
@@ -63,10 +64,11 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                     SessionStore.walletsFetchedAtMs = System.currentTimeMillis()
 
                     if (SessionStore.hasWalletSelected()) {
-                        navController.popBackStack(
-                            route = TrezorRoutes.Graph,
-                            inclusive = true
-                        )
+                        // Navigate to wallet dashboard
+                        navController.navigate(WalletRoutes.Graph) {
+                            popUpTo(TrezorRoutes.Graph) { inclusive = true }
+                            launchSingleTop = true
+                        }
                     } else {
                         navController.navigate(TrezorRoutes.SelectAccount) {
                             launchSingleTop = true
@@ -90,10 +92,11 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                 onConfirm = { selected ->
                     SessionStore.activeWalletId = selected.id
 
-                    navController.popBackStack(
-                        route = TrezorRoutes.Graph,
-                        inclusive = true
-                    )
+                    // Navigate to wallet dashboard
+                    navController.navigate(WalletRoutes.Graph) {
+                        popUpTo(TrezorRoutes.Graph) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

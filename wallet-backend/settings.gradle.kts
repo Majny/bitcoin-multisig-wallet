@@ -34,3 +34,4 @@ include(":auth-service")
 
 include("wallet-registry")
 include("blockchain-service")
+include("price-service")

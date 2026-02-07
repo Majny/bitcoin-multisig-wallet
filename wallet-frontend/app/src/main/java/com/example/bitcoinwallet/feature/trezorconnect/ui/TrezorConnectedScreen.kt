@@ -12,8 +12,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.example.bitcoinwallet.ui.theme.*
 
 @Composable
 fun TrezorConnectedScreen(
@@ -30,7 +30,7 @@ fun TrezorConnectedScreen(
         Text(
             text = "Trezor Connected",
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.White
+            color = TextPrimary
         )
 
         Spacer(Modifier.height(48.dp))
@@ -39,13 +39,13 @@ fun TrezorConnectedScreen(
             Icon(
                 imageVector = Icons.Default.Lock,
                 contentDescription = null,
-                tint = Color.White,
+                tint = TextPrimary,
                 modifier = Modifier.size(190.dp)
             )
             Icon(
                 imageVector = Icons.Default.CheckCircle,
                 contentDescription = null,
-                tint = Color(0xFF1B8F2A),
+                tint = TrezorGreen,
                 modifier = Modifier.size(56.dp)
             )
         }
@@ -55,7 +55,7 @@ fun TrezorConnectedScreen(
         Text(
             text = "Your Trezor device is connected\nand ready to use.",
             style = MaterialTheme.typography.bodyMedium,
-            color = Color(0xFFB0B0B0)
+            color = TextSecondary
         )
 
         Spacer(Modifier.weight(1f))
@@ -65,7 +65,7 @@ fun TrezorConnectedScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF1B8F2A))
+            colors = ButtonDefaults.buttonColors(containerColor = TrezorGreen)
         ) {
             Text("Continue", style = MaterialTheme.typography.titleMedium)
         }
@@ -75,7 +75,7 @@ fun TrezorConnectedScreen(
         Text(
             text = "For your security, always check your\ndevice screen.",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF7D7D7D)
+            color = TextMuted
         )
 
         Spacer(Modifier.height(22.dp))

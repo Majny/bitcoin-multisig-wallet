@@ -279,7 +279,34 @@
   * `PORT`: Port služby (default 8086)
   * `MEMPOOL_BASE_URL`: URL Mempool API (default `https://mempool.space/api`)
 
-### 2.11 Infra (PG/Redis/S3/Observability)
+### 2.11 Price Service (price-service)
+
+* **Role**: **Separátní microservice** pro získávání cen Bitcoinu ve fiat měnách. Komunikuje s **CoinGecko API**.
+* **Port**: 8087 (default)
+* **API endpointy**:
+  * `GET /price` → aktuální ceny BTC v CZK, USD, EUR + 24h změna
+  * `GET /price/convert?sats=1000000&currency=czk` → převod satoshi na fiat
+  * `GET /price/health` → health check
+* **CoinGecko API**:
+  * `https://api.coingecko.com/api/v3/simple/price`
+  * Free tier: 10-30 requests/min (bez API klíče)
+* **Funkce**:
+  * **In-memory cache**: Ceny se cachují (default 5 minut) pro respektování rate limitů.
+  * **Převod**: Satoshi → fiat hodnota pro zobrazení v UI.
+  * **24h změna**: Procentuální změna ceny za posledních 24 hodin.
+* **Výhody separátního service**:
+  * Single Responsibility - oddělení cenových dat od blockchain dat
+  * Jiný zdroj dat (CoinGecko vs Mempool.space)
+  * Nezávislý caching a škálování
+  * Pokud CoinGecko padne, blockchain-service funguje dál
+* **Spojení**:
+  * API Gateway → Price Service → CoinGecko API
+* **Konfigurace** (env proměnné):
+  * `PORT`: Port služby (default 8087)
+  * `COINGECKO_BASE_URL`: URL CoinGecko API (default `https://api.coingecko.com/api/v3`)
+  * `PRICE_CACHE_DURATION_MS`: Doba cache v ms (default 300000 = 5 min)
+
+### 2.12 Infra (PG/Redis/S3/Observability)
 
 * **PG**: devices, wallets, wallet\_cosigners, wallet\_members, utxo/history projekce, audit, ms\_state.
 * **Redis**: RL tokens, krátké cache, PSBT dočasné stavy.
