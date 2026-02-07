@@ -25,7 +25,10 @@ fun main() {
             explorer = ExplorerClientImpl(cfg),
             signer = SignerClientImpl(cfg),
             psbt = PsbtClientImpl(cfg),
-            nodeProxy = NodeProxyClientImpl(cfg),
+            nodeProxy = NodeProxyClientImpl(cfg),  // DEPRECATED
+            mempool = MempoolClientImpl(
+                baseUrl = cfg.mempoolBaseUrl ?: "https://mempool.space/api"
+            ),
         )
 
         installGatewayDeps(deps)

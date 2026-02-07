@@ -242,3 +242,57 @@ significant amount of metadata about a transaction, making it much less compact 
 the standard serialization format. This book does not go into detail about PSBT, but we
 strongly recommend it to developers of wallets that plan to support signing with
 multiple keys.
+
+
+
+# mempool.space API
+
+## Endpointy
+
+| Funkce | Endpoint | Popis |
+|--------|----------|-------|
+| Address info | `GET /api/address/:addr` | tx_count, balance |
+| UTXO list | `GET /api/address/:addr/utxo` | Pro coin control |
+| TX history | `GET /api/address/:addr/txs` | Historie transakcí |
+| Fee estimates | `GET /api/v1/fees/recommended` | sat/vB |
+| Broadcast | `POST /api/tx` | Raw hex → txid |
+| TX detail | `GET /api/tx/:txid` | Detail transakce |
+
+## Příklady
+
+```bash
+# Address info (zjistí jestli má aktivitu)
+curl https://mempool.space/api/address/bc1q...
+
+# UTXO list (pro coin control)
+curl https://mempool.space/api/address/bc1q.../utxo
+
+# Fee estimates
+curl https://mempool.space/api/v1/fees/recommended
+# {\"fastestFee\":12,\"halfHourFee\":10,\"hourFee\":8,\"economyFee\":6,\"minimumFee\":3}
+
+# Broadcast TX
+curl -X POST https://mempool.space/api/tx -d '<raw-hex>'
+
+# Testnet
+curl https://mempool.space/testnet/api/address/tb1q...
+```
+
+## Account Discovery (bez scantxoutset)
+
+```
+1. Z xpub derivuj prvních 20 adres (gap limit = 20)
+2. Pro každou adresu: GET /api/address/:addr
+3. Pokud tx_count > 0 → účet je aktivní
+4. Pokud všech 20 adres má tx_count = 0 → prázdný účet
+```
+
+## Base URLs
+- **Mainnet**: `https://mempool.space/api/`
+- **Testnet**: `https://mempool.space/testnet/api/`
+
+---
+
+# Node Proxy - DEPRECATED (disk odešel)
+
+> **Poznámka:** Node Proxy na RPi již není potřeba. Používáme mempool.space API.

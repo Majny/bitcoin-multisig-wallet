@@ -7,8 +7,9 @@ data class AppConfig(
     val explorerBaseUrl: String,
     val signerBaseUrl: String,
     val psbtBaseUrl: String,
-    val nodeProxyBaseUrl: String,
-    val nodeProxyApiKey: String?,
+    val nodeProxyBaseUrl: String,  // DEPRECATED
+    val nodeProxyApiKey: String?,  // DEPRECATED
+    val mempoolBaseUrl: String?,   // NEW - Mempool.space API base URL
     val jwtIssuer: String,
     val jwtAudience: String,
     val jwksUrl: String,
@@ -26,8 +27,9 @@ data class AppConfig(
                 explorerBaseUrl = env("EXPLORER_BASE_URL", "http://localhost:8083"),
                 signerBaseUrl = env("SIGNER_BASE_URL", "http://localhost:8084"),
                 psbtBaseUrl = env("PSBT_BASE_URL", "http://localhost:8085"),
-                nodeProxyBaseUrl = env("NODE_PROXY_BASE_URL", "http://localhost:8088"),
-                nodeProxyApiKey = System.getenv("NODE_PROXY_API_KEY"),
+                nodeProxyBaseUrl = env("NODE_PROXY_BASE_URL", "http://localhost:8088"),  // DEPRECATED
+                nodeProxyApiKey = System.getenv("NODE_PROXY_API_KEY"),  // DEPRECATED
+                mempoolBaseUrl = System.getenv("MEMPOOL_BASE_URL"),  // NEW: defaults to mainnet in client
 
                 jwtIssuer = env("JWT_ISSUER", "wallet-auth"),
                 jwtAudience = env("JWT_AUDIENCE", "wallet-gateway"),

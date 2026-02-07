@@ -1,6 +1,6 @@
 # Architektura: komponenty, API a use‑casy
 
-> Cíl: Android bitcoin aplikace s **coin‑control** a **multisig**. Všechny podpisy probíhají na **Trezoru**. Backend komunikuje s **Bitcoin Core** na RPi **výhradně přes Tailscale VPN**.
+> Cíl: Android bitcoin aplikace s **coin‑control** a **multisig**. Všechny podpisy probíhají na **Trezoru**. Backend komunikuje s **Bitcoin blockchain** přes veřejné **Mempool.space API** (nevyžaduje vlastní node).
 
 ---
 
@@ -42,15 +42,23 @@
 * **PSBT Builder/Bridge** – stavba PSBT, coin selection, fee, finalize, broadcast.
 * **Multisig Coordinator** – sleduje stav PSBT u multisigů (K‑z‑N), orchestrace podpisů, notifikace.
 * **Notification Service** – FCM/webhooky (nevim jestli bude potřeba, spíše ne).
-* **Node Proxy (Tailscale RPC)** – jediná služba, která mluví na Core přes **Tailscale VPN**. Má **allowlist RPC** a ochrany (max tx size/feerate, HTTP/1.1 + Connection: close, retry/backoff, audit).
+* **Blockchain Client (Mempool.space)** – HTTP klient pro komunikaci s veřejným Mempool.space API. Poskytuje UTXO, TX history, fee estimates, broadcast. Nevyžaduje vlastní Bitcoin node.
 * **Infra úložiště**: PostgreSQL (perzistence), Redis (cache/rate‑limit), S3 (PSBT blobs), Observability (Prometheus/Grafana/Loki/Jaeger).
 
 > **Poznámka:** Podepisování transakcí probíhá **výhradně na telefonu** přes Trezor Connect Mobile (deeplink do Trezor Suite). Backend nikdy nemá přístup k privátním klíčům ani k Trezoru.
 
-### 1.3 RPi s Bitcoin Core
+### 1.3 Blockchain Data Source (Mempool.space)
 
-* **Bitcoin Core (`bitcoind`)** – full node, `rpcbind=100.79.139.14` (Tailscale IP), `rpcauth=…`, `txindex=1`.
-* **Tailscale** – VPN mesh síť pro bezpečnou komunikaci. Core není z internetu přímo dosažitelné, pouze přes Tailscale.
+* **Mempool.space API** – veřejné REST API pro Bitcoin blockchain data.
+  * Mainnet: `https://mempool.space/api/`
+  * Testnet: `https://mempool.space/testnet/api/`
+* **Poskytuje**:
+  * UTXO pro adresy: `GET /address/:addr/utxo`
+  * TX historie: `GET /address/:addr/txs`
+  * Fee estimates: `GET /v1/fees/recommended`
+  * Broadcast TX: `POST /tx` (raw hex)
+  * Account discovery: kontrola `tx_count` pro adresy derivované z xpub
+* **Výhody**: Žádná infrastruktura, žádná údržba, vysoká dostupnost, podpora testnet.
 
 ---
 
@@ -70,7 +78,7 @@
   * `GET  /api/v1/wallets/{id}/utxos` → data z Exploreru
   * `POST /api/v1/psbt` → vytvoření PSBT (Bridge)
   * `POST /api/v1/psbt/{id}/submit` → přijetí podepsané PSBT z appky (Bridge)
-  * `POST /api/v1/psbt/{id}/broadcast` → broadcast (Bridge → Node Proxy)
+  * `POST /api/v1/psbt/{id}/broadcast` → broadcast (Bridge → Mempool.space API)
 * **Spojení**
   * API Gateway → Auth & Pairing Service: vydání/obnova tokenů přes pairing s Trezorem.
   * API Gateway → Wallet Registry: CRUD nad peněženkami a přidělování adres.
@@ -142,12 +150,12 @@
 
 ### 2.5 Explorer Service
 
-* **Role**: Rychlé a škálovatelné READ endpointy pro peněženky: UTXO, historie, zůstatek, odhad poplatků a základní chain info. Minimalizuje zátěž na Bitcoin Core díky lokální cache/indexům a ZMQ invalidaci (nvm jestli bude potřeba TODO).
+* **Role**: Rychlé a škálovatelné READ endpointy pro peněženky: UTXO, historie, zůstatek, odhad poplatků a základní chain info. Používá **Mempool.space API** jako primární zdroj dat.
 * **Funkce**:
-  * Primární zdroj: vlastní indexy/projekce a Redis (hot cache) – typické dotazy obsluhuje z paměti (např. GET /wallets/{id}/utxos nebo GET /fees/estimates). 
+  * Primární zdroj: **Mempool.space API** – UTXO, TX historie, fee estimates.
+  * Account discovery: derivuje adresy z xpub a kontroluje `tx_count > 0` přes Mempool API.
+  * Lokální cache: Redis (hot cache) pro snížení počtu API volání.
   * Projekce do PG: trvalé projekce UTXO/tx-history pro rychlé filtry, stránkování a agregace.
-  * ZMQ invalidace: odebírá hashblock/rawtx (případně sequence) a okamžitě invaliduje/aktualizuje cache. 
-  * Fallback na Core: při cache miss nebo chybějících datech volá Node Proxy → Core RPC (s allowlist metodami).
 * **API** TODO
   * `GET /wallets/{id}/utxos`
   * `GET /wallets/{id}/history?limit=&from=`
@@ -156,8 +164,7 @@
 * **Data**: Redis (hot cache), PG (projekce na transakce/UTXO).
 * **Spojení**
   * Explorer → Wallet Registry: získání descriptor setu a členství; Příklad: „Načti ext/int descriptor pro wallet X“. 
-  * Explorer → Node Proxy: fallback/primární RPC na Core; Příklad: „getblockfilter/getrawtransaction přes Tailscale".
-  * Explorer → Electrum/Esplora: rychlé čtení UTXO/historie 
+  * Explorer → Mempool.space API: UTXO, TX historie, fee estimates, account discovery.
   * Explorer → Redis: hot cache výsledků 
   * Explorer → PostgreSQL: projekce historie/utxo
 
@@ -175,26 +182,26 @@
     * Umožňuje upravit vstupy nebo poplatky (např. při použití Coin Control). 
     * Znovu přepočítá poplatek a change výstup. 
   * Finalize (/psbt/{id}/finalize)
-    * Zavolá Core RPC finalizepsbt přes Node Proxy. 
+    * Finalizuje PSBT lokálně pomocí BitcoinJ/libwally. 
     * Zkontroluje, zda má transakce všechny potřebné podpisy (complete: true/false). 
     * Vrací hex a stav finální transakce. 
   * Broadcast (/psbt/{id}/broadcast)
-    * Po complete=true odešle transakci do mempoolu přes Node Proxy → Core (sendrawtransaction). 
-    * Volitelně spustí testmempoolaccept pro validaci před broadcastem.
+    * Po complete=true odešle transakci do mempoolu přes **Mempool.space API** (`POST /tx`).
+    * Mempool.space vrací txid při úspěchu.
 * **API** TODO
   * `POST /psbt` – vstup: wallet\_id, outputs\[], optional inputs (coin‑control), fee policy. Výstup: `psbt_id`, PSBT blob.
   * `POST /psbt/{id}/update` – změna vstupů/fee (např. z Coin Control).
-  * `POST /psbt/{id}/finalize` – zavolá Core `finalizepsbt`, řekne `complete: true/false`.
-  * `POST /psbt/{id}/broadcast` – po `complete=true` pošle přes Node Proxy `sendrawtransaction`.
+  * `POST /psbt/{id}/finalize` – finalizuje PSBT lokálně, řekne `complete: true/false`.
+  * `POST /psbt/{id}/broadcast` – po `complete=true` pošle přes Mempool.space API.
 * **Spojení**
   * Bridge → Wallet Registry: deskriptory, change index, policy 
   * Bridge → Explorer: UTXO/fee inputs 
-  * Bridge → Node Proxy: testmempoolaccept/broadcast 
+  * Bridge → Mempool.space API: broadcast transakce (`POST /tx`)
   * Bridge → Multisig Coordinator: registrace PSBT a sběr podpisů 
   * Bridge → PostgreSQL: záznam o PSBT/TX
 * Bezpečnostní omezení (Guard-rails):
-  * Validace přes testmempoolaccept před broadcastem.
-* **Závislosti**: Registry (deskriptory), Explorer (UTXO), Node Proxy (RPC), Coordinator (multisig stav).
+  * Validace PSBT lokálně před broadcastem.
+* **Závislosti**: Registry (deskriptory), Explorer (UTXO), Mempool.space (broadcast), Coordinator (multisig stav).
 
 ### 2.x MobileSigner (Android HTTP klient)
 
@@ -240,28 +247,31 @@
 * **Role**: FCM/webhooky při změně stavu PSBT, při příchozí transakci apod.
 * **API**: `POST /notify/device` / `POST /notify/webhook`.
 
-### 2.10 Node Proxy (na RPi)
+### 2.10 Blockchain Client (Mempool.space API)
 
-* **Role**: Bezpečný a izolovaný most mezi cloud backendem a Bitcoin Core. **Běží na Raspberry Pi** vedle Bitcoin Core a vystavuje REST API přes Tailscale VPN.
+* **Role**: HTTP klient pro komunikaci s veřejným **Mempool.space API**. Poskytuje všechny blockchain data bez nutnosti vlastního Bitcoin node.
+* **Endpointy Mempool.space**:
+  * `GET /api/address/:addr` → informace o adrese (tx_count, balance)
+  * `GET /api/address/:addr/utxo` → seznam UTXO pro coin control
+  * `GET /api/address/:addr/txs` → historie transakcí
+  * `GET /api/v1/fees/recommended` → fee estimates (fastestFee, halfHourFee, hourFee)
+  * `GET /api/tx/:txid` → detail transakce
+  * `POST /api/tx` → broadcast raw hex transakce
 * **Funkce**:
-  * Node Proxy běží na RPi a naslouchá na Tailscale IP (`100.79.139.14`).
-  * Cloud backend (Explorer, PSBT Bridge) volá Node Proxy přes Tailscale VPN.
-  * Node Proxy volá Bitcoin Core na `localhost:8332` (JSON-RPC).
-  * **Discovery peněženek**: při párování Trezoru ověřuje aktivitu účtů pomocí `scantxoutset` nebo `listunspent`.
-* **Allowlist RPC metod**: 
-  * Node Proxy povoluje pouze omezenou sadu RPC příkazů – čtecí i zápisové operace jsou přísně řízené. 
-  * READ: getblockchaininfo, getblockhash, getblock, getrawtransaction, scantxoutset (pro discovery), estimatesmartfee, listunspent.
-  * WRITE: pouze testmempoolaccept (ověření transakce) a sendrawtransaction (odeslání do mempoolu)
-* **API (REST přes Tailscale)** TODO
-  * `POST /rpc` body: `{ method, params }` → odpověď 1:1 s Core.
-  * `POST /wallet/scan` body: `{ descriptor }` → Core `scantxoutset` → vrátí balance a UTXO.
-  * `POST /tx/test` body: `{ hex }` → Core `testmempoolaccept`.
-  * `POST /tx/broadcast` body: `{ hex }` → Core `sendrawtransaction`.
-* **Ochrany**: rate‑limit (req/min, bytes/min), max tx size (např. 500 kB), .. TODO
+  * **Account discovery**: derivuje adresy z xpub (BIP-84/49/44), kontroluje `tx_count > 0`.
+  * **UTXO list**: pro coin control vrací `{ txid, vout, value, status }`.
+  * **Fee estimation**: vrací doporučené sat/vB pro různé priority.
+  * **Broadcast**: odesílá finalizovanou TX jako raw hex.
+* **Výhody**:
+  * Žádná infrastruktura, žádná údržba
+  * Vysoká dostupnost a spolehlivost
+  * Podpora mainnet i testnet
 * **Spojení**
-  * Cloud Backend → Tailscale VPN → Node Proxy (100.79.139.14): příchozí požadavky
-  * Node Proxy → Bitcoin Core (localhost:8332): JSON-RPC volání
-  * Node Proxy → Observability: RPC metriky/latence/chyby TODO
+  * Explorer Service → Mempool.space: UTXO, TX historie, fee estimates
+  * PSBT Bridge → Mempool.space: broadcast transakce
+* **Konfigurace**:
+  * Mainnet: `https://mempool.space/api/`
+  * Testnet: `https://mempool.space/testnet/api/`
 
 ### 2.11 Infra (PG/Redis/S3/Observability)
 
@@ -289,10 +299,8 @@
 | API Gateway → Explorer       | HTTP           | Read (UTXO/history/fees/chain)           |
 | API Gateway → Bridge         | HTTP           | Tvorba/úprava/finalize/broadcast PSBT    |
 | API Gateway → MsCoordinator  | HTTP           | Registrace PSBT, stav                    |
-| Explorer → Node Proxy        | HTTP (interní) | Fallback Core RPC                        |
-| Bridge → Node Proxy          | HTTP (interní) | `testmempoolaccept`/`sendrawtransaction` |
-| Node Proxy → Core (RPi)      | Tailscale VPN  | RPC 8332 (100.79.139.14)                 |
-| Explorer ← ZMQ (Core)        | SUB            | `hashblock`/`rawtx` invalidace cache     |
+| Explorer → Mempool.space     | HTTPS          | UTXO, TX historie, fee estimates         |
+| Bridge → Mempool.space       | HTTPS          | Broadcast TX (`POST /api/tx`)            |
 
 ---
 
