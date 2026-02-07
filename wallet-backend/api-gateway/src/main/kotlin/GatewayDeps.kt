@@ -12,7 +12,7 @@ data class GatewayDeps(
     val explorer: ExplorerClient,
     val signer: SignerClient,
     val psbt: PsbtClient,
-    val mempool: MempoolClient,
+    val blockchain: BlockchainClient,
 )
 
 private val GatewayDepsKey = AttributeKey<GatewayDeps>("GatewayDeps")

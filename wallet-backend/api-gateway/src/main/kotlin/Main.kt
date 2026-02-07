@@ -25,9 +25,7 @@ fun main() {
             explorer = ExplorerClientImpl(cfg),
             signer = SignerClientImpl(cfg),
             psbt = PsbtClientImpl(cfg),
-            mempool = MempoolClientImpl(
-                baseUrl = cfg.mempoolBaseUrl ?: "https://mempool.space/api"
-            ),
+            blockchain = BlockchainClientImpl(baseUrl = cfg.blockchainBaseUrl),
         )
 
         installGatewayDeps(deps)

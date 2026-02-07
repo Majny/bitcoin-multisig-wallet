@@ -1,6 +1,7 @@
-package cz.majny.wallet.gateway.http
+package cz.majny.wallet.blockchain.http
 
-import cz.majny.wallet.gateway.deps
+import cz.majny.wallet.blockchain.client.MempoolBroadcastException
+import cz.majny.wallet.blockchain.client.MempoolClient
 import io.ktor.http.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -9,9 +10,8 @@ import kotlinx.serialization.Serializable
 
 /**
  * Routes for blockchain data via Mempool.space API.
- * Replaces Node Proxy routes for blockchain access.
  */
-fun Route.mempoolRoutes() {
+fun Route.blockchainRoutes(mempool: MempoolClient) {
     route("/api/v1/blockchain") {
         
         /**
@@ -22,7 +22,7 @@ fun Route.mempoolRoutes() {
             val address = call.parameters["address"] 
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
             
-            val info = application.deps.mempool.getAddressInfo(address)
+            val info = mempool.getAddressInfo(address)
             call.respond(AddressInfoResponse(
                 address = info.address,
                 txCount = info.txCount,
@@ -38,7 +38,7 @@ fun Route.mempoolRoutes() {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
             
-            val utxos = application.deps.mempool.getAddressUtxos(address)
+            val utxos = mempool.getAddressUtxos(address)
             call.respond(utxos)
         }
         
@@ -50,7 +50,7 @@ fun Route.mempoolRoutes() {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
             
-            val txs = application.deps.mempool.getAddressTransactions(address)
+            val txs = mempool.getAddressTransactions(address)
             call.respond(txs)
         }
         
@@ -62,7 +62,7 @@ fun Route.mempoolRoutes() {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
             
-            val hasActivity = application.deps.mempool.hasActivity(address)
+            val hasActivity = mempool.hasActivity(address)
             call.respond(HasActivityResponse(address = address, hasActivity = hasActivity))
         }
         
@@ -71,7 +71,7 @@ fun Route.mempoolRoutes() {
          * Get recommended fee rates.
          */
         get("/fees") {
-            val fees = application.deps.mempool.getFeeEstimates()
+            val fees = mempool.getFeeEstimates()
             call.respond(fees)
         }
         
@@ -83,7 +83,7 @@ fun Route.mempoolRoutes() {
             val txid = call.parameters["txid"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing txid")
             
-            val tx = application.deps.mempool.getTransaction(txid)
+            val tx = mempool.getTransaction(txid)
             call.respond(tx)
         }
         
@@ -95,19 +95,19 @@ fun Route.mempoolRoutes() {
             val request = call.receive<BroadcastRequest>()
             
             try {
-                val txid = application.deps.mempool.broadcastTransaction(request.hex)
+                val txid = mempool.broadcastTransaction(request.hex)
                 call.respond(BroadcastResponse(success = true, txid = txid))
-            } catch (e: cz.majny.wallet.gateway.clients.MempoolBroadcastException) {
+            } catch (e: MempoolBroadcastException) {
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    BroadcastResponse(success = false, error = e.body)
+                    BroadcastResponse(success = false, txid = null, error = e.body)
                 )
             }
         }
     }
 }
 
-// ============ DTOs ============
+// ============ Response DTOs ============
 
 @Serializable
 data class AddressInfoResponse(
@@ -130,6 +130,6 @@ data class BroadcastRequest(
 @Serializable
 data class BroadcastResponse(
     val success: Boolean,
-    val txid: String? = null,
+    val txid: String?,
     val error: String? = null
 )

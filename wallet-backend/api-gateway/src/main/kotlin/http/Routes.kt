@@ -8,15 +8,13 @@ fun Application.configureRouting() {
     routing {
         get("/health") { call.respondText("ok") }
 
-        // Mempool routes are at /api/v1/blockchain (outside the api/v1 route block)
-        mempoolRoutes()
-
         route("/api/v1") {
             authRoutes()
             signerRoutes()
             walletRoutes()
             explorerRoutes()
             psbtRoutes()
+            blockchainRoutes()  // Proxies to blockchain-service
             accountDiscoveryRoutes()
         }
     }

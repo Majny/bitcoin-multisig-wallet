@@ -7,7 +7,7 @@ data class AppConfig(
     val explorerBaseUrl: String,
     val signerBaseUrl: String,
     val psbtBaseUrl: String,
-    val mempoolBaseUrl: String?,
+    val blockchainBaseUrl: String,
     val jwtIssuer: String,
     val jwtAudience: String,
     val jwksUrl: String,
@@ -25,7 +25,7 @@ data class AppConfig(
                 explorerBaseUrl = env("EXPLORER_BASE_URL", "http://localhost:8083"),
                 signerBaseUrl = env("SIGNER_BASE_URL", "http://localhost:8084"),
                 psbtBaseUrl = env("PSBT_BASE_URL", "http://localhost:8085"),
-                mempoolBaseUrl = System.getenv("MEMPOOL_BASE_URL"),
+                blockchainBaseUrl = env("BLOCKCHAIN_BASE_URL", "http://localhost:8086"),
 
                 jwtIssuer = env("JWT_ISSUER", "wallet-auth"),
                 jwtAudience = env("JWT_AUDIENCE", "wallet-gateway"),

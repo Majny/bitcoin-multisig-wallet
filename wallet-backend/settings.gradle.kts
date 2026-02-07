@@ -33,3 +33,4 @@ include(":api-gateway")
 include(":auth-service")
 
 include("wallet-registry")
+include("blockchain-service")

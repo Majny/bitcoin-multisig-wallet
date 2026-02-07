@@ -42,7 +42,7 @@
 * **PSBT Builder/Bridge** – stavba PSBT, coin selection, fee, finalize, broadcast.
 * **Multisig Coordinator** – sleduje stav PSBT u multisigů (K‑z‑N), orchestrace podpisů, notifikace.
 * **Notification Service** – FCM/webhooky (nevim jestli bude potřeba, spíše ne).
-* **Blockchain Client (Mempool.space)** – HTTP klient pro komunikaci s veřejným Mempool.space API. Poskytuje UTXO, TX history, fee estimates, broadcast. Nevyžaduje vlastní Bitcoin node.
+* **Blockchain Client (Mempool.space)** – **separátní microservice** pro komunikaci s veřejným Mempool.space API. Poskytuje UTXO, TX history, fee estimates, broadcast. Nevyžaduje vlastní Bitcoin node.
 * **Infra úložiště**: PostgreSQL (perzistence), Redis (cache/rate‑limit), S3 (PSBT blobs), Observability (Prometheus/Grafana/Loki/Jaeger).
 
 > **Poznámka:** Podepisování transakcí probíhá **výhradně na telefonu** přes Trezor Connect Mobile (deeplink do Trezor Suite). Backend nikdy nemá přístup k privátním klíčům ani k Trezoru.
@@ -247,31 +247,37 @@
 * **Role**: FCM/webhooky při změně stavu PSBT, při příchozí transakci apod.
 * **API**: `POST /notify/device` / `POST /notify/webhook`.
 
-### 2.10 Blockchain Client (Mempool.space API)
+### 2.10 Blockchain Service (blockchain-service)
 
-* **Role**: HTTP klient pro komunikaci s veřejným **Mempool.space API**. Poskytuje všechny blockchain data bez nutnosti vlastního Bitcoin node.
-* **Endpointy Mempool.space**:
-  * `GET /api/address/:addr` → informace o adrese (tx_count, balance)
-  * `GET /api/address/:addr/utxo` → seznam UTXO pro coin control
-  * `GET /api/address/:addr/txs` → historie transakcí
-  * `GET /api/v1/fees/recommended` → fee estimates (fastestFee, halfHourFee, hourFee)
-  * `GET /api/tx/:txid` → detail transakce
-  * `POST /api/tx` → broadcast raw hex transakce
+* **Role**: **Separátní microservice** pro komunikaci s veřejným **Mempool.space API**. Poskytuje všechny blockchain data bez nutnosti vlastního Bitcoin node.
+* **Port**: 8086 (default)
+* **API endpointy**:
+  * `GET /api/v1/blockchain/address/:addr` → informace o adrese (tx_count, balance)
+  * `GET /api/v1/blockchain/address/:addr/utxos` → seznam UTXO pro coin control
+  * `GET /api/v1/blockchain/address/:addr/txs` → historie transakcí
+  * `GET /api/v1/blockchain/address/:addr/has-activity` → kontrola aktivity (pro account discovery)
+  * `GET /api/v1/blockchain/fees` → fee estimates (fastestFee, halfHourFee, hourFee)
+  * `GET /api/v1/blockchain/tx/:txid` → detail transakce
+  * `POST /api/v1/blockchain/tx/broadcast` → broadcast raw hex transakce
+* **Mempool.space API**:
+  * Mainnet: `https://mempool.space/api/`
+  * Testnet: `https://mempool.space/testnet/api/`
 * **Funkce**:
-  * **Account discovery**: derivuje adresy z xpub (BIP-84/49/44), kontroluje `tx_count > 0`.
+  * **Account discovery**: kontroluje `tx_count > 0` pro adresy.
   * **UTXO list**: pro coin control vrací `{ txid, vout, value, status }`.
   * **Fee estimation**: vrací doporučené sat/vB pro různé priority.
   * **Broadcast**: odesílá finalizovanou TX jako raw hex.
-* **Výhody**:
-  * Žádná infrastruktura, žádná údržba
-  * Vysoká dostupnost a spolehlivost
-  * Podpora mainnet i testnet
-* **Spojení**
-  * Explorer Service → Mempool.space: UTXO, TX historie, fee estimates
-  * PSBT Bridge → Mempool.space: broadcast transakce
-* **Konfigurace**:
-  * Mainnet: `https://mempool.space/api/`
-  * Testnet: `https://mempool.space/testnet/api/`
+* **Výhody separátního service**:
+  * Single Responsibility Principle - API Gateway jen routuje
+  * Snadná výměna providera (Mempool → Blockstream → vlastní node)
+  * Testovatelnost a škálovatelnost
+* **Spojení**:
+  * API Gateway → Blockchain Service → Mempool.space API
+  * Explorer Service → Blockchain Service (pro UTXO a TX data)
+  * PSBT Bridge → Blockchain Service (pro broadcast)
+* **Konfigurace** (env proměnné):
+  * `PORT`: Port služby (default 8086)
+  * `MEMPOOL_BASE_URL`: URL Mempool API (default `https://mempool.space/api`)
 
 ### 2.11 Infra (PG/Redis/S3/Observability)
 
@@ -299,8 +305,10 @@
 | API Gateway → Explorer       | HTTP           | Read (UTXO/history/fees/chain)           |
 | API Gateway → Bridge         | HTTP           | Tvorba/úprava/finalize/broadcast PSBT    |
 | API Gateway → MsCoordinator  | HTTP           | Registrace PSBT, stav                    |
-| Explorer → Mempool.space     | HTTPS          | UTXO, TX historie, fee estimates         |
-| Bridge → Mempool.space       | HTTPS          | Broadcast TX (`POST /api/tx`)            |
+| API Gateway → BlockchainSvc  | HTTP           | Proxy k Mempool.space API                |
+| BlockchainSvc → Mempool.space| HTTPS          | UTXO, TX historie, fee, broadcast        |
+| Explorer → BlockchainSvc     | HTTP           | UTXO, TX historie, fee estimates         |
+| Bridge → BlockchainSvc       | HTTP           | Broadcast TX                             |
 
 ---
 

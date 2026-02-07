@@ -1,4 +1,4 @@
-package cz.majny.wallet.gateway.clients
+package cz.majny.wallet.blockchain.client
 
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -9,7 +9,6 @@ import kotlinx.serialization.Serializable
 
 /**
  * Client for Mempool.space public API.
- * Replaces Node Proxy for blockchain data access.
  * 
  * Mainnet: https://mempool.space/api/
  * Testnet: https://mempool.space/testnet/api/
@@ -131,44 +130,32 @@ data class FeeEstimates(
 // ============ Implementation ============
 
 class MempoolClientImpl(
-    private val baseUrl: String = "https://mempool.space/api"
+    private val baseUrl: String = "https://mempool.space/api",
+    private val client: HttpClient
 ) : MempoolClient {
 
-    private lateinit var client: HttpClient
-
-    fun attach(http: HttpClient) {
-        client = http
-    }
-
-    private fun requireClient(): HttpClient {
-        check(this::client.isInitialized) {
-            "MempoolClientImpl is not attached. Call deps.attachHttpClients(application) first."
-        }
-        return client
-    }
-
     override suspend fun getAddressInfo(address: String): AddressInfo {
-        return requireClient().get("$baseUrl/address/$address").body()
+        return client.get("$baseUrl/address/$address").body()
     }
 
     override suspend fun getAddressUtxos(address: String): List<MempoolUtxo> {
-        return requireClient().get("$baseUrl/address/$address/utxo").body()
+        return client.get("$baseUrl/address/$address/utxo").body()
     }
 
     override suspend fun getAddressTransactions(address: String): List<MempoolTransaction> {
-        return requireClient().get("$baseUrl/address/$address/txs").body()
+        return client.get("$baseUrl/address/$address/txs").body()
     }
 
     override suspend fun getFeeEstimates(): FeeEstimates {
-        return requireClient().get("$baseUrl/v1/fees/recommended").body()
+        return client.get("$baseUrl/v1/fees/recommended").body()
     }
 
     override suspend fun getTransaction(txid: String): MempoolTransaction {
-        return requireClient().get("$baseUrl/tx/$txid").body()
+        return client.get("$baseUrl/tx/$txid").body()
     }
 
     override suspend fun broadcastTransaction(hex: String): String {
-        val response: HttpResponse = requireClient().post("$baseUrl/tx") {
+        val response: HttpResponse = client.post("$baseUrl/tx") {
             contentType(ContentType.Text.Plain)
             setBody(hex)
         }

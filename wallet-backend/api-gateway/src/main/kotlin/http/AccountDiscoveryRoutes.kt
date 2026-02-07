@@ -1,6 +1,6 @@
 package cz.majny.wallet.gateway.http
 
-import cz.majny.wallet.gateway.clients.MempoolClient
+import cz.majny.wallet.gateway.clients.BlockchainClient
 import cz.majny.wallet.gateway.deps
 import cz.majny.wallet.gateway.dto.*
 import io.ktor.http.*
@@ -9,9 +9,9 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 /**
- * Account discovery routes - scan blockchain for wallet activity using Mempool.space API.
+ * Account discovery routes - scan blockchain for wallet activity.
  * 
- * Uses address activity check (tx_count > 0) instead of scantxoutset RPC.
+ * Uses blockchain-service for address activity checks.
  */
 fun Route.accountDiscoveryRoutes() {
 
@@ -35,7 +35,7 @@ fun Route.accountDiscoveryRoutes() {
 
         val scannedAccounts = req.accounts.map { account ->
             scanSingleAccount(
-                mempool = call.application.deps.mempool,
+                blockchain = call.application.deps.blockchain,
                 fingerprint = req.fingerprint,
                 xpub = account.xpub,
                 derivationPath = account.derivationPath
@@ -61,7 +61,7 @@ fun Route.accountDiscoveryRoutes() {
         val fingerprint = call.request.queryParameters["fingerprint"] ?: ""
 
         val result = scanSingleAccount(
-            mempool = call.application.deps.mempool,
+            blockchain = call.application.deps.blockchain,
             fingerprint = fingerprint,
             xpub = account.xpub,
             derivationPath = account.derivationPath
@@ -74,22 +74,19 @@ fun Route.accountDiscoveryRoutes() {
      * GET /api/v1/accounts/check-address/{address}
      * 
      * Check if a single address has any activity.
-     * Simple wrapper around Mempool hasActivity check.
+     * Proxies to blockchain-service.
      */
     get("/accounts/check-address/{address}") {
         val address = call.parameters["address"]
             ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address parameter")
         
-        val hasActivity = call.application.deps.mempool.hasActivity(address)
-        call.respond(mapOf(
-            "address" to address,
-            "hasActivity" to hasActivity
-        ))
+        val result = call.application.deps.blockchain.hasActivity(address)
+        call.respond(result)
     }
 }
 
 /**
- * Scans a single account by checking if addresses have activity via Mempool.space API.
+ * Scans a single account by checking if addresses have activity via blockchain-service.
  * 
  * NOTE: This is a simplified implementation. For full account discovery with xpub,
  * the frontend should derive addresses and check them individually, or use a 
@@ -99,7 +96,7 @@ fun Route.accountDiscoveryRoutes() {
  * (since we cannot derive addresses server-side without the xpub derivation library).
  */
 private suspend fun scanSingleAccount(
-    mempool: MempoolClient,
+    blockchain: BlockchainClient,
     fingerprint: String,
     xpub: String,
     derivationPath: String
