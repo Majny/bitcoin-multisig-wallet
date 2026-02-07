@@ -17,7 +17,6 @@ fun Application.configureRouting() {
             walletRoutes()
             explorerRoutes()
             psbtRoutes()
-            nodeProxyRoutes()     // DEPRECATED - kept for compatibility
             accountDiscoveryRoutes()
         }
     }

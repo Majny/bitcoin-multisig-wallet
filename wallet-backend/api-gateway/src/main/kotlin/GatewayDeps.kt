@@ -12,8 +12,7 @@ data class GatewayDeps(
     val explorer: ExplorerClient,
     val signer: SignerClient,
     val psbt: PsbtClient,
-    val nodeProxy: NodeProxyClient,  // DEPRECATED - kept for compatibility
-    val mempool: MempoolClient,      // NEW - primary blockchain data source
+    val mempool: MempoolClient,
 )
 
 private val GatewayDepsKey = AttributeKey<GatewayDeps>("GatewayDeps")

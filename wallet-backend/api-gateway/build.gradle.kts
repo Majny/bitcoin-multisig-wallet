@@ -1,7 +1,11 @@
 plugins {
     kotlin("jvm")
     kotlin("plugin.serialization") version "2.0.0"
+    application
+}
 
+application {
+    mainClass.set("cz.majny.wallet.gateway.MainKt")
 }
 
 group = "org.example"
