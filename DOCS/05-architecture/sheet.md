@@ -83,6 +83,69 @@ RPC_URL	http://100.79.139.14:8332/	URL, kam se aplikace připojuje přes Tailsca
 RPC_USER	backend	uživatelské jméno (z rpcauth=backend:...)
 RPC_PASS	mqn47rm-NpYQTpJjyD6k3A1xU6ziuKbPTLfYlu9JSok
 
+# Node Proxy - spuštění na RPi
+
+## 1. Build Docker image
+```bash
+cd ~/dvorak/wallet-backend/node-proxy
+docker build -t node-proxy:latest .
+```
+
+## 2. Spuštění kontejneru
+```bash
+# Varianta A: S API_KEY (doporučeno pro produkci)
+docker run -d --name node-proxy \
+  --network host \
+  --restart unless-stopped \
+  -e RPC_URL=http://127.0.0.1:8332/ \
+  -e RPC_USER=backend \
+  -e RPC_PASS='mqn47rm-NpYQTpJjyD6k3A1xU6ziuKbPTLfYlu9JSok' \
+  -e API_KEY='changeme' \
+  node-proxy:latest
+
+# Varianta B: Bez API_KEY (pro testování)
+docker run -d --name node-proxy \
+  --network host \
+  --restart unless-stopped \
+  -e RPC_URL=http://127.0.0.1:8332/ \
+  -e RPC_USER=backend \
+  -e RPC_PASS='mqn47rm-NpYQTpJjyD6k3A1xU6ziuKbPTLfYlu9JSok' \
+  node-proxy:latest
+```
+
+**Poznámka:** Pokud nenastavíš `-e API_KEY`, použije se default `changeme` z Dockerfile.
+
+**Env proměnné:**
+| Proměnná | Popis |
+|----------|-------|
+| `RPC_URL` | URL Bitcoin Core (localhost na RPi) |
+| `RPC_USER` | Uživatel z rpcauth |
+| `RPC_PASS` | Heslo z rpcauth.py |
+| `API_KEY` | Volitelný - ochrana před neautorizovaným přístupem |
+| `PORT` | Port na kterém proxy poslouchá (default 8088) |
+
+## 3. Ověření
+```bash
+# Health check (s API_KEY)
+curl -H 'X-API-Key: changeme' http://localhost:8088/health
+
+# Test RPC
+curl -X POST http://localhost:8088/rpc \
+  -H 'Content-Type: application/json' \
+  -H 'X-API-Key: changeme' \
+  -d '{"method":"getblockchaininfo","params":[]}'
+```
+
+## 4. Správa kontejneru
+```bash
+docker logs node-proxy          # Logy
+docker restart node-proxy       # Restart
+docker stop node-proxy          # Stop
+docker rm node-proxy            # Smazat
+```
+
+---
+
 # Cloud Stuff
 
 

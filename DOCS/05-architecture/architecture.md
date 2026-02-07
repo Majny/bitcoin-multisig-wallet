@@ -60,39 +60,23 @@
 
 * **Role**: jediný veřejný vstup; ověřuje JWT, aplikuje rate‑limits a audit; směruje na vnitřní služby.
 * **Auth**: Bearer JWT; device‑scope (vázaný na `device_id`).
-* **Veřejné endpointy** (implementováno):
+* **Veřejné endpointy (zatím jen příklady, bude jich více TODO)**
 
-  **Autentizace:**
-  * `POST /api/v1/auth/trezor/login` → párování Trezoru, vrací JWT + wallety.
-  * `POST /api/v1/auth/token/refresh` → nové access JWT.
-
-  **Account Discovery:**
-  * `POST /api/v1/accounts/scan` → skenování více derivation paths pro aktivitu (scantxoutset).
-  * `POST /api/v1/accounts/scan-single` → skenování jednoho účtu.
-
-  **Peněženky:**
-  * `GET  /api/v1/wallets` → seznam peněženek pro aktuální device.
-  * `POST /api/v1/wallets` → vytvoření singlesig/multisig (předá Wallet Registry).
-  * `POST /api/v1/wallets/import` → import policy/descriptor (předá Wallet Importer).
-  * `GET  /api/v1/wallets/{id}/utxos` → data z Exploreru.
-
-  **Node Proxy (komunikace s Bitcoin Core):**
-  * `POST /api/v1/node/rpc` → generic JSON-RPC passthrough.
-  * `POST /api/v1/node/tx/test` → test mempool accept.
-  * `POST /api/v1/node/tx/broadcast` → broadcast transakce.
-  * `GET  /api/v1/node/health` → health check Node Proxy.
-
-  **PSBT:**
-  * `POST /api/v1/psbt` → vytvoření PSBT (Bridge).
-  * `POST /api/v1/psbt/{id}/submit` → přijetí podepsané PSBT z appky (Bridge).
-  * `POST /api/v1/psbt/{id}/broadcast` → broadcast (Bridge → Node Proxy).
+  * `POST /api/v1/auth/pairing/start` → zahájí pairing flow (viz UC‑01)
+  * `POST /api/v1/auth/token/refresh` → nové access JWT
+  * `GET  /api/v1/wallets` → seznam peněženek pro aktuální device
+  * `POST /api/v1/wallets` → vytvoření singlesig/multisig (předá Wallet Registry)
+  * `POST /api/v1/wallets/import` → import policy/descriptor (předá Wallet Importer)
+  * `GET  /api/v1/wallets/{id}/utxos` → data z Exploreru
+  * `POST /api/v1/psbt` → vytvoření PSBT (Bridge)
+  * `POST /api/v1/psbt/{id}/submit` → přijetí podepsané PSBT z appky (Bridge)
+  * `POST /api/v1/psbt/{id}/broadcast` → broadcast (Bridge → Node Proxy)
 * **Spojení**
   * API Gateway → Auth & Pairing Service: vydání/obnova tokenů přes pairing s Trezorem.
   * API Gateway → Wallet Registry: CRUD nad peněženkami a přidělování adres.
   * API Gateway → Explorer Service: čtení UTXO/historie/fee.
   * API Gateway → PSBT Bridge: stavba/finalizace PSBT.
-  * API Gateway → Multisig Coordinator: dotazy na stav podpisů / registrace účasti.
-  * API Gateway → Node Proxy: komunikace s Bitcoin Core (scantxoutset, broadcast, RPC).
+  * API Gateway → Multisig Coordinator: dotazy na stav podpisů / registrace účasti 
   * API Gateway → PostgreSQL: zápis auditních záznamů.
 
 ### 2.2 Auth & Pairing Service
@@ -220,14 +204,6 @@
     * Volá `POST /auth/trezor/login`.
     * Tělo: `{ fingerprint, xpub, derivationPath, deviceModel, deviceLabel }`.
     * Odpověď: JWT access token + shrnutí uživatele a peněženek.
-  * `listWallets(accessToken: String): List<WalletSummary>`
-    * Volá `GET /wallets`.
-    * Odpověď: seznam peněženek s `{ walletId, network, type, scriptType, m, n, label }`.
-  * `scanAccounts(fingerprint: String, accounts: List<AccountToScan>): ScanAccountsResponse`
-    * Volá `POST /accounts/scan`.
-    * Tělo: `{ fingerprint, accounts[]: { xpub, derivationPath } }`.
-    * Odpověď: `{ fingerprint, accounts[]: { derivationPath, xpub, hasActivity, utxoCount, totalSats, scriptType, network } }`.
-    * Slouží pro discovery účtů při připojení Trezoru.
   * `preparePsbt(request: PreparePsbtRequest): PreparedPsbt`
     * Volá `POST /wallets/{walletId}/tx/prepare`.
     * Tělo: `{ amountSats, destinationAddress, feeRateSatsPerVb, selectedInputs[] }`.
@@ -268,23 +244,20 @@
 
 * **Role**: Bezpečný a izolovaný most mezi cloud backendem a Bitcoin Core. **Běží na Raspberry Pi** vedle Bitcoin Core a vystavuje REST API přes Tailscale VPN.
 * **Funkce**:
-  * Node Proxy běží na RPi a naslouchá na Tailscale IP (`100.79.139.14`), port `8088`.
-  * Cloud backend (API Gateway, Explorer, PSBT Bridge) volá Node Proxy přes Tailscale VPN.
+  * Node Proxy běží na RPi a naslouchá na Tailscale IP (`100.79.139.14`).
+  * Cloud backend (Explorer, PSBT Bridge) volá Node Proxy přes Tailscale VPN.
   * Node Proxy volá Bitcoin Core na `localhost:8332` (JSON-RPC).
-  * **Discovery peněženek**: při párování Trezoru ověřuje aktivitu účtů pomocí `scantxoutset`.
-* **Allowlist RPC metod** (implementováno v `dto/AllowList.kt`):
-  * READ: `getblockchaininfo`, `getblockhash`, `getblock`, `getrawtransaction`, `getrawmempool`, `gettxout`, `estimatesmartfee`, `getdescriptorinfo`, `deriveaddresses`, `decoderawtransaction`, `decodepsbt`, `finalizepsbt`, `scantxoutset`.
-  * WRITE: `testmempoolaccept` (ověření transakce), `sendrawtransaction` (odeslání do mempoolu).
-* **API (REST přes Tailscale)** – implementováno:
-  * `POST /rpc` – generic JSON-RPC passthrough (body: `{ jsonrpc, method, params, id }`).
-  * `POST /tx/test` – body: `{ hex }` → Core `testmempoolaccept`.
-  * `POST /tx/broadcast` – body: `{ hex }` → Core `sendrawtransaction`.
-  * `GET /healthz` – health check endpoint.
-* **Ochrany** (implementováno):
-  * API Key autentizace (`X-API-Key` header).
-  * Rate-limit: 60 req/min per API key.
-  * Max tx size: 1 MB.
-  * Retry/backoff při výpadcích Core (2 retries).
+  * **Discovery peněženek**: při párování Trezoru ověřuje aktivitu účtů pomocí `scantxoutset` nebo `listunspent`.
+* **Allowlist RPC metod**: 
+  * Node Proxy povoluje pouze omezenou sadu RPC příkazů – čtecí i zápisové operace jsou přísně řízené. 
+  * READ: getblockchaininfo, getblockhash, getblock, getrawtransaction, scantxoutset (pro discovery), estimatesmartfee, listunspent.
+  * WRITE: pouze testmempoolaccept (ověření transakce) a sendrawtransaction (odeslání do mempoolu)
+* **API (REST přes Tailscale)** TODO
+  * `POST /rpc` body: `{ method, params }` → odpověď 1:1 s Core.
+  * `POST /wallet/scan` body: `{ descriptor }` → Core `scantxoutset` → vrátí balance a UTXO.
+  * `POST /tx/test` body: `{ hex }` → Core `testmempoolaccept`.
+  * `POST /tx/broadcast` body: `{ hex }` → Core `sendrawtransaction`.
+* **Ochrany**: rate‑limit (req/min, bytes/min), max tx size (např. 500 kB), .. TODO
 * **Spojení**
   * Cloud Backend → Tailscale VPN → Node Proxy (100.79.139.14): příchozí požadavky
   * Node Proxy → Bitcoin Core (localhost:8332): JSON-RPC volání
@@ -316,11 +289,9 @@
 | API Gateway → Explorer       | HTTP           | Read (UTXO/history/fees/chain)           |
 | API Gateway → Bridge         | HTTP           | Tvorba/úprava/finalize/broadcast PSBT    |
 | API Gateway → MsCoordinator  | HTTP           | Registrace PSBT, stav                    |
-| **API Gateway → Node Proxy** | **HTTP (Tailscale)** | **Account discovery, RPC, broadcast** |
 | Explorer → Node Proxy        | HTTP (interní) | Fallback Core RPC                        |
 | Bridge → Node Proxy          | HTTP (interní) | `testmempoolaccept`/`sendrawtransaction` |
-| Node Proxy → Core (RPi)      | JSON-RPC       | RPC 8332 (localhost na RPi)              |
-| Cloud → RPi                  | Tailscale VPN  | Bezpečný tunel (100.79.139.14)           |
+| Node Proxy → Core (RPi)      | Tailscale VPN  | RPC 8332 (100.79.139.14)                 |
 | Explorer ← ZMQ (Core)        | SUB            | `hashblock`/`rawtx` invalidace cache     |
 
 ---
