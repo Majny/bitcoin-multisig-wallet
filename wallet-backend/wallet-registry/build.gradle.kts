@@ -37,6 +37,9 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-dao:0.53.0")
     implementation("org.jetbrains.exposed:exposed-jdbc:0.53.0")
     implementation("org.jetbrains.exposed:exposed-java-time:0.53.0")
+
+    // Bitcoin address derivation (BIP-32/84/86)
+    implementation("org.bitcoinj:bitcoinj-core:0.17")
 }
 
 kotlin {

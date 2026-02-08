@@ -51,6 +51,29 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 repo.attachMember(id, req.deviceId, req.cosignerIdx)
                 call.respondText("ok")
             }
+
+            /**
+             * GET /registry/wallets/{id}/addresses?type=receive&index=0
+             *
+             * Returns derived addresses for a wallet.
+             * - type: "receive" or "change" (optional, returns both if omitted)
+             * - index: specific address index (optional, returns all if omitted)
+             */
+            get("/wallets/{id}/addresses") {
+                val id = call.parameters["id"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
+                val type = call.request.queryParameters["type"]   // "receive" or "change"
+                val index = call.request.queryParameters["index"]?.toIntOrNull()
+
+                if (index != null) {
+                    val addr = repo.getAddress(id, type ?: "receive", index)
+                        ?: return@get call.respond(HttpStatusCode.NotFound, ErrorResponse("address not found"))
+                    call.respond(addr)
+                } else {
+                    val addresses = repo.getAddresses(id, type)
+                    call.respond(WalletAddressesResponse(walletId = id, addresses = addresses))
+                }
+            }
         }
     }
 }

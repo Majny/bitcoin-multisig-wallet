@@ -106,3 +106,19 @@ data class RegistryWalletSummary(
     val n: Int? = null,
     val label: String? = null
 )
+
+// ---- Address DTOs (mirrors wallet-registry API) ----
+
+@Serializable
+data class WalletAddressResponse(
+    val walletId: String,
+    val address: String,
+    val index: Int,
+    val type: String    // "receive" or "change"
+)
+
+@Serializable
+data class WalletAddressesResponse(
+    val walletId: String,
+    val addresses: List<WalletAddressResponse>
+)

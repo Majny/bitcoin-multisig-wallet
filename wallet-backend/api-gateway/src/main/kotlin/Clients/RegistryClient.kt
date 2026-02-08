@@ -20,6 +20,10 @@ interface RegistryClient {
     suspend fun attachMember(walletId: String, req: MemberAttach)
 
     suspend fun listWallets(deviceId: String): List<RegistryWalletSummary>
+
+    suspend fun getWalletAddress(walletId: String, type: String = "receive", index: Int = 0): WalletAddressResponse
+
+    suspend fun getWalletAddresses(walletId: String, type: String? = null): WalletAddressesResponse
 }
 
 class RegistryClientImpl(
@@ -68,6 +72,21 @@ class RegistryClientImpl(
     override suspend fun listWallets(deviceId: String): List<RegistryWalletSummary> {
         return client().get("$baseUrl/registry/wallets") {
             url { parameters.append("device_id", deviceId) }
+        }.body()
+    }
+
+    override suspend fun getWalletAddress(walletId: String, type: String, index: Int): WalletAddressResponse {
+        return client().get("$baseUrl/registry/wallets/$walletId/addresses") {
+            url {
+                parameters.append("type", type)
+                parameters.append("index", index.toString())
+            }
+        }.body()
+    }
+
+    override suspend fun getWalletAddresses(walletId: String, type: String?): WalletAddressesResponse {
+        return client().get("$baseUrl/registry/wallets/$walletId/addresses") {
+            if (type != null) url { parameters.append("type", type) }
         }.body()
     }
 }

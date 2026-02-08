@@ -82,3 +82,17 @@ data class WalletDetail(
 data class ErrorResponse(
     val error: String
 )
+
+@Serializable
+data class WalletAddressResponse(
+    val walletId: String,
+    val address: String,
+    val index: Int,
+    val type: String    // "receive" or "change"
+)
+
+@Serializable
+data class WalletAddressesResponse(
+    val walletId: String,
+    val addresses: List<WalletAddressResponse>
+)

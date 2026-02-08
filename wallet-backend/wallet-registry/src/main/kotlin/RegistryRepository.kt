@@ -4,9 +4,12 @@ import cz.majny.wallet.registry.api.*
 import cz.majny.wallet.registry.schema.*
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.transactions.transaction
+import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 
 class RegistryRepository {
+
+    private val log = LoggerFactory.getLogger(RegistryRepository::class.java)
 
     fun upsertDevice(req: UpsertDeviceRequest): DeviceResponse = transaction {
         val existing = DevicesTable
@@ -91,6 +94,10 @@ class RegistryRepository {
                 it[createdAt] = OffsetDateTime.now()
             }
         }
+
+        // Derive and store receive + change addresses
+        deriveAndStoreAddresses(req.walletId, req.receiveDescriptor, req.network, "receive")
+        deriveAndStoreAddresses(req.walletId, req.changeDescriptor, req.network, "change")
 
         getWallet(req.walletId) ?: error("Wallet insert failed")
     }
@@ -180,5 +187,94 @@ class RegistryRepository {
             cosigners = cosigners,
             members = members
         )
+    }
+
+    // ---- Address derivation & storage ----
+
+    /**
+     * Derives addresses from a descriptor and stores them in wallet_addresses.
+     */
+    private fun deriveAndStoreAddresses(
+        walletId: String,
+        descriptor: String,
+        network: String,
+        type: String,
+        count: Int = AddressDerivation.DEFAULT_GAP_LIMIT
+    ) {
+        val chain = if (type == "receive") 0 else 1
+        try {
+            val addresses = AddressDerivation.deriveAddresses(
+                descriptor = descriptor,
+                network = network,
+                chain = chain,
+                fromIndex = 0,
+                count = count
+            )
+            addresses.forEach { derived ->
+                WalletAddressesTable.insertIgnore {
+                    it[WalletAddressesTable.walletId] = walletId
+                    it[addressType] = type
+                    it[addressIndex] = derived.index
+                    it[address] = derived.address
+                    it[createdAt] = OffsetDateTime.now()
+                }
+            }
+            log.info("Derived {} {} addresses for wallet {}", addresses.size, type, walletId)
+        } catch (e: Exception) {
+            log.error("Failed to derive {} addresses for wallet {}: {}", type, walletId, e.message, e)
+        }
+    }
+
+    /**
+     * Returns all stored addresses for a wallet.
+     */
+    fun getAddresses(
+        walletId: String,
+        type: String? = null
+    ): List<WalletAddressResponse> = transaction {
+        val query = WalletAddressesTable
+            .selectAll()
+            .where { WalletAddressesTable.walletId eq walletId }
+
+        if (type != null) {
+            query.andWhere { WalletAddressesTable.addressType eq type }
+        }
+
+        query
+            .orderBy(WalletAddressesTable.addressIndex)
+            .map { row ->
+                WalletAddressResponse(
+                    walletId = walletId,
+                    address = row[WalletAddressesTable.address],
+                    index = row[WalletAddressesTable.addressIndex],
+                    type = row[WalletAddressesTable.addressType]
+                )
+            }
+    }
+
+    /**
+     * Returns a single address by wallet, type and index.
+     */
+    fun getAddress(
+        walletId: String,
+        type: String = "receive",
+        index: Int = 0
+    ): WalletAddressResponse? = transaction {
+        WalletAddressesTable
+            .selectAll()
+            .where {
+                (WalletAddressesTable.walletId eq walletId) and
+                (WalletAddressesTable.addressType eq type) and
+                (WalletAddressesTable.addressIndex eq index)
+            }
+            .singleOrNull()
+            ?.let { row ->
+                WalletAddressResponse(
+                    walletId = walletId,
+                    address = row[WalletAddressesTable.address],
+                    index = row[WalletAddressesTable.addressIndex],
+                    type = row[WalletAddressesTable.addressType]
+                )
+            }
     }
 }

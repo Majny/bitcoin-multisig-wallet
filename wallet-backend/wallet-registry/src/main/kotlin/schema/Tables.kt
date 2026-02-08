@@ -51,3 +51,12 @@ object WalletMembersTable : Table("wallet_members") {
     val createdAt = timestampWithTimeZone("created_at")
     override val primaryKey = PrimaryKey(walletId, deviceId)
 }
+
+object WalletAddressesTable : Table("wallet_addresses") {
+    val walletId = text("wallet_id").references(WalletsTable.walletId)
+    val addressType = text("address_type")   // "receive" or "change"
+    val addressIndex = integer("address_index")
+    val address = text("address")
+    val createdAt = timestampWithTimeZone("created_at")
+    override val primaryKey = PrimaryKey(walletId, addressType, addressIndex)
+}
