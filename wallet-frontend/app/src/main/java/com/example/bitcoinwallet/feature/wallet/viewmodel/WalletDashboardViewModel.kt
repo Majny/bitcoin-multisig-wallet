@@ -1,15 +1,18 @@
 package com.example.bitcoinwallet.feature.wallet.viewmodel
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.bitcoinwallet.core.api.WalletApi
+import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.feature.wallet.model.Transaction
-import com.example.bitcoinwallet.feature.wallet.model.TransactionType
 import com.example.bitcoinwallet.feature.wallet.model.WalletBalance
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import java.time.LocalDate
+
+private const val TAG = "WalletDashboardVM"
 
 /**
  * UI State for the Wallet Dashboard.
@@ -23,12 +26,14 @@ data class WalletDashboardUiState(
 
 /**
  * ViewModel for the Wallet Dashboard screen.
- * Manages wallet balance and transaction history.
+ * Manages wallet balance and transaction history using API Gateway.
  */
 class WalletDashboardViewModel : ViewModel() {
     
     private val _uiState = MutableStateFlow(WalletDashboardUiState())
     val uiState: StateFlow<WalletDashboardUiState> = _uiState.asStateFlow()
+    
+    private val repository = WalletApi.repository
     
     init {
         loadWalletData()
@@ -41,11 +46,36 @@ class WalletDashboardViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
+            val accessToken = SessionStore.session?.accessToken
+            if (accessToken == null) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Není přihlášen uživatel"
+                )
+                return@launch
+            }
+            
+            val walletId = SessionStore.activeWalletId
+            if (walletId == null) {
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = "Není vybrán wallet"
+                )
+                return@launch
+            }
+            
             try {
-                // TODO: Replace with actual API calls to blockchain-service
-                // This is mock data for UI development
-                val balance = fetchBalance()
-                val transactions = fetchTransactions()
+                Log.d(TAG, "Loading wallet data for wallet: $walletId")
+                
+                // Get wallet address from backend
+                val address = repository.getWalletReceiveAddress(walletId, accessToken)
+                Log.d(TAG, "Wallet receive address: $address")
+                
+                // Fetch balance and transactions in parallel
+                val balance = repository.getWalletBalance(address, accessToken)
+                val transactions = repository.getTransactionHistory(address, accessToken)
+                
+                Log.d(TAG, "Balance: ${balance.balanceSats} sats, Transactions: ${transactions.size}")
                 
                 _uiState.value = WalletDashboardUiState(
                     balance = balance,
@@ -53,9 +83,10 @@ class WalletDashboardViewModel : ViewModel() {
                     isLoading = false
                 )
             } catch (e: Exception) {
+                Log.e(TAG, "Error loading wallet data", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Unknown error occurred"
+                    error = e.message ?: "Neznámá chyba"
                 )
             }
         }
@@ -73,70 +104,5 @@ class WalletDashboardViewModel : ViewModel() {
      */
     fun clearError() {
         _uiState.value = _uiState.value.copy(error = null)
-    }
-    
-    // ============ Mock Data (to be replaced with API calls) ============
-    
-    private suspend fun fetchBalance(): WalletBalance {
-        // TODO: Call blockchain-service API
-        // GET /api/blockchain/address/{address}/balance
-        
-        // Mock data for now
-        return WalletBalance(
-            balanceSats = 123450000, // 1.2345 BTC
-            balanceFiat = 75000.0,
-            fiatCurrency = "CZK"
-        )
-    }
-    
-    private suspend fun fetchTransactions(): List<Transaction> {
-        // TODO: Call blockchain-service API
-        // GET /api/blockchain/address/{address}/txs
-        
-        // Mock data for now
-        return listOf(
-            Transaction(
-                id = "1",
-                txid = "abc123def456789...",
-                type = TransactionType.RECEIVED,
-                amount = 1500000, // 0.015 BTC
-                date = LocalDate.of(2024, 4, 25)
-            ),
-            Transaction(
-                id = "2",
-                txid = "def456ghi789012...",
-                type = TransactionType.SENT,
-                amount = 250000, // 0.0025 BTC
-                date = LocalDate.of(2024, 4, 24)
-            ),
-            Transaction(
-                id = "3",
-                txid = "ghi789jkl012345...",
-                type = TransactionType.RECEIVED,
-                amount = 10000000, // 0.1 BTC
-                date = LocalDate.of(2024, 4, 23)
-            ),
-            Transaction(
-                id = "4",
-                txid = "jkl012mno345678...",
-                type = TransactionType.SENT,
-                amount = 500000, // 0.005 BTC
-                date = LocalDate.of(2024, 4, 22)
-            ),
-            Transaction(
-                id = "5",
-                txid = "mno345pqr678901...",
-                type = TransactionType.RECEIVED,
-                amount = 2000000, // 0.02 BTC
-                date = LocalDate.of(2024, 4, 21)
-            ),
-            Transaction(
-                id = "6",
-                txid = "pqr678stu901234...",
-                type = TransactionType.SENT,
-                amount = 120000, // 0.0012 BTC
-                date = LocalDate.of(2024, 4, 20)
-            )
-        )
     }
 }
