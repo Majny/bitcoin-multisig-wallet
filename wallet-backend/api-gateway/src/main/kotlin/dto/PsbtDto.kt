@@ -30,3 +30,88 @@ data class SubmitSignedPsbtBackendResponse(
     val status: String,
     val txId: String? = null
 )
+
+// ========== Nové DTO pro psbt-service ==========
+
+@Serializable
+data class TxOutput(
+    val address: String,
+    val amountSats: Long
+)
+
+@Serializable
+data class UtxoSelection(
+    val txid: String,
+    val vout: Int
+)
+
+@Serializable
+data class CreatePsbtRequest(
+    val walletId: String,
+    val outputs: List<TxOutput>,
+    val feeRate: Double,
+    val utxos: List<UtxoSelection>? = null,
+    val rbf: Boolean = true,
+    val label: String? = null
+)
+
+@Serializable
+data class CreatePsbtResponse(
+    val id: String,
+    val psbtBase64: String,
+    val estimatedFee: Long,
+    val estimatedVsize: Int
+)
+
+@Serializable
+data class SignatureInfo(
+    val deviceId: String,
+    val fingerprint: String,
+    val signedAt: String
+)
+
+@Serializable
+data class PsbtDetailResponse(
+    val id: String,
+    val walletId: String,
+    val psbtBase64: String,
+    val status: String,
+    val requiredSigs: Int,
+    val currentSigs: Int,
+    val signatures: List<SignatureInfo> = emptyList(),
+    val label: String? = null,
+    val txid: String? = null,
+    val createdAt: String,
+    val updatedAt: String
+)
+
+@Serializable
+data class PsbtListResponse(
+    val psbts: List<PsbtDetailResponse>
+)
+
+@Serializable
+data class AddSignatureRequest(
+    val psbtBase64: String,
+    val deviceId: String,
+    val fingerprint: String
+)
+
+@Serializable
+data class CombinePsbtsRequest(
+    val psbts: List<String>
+)
+
+@Serializable
+data class FinalizeResponse(
+    val psbtId: String,
+    val txHex: String,
+    val txid: String
+)
+
+@Serializable
+data class BroadcastResponse(
+    val psbtId: String,
+    val txid: String,
+    val success: Boolean
+)

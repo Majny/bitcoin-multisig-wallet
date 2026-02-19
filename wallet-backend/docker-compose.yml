@@ -10,6 +10,108 @@ services:
       - "5432:5432"
     volumes:
       - wallet_pg_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: wallet_api_gateway
+    ports:
+      - "8080:8080"
+    environment:
+      AUTH_SERVICE_URL: http://auth-service:8081
+      REGISTRY_SERVICE_URL: http://wallet-registry:8082
+      BLOCKCHAIN_SERVICE_URL: http://node-proxy:8083
+      PSBT_SERVICE_URL: http://psbt-service:8085
+    depends_on:
+      - auth-service
+      - wallet-registry
+      - node-proxy
+      - psbt-service
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: wallet_auth_service
+    ports:
+      - "8081:8081"
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/wallet_auth
+      DATABASE_USER: wallet
+      DATABASE_PASSWORD: wallet
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+    depends_on:
+      - postgres
+
+  wallet-registry:
+    build:
+      context: .
+      dockerfile: wallet-registry/Dockerfile
+    container_name: wallet_registry
+    ports:
+      - "8082:8082"
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/wallet_registry
+      DATABASE_USER: wallet
+      DATABASE_PASSWORD: wallet
+    depends_on:
+      - postgres
+
+  node-proxy:
+    build:
+      context: .
+      dockerfile: node-proxy/Dockerfile
+    container_name: wallet_node_proxy
+    ports:
+      - "8083:8083"
+    environment:
+      ELECTRUM_URL: ${ELECTRUM_URL:-ssl://electrum.blockstream.info:50002}
+      MEMPOOL_API_URL: ${MEMPOOL_API_URL:-https://mempool.space/api}
+
+  psbt-service:
+    build:
+      context: .
+      dockerfile: psbt-service/Dockerfile
+    container_name: wallet_psbt_service
+    ports:
+      - "8085:8085"
+    environment:
+      DATABASE_URL: jdbc:postgresql://postgres:5432/wallet_psbt
+      DATABASE_USER: wallet
+      DATABASE_PASSWORD: wallet
+      BLOCKCHAIN_SERVICE_URL: http://node-proxy:8083
+      REGISTRY_SERVICE_URL: http://wallet-registry:8082
+    depends_on:
+      - postgres
+      - node-proxy
+      - wallet-registry
+
+  explorer-service:
+    build:
+      context: .
+      dockerfile: explorer-service/Dockerfile
+    container_name: wallet_explorer_service
+    ports:
+      - "8083:8083"
+    environment:
+      REGISTRY_URL: http://wallet-registry:8082
+      BLOCKCHAIN_URL: http://blockchain-service:8086
+    depends_on:
+      - wallet-registry
+      - blockchain-service
+
+  blockchain-service:
+    build:
+      context: .
+      dockerfile: blockchain-service/Dockerfile
+    container_name: wallet_blockchain_service
+    ports:
+      - "8086:8086"
+    environment:
+      MEMPOOL_BASE_URL: ${MEMPOOL_BASE_URL:-https://mempool.space/api}
+      PORT: "8086"
 
 volumes:
   wallet_pg_data:

@@ -1,20 +1,11 @@
-package cz.majny.wallet.gateway.dto
+package cz.majny.wallet.explorer.http
 
 import kotlinx.serialization.Serializable
 
-@Serializable
-data class UtxoDto(
-    val txid: String,
-    val vout: Int,
-    val valueSats: Long,
-    val address: String? = null,
-    val confirmations: Int? = null
-)
-
-// ============ Explorer Service DTOs ============
+// ============ Wallet Balance ============
 
 @Serializable
-data class WalletBalanceDto(
+data class WalletBalanceResponse(
     val walletId: String,
     val confirmedSats: Long,
     val unconfirmedSats: Long,
@@ -23,20 +14,22 @@ data class WalletBalanceDto(
     val addressCount: Int
 )
 
+// ============ Wallet Transactions ============
+
 @Serializable
-data class WalletTransactionsDto(
+data class WalletTransactionsResponse(
     val walletId: String,
-    val transactions: List<WalletTransactionDto>,
+    val transactions: List<WalletTransaction>,
     val total: Int,
     val limit: Int,
     val offset: Int
 )
 
 @Serializable
-data class WalletTransactionDto(
+data class WalletTransaction(
     val txid: String,
-    val type: String,
-    val amountSats: Long,
+    val type: String,           // "SENT" or "RECEIVED"
+    val amountSats: Long,       // Always positive
     val fee: Long = 0,
     val confirmed: Boolean,
     val blockHeight: Int? = null,
@@ -48,29 +41,33 @@ data class WalletTransactionDto(
     val weight: Int = 0
 )
 
+// ============ Wallet UTXOs ============
+
 @Serializable
-data class WalletUtxosDto(
+data class WalletUtxosResponse(
     val walletId: String,
-    val utxos: List<WalletUtxoDto>,
+    val utxos: List<WalletUtxo>,
     val totalSats: Long,
     val count: Int
 )
 
 @Serializable
-data class WalletUtxoDto(
+data class WalletUtxo(
     val txid: String,
     val vout: Int,
     val valueSats: Long,
     val address: String,
     val addressIndex: Int,
-    val addressType: String,
+    val addressType: String,    // "receive" or "change"
     val confirmed: Boolean,
     val blockHeight: Int? = null,
     val blockTime: Long? = null
 )
 
+// ============ Receive Address ============
+
 @Serializable
-data class ReceiveAddressDto(
+data class ReceiveAddressResponse(
     val walletId: String,
     val address: String,
     val index: Int,
@@ -78,23 +75,25 @@ data class ReceiveAddressDto(
     val needsDerivation: Boolean = false
 )
 
+// ============ Transaction Detail ============
+
 @Serializable
-data class TransactionDetailDto(
+data class TransactionDetailResponse(
     val txid: String,
-    val version: Int = 2,
-    val locktime: Int = 0,
-    val size: Int = 0,
-    val weight: Int = 0,
-    val fee: Long = 0,
-    val confirmed: Boolean = false,
+    val version: Int,
+    val locktime: Int,
+    val size: Int,
+    val weight: Int,
+    val fee: Long,
+    val confirmed: Boolean,
     val blockHeight: Int? = null,
     val blockTime: Long? = null,
-    val inputs: List<TxInputDto> = emptyList(),
-    val outputs: List<TxOutputDto> = emptyList()
+    val inputs: List<TransactionInput>,
+    val outputs: List<TransactionOutput>
 )
 
 @Serializable
-data class TxInputDto(
+data class TransactionInput(
     val txid: String,
     val vout: Int,
     val address: String,
@@ -103,18 +102,9 @@ data class TxInputDto(
 )
 
 @Serializable
-data class TxOutputDto(
+data class TransactionOutput(
     val index: Int,
     val address: String,
     val valueSats: Long,
     val isMine: Boolean = false
-)
-
-@Serializable
-data class FeeEstimatesExplorerDto(
-    val fastestFee: Int,
-    val halfHourFee: Int,
-    val hourFee: Int,
-    val economyFee: Int,
-    val minimumFee: Int
 )
