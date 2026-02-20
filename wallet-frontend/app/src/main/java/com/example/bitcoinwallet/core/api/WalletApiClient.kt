@@ -7,6 +7,10 @@ import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
+import io.ktor.http.ContentType
+import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -86,6 +90,48 @@ class WalletApiClient(
      */
     suspend fun getFeeEstimates(accessToken: String): FeeEstimatesDto {
         return client.get("$baseUrl/explorer/fees") {
+            header("Authorization", "Bearer $accessToken")
+        }.body()
+    }
+
+    // ============ PSBT Endpoints ============
+
+    /**
+     * POST /api/v1/psbt
+     * Create a new PSBT transaction.
+     */
+    suspend fun createPsbt(
+        accessToken: String,
+        walletId: String,
+        destinationAddress: String,
+        amountSats: Long,
+        feeRate: Double,
+        utxos: List<UtxoSelectionDto>? = null,
+        rbf: Boolean = true,
+        label: String? = null
+    ): CreatePsbtResponseDto {
+        return client.post("$baseUrl/psbt") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(
+                CreatePsbtRequestDto(
+                    walletId = walletId,
+                    outputs = listOf(PsbtTxOutputDto(address = destinationAddress, amountSats = amountSats)),
+                    feeRate = feeRate,
+                    utxos = utxos,
+                    rbf = rbf,
+                    label = label
+                )
+            )
+        }.body()
+    }
+
+    /**
+     * GET /api/v1/psbt/{id}
+     * Get PSBT detail.
+     */
+    suspend fun getPsbtDetail(psbtId: String, accessToken: String): PsbtDetailDto {
+        return client.get("$baseUrl/psbt/$psbtId") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
@@ -260,4 +306,58 @@ data class ConversionResultDto(
     val btc: Double,
     val fiatValue: Double,
     val fiatCurrency: String
+)
+
+// ============ PSBT DTOs ============
+
+@Serializable
+data class PsbtTxOutputDto(
+    val address: String,
+    val amountSats: Long
+)
+
+@Serializable
+data class UtxoSelectionDto(
+    val txid: String,
+    val vout: Int
+)
+
+@Serializable
+data class CreatePsbtRequestDto(
+    val walletId: String,
+    val outputs: List<PsbtTxOutputDto>,
+    val feeRate: Double,
+    val utxos: List<UtxoSelectionDto>? = null,
+    val rbf: Boolean = true,
+    val label: String? = null
+)
+
+@Serializable
+data class CreatePsbtResponseDto(
+    val id: String,
+    val psbtBase64: String,
+    val estimatedFee: Long,
+    val estimatedVsize: Int
+)
+
+@Serializable
+data class PsbtDetailDto(
+    val id: String,
+    val walletId: String,
+    val psbtBase64: String,
+    val status: String,
+    val requiredSigs: Int,
+    val currentSigs: Int,
+    val signatures: List<PsbtSignatureDto> = emptyList(),
+    val label: String? = null,
+    val txid: String? = null,
+    val createdAt: String = "",
+    val updatedAt: String = ""
+)
+
+@Serializable
+data class PsbtSignatureDto(
+    val fingerprint: String,
+    val deviceId: String,
+    val signedAt: String
 )

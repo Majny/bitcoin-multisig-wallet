@@ -8,7 +8,9 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.navigation
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
+import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
 
 object WalletRoutes {
     const val Graph = "wallet_graph"
@@ -48,7 +50,27 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         }
         
         composable(WalletRoutes.Send) {
-            // TODO: SendBtcScreen
+            val viewModel: SendTransactionViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+
+            SendTransactionScreen(
+                state = state,
+                onClose = { navController.popBackStack() },
+                onRecipientChanged = viewModel::onRecipientChanged,
+                onAmountChanged = viewModel::onAmountChanged,
+                onFeePriorityChanged = viewModel::onFeePriorityChanged,
+                onAutoSelectChanged = viewModel::onAutoSelectChanged,
+                onCustomFeeRateChanged = viewModel::onCustomFeeRateChanged,
+                onEditSelection = {
+                    // TODO: navigate to Coin Control / UTXO selection screen
+                },
+                onCreateTransaction = {
+                    viewModel.createTransaction { psbtId ->
+                        // After PSBT created, navigate back (or to sign screen in future)
+                        navController.popBackStack()
+                    }
+                }
+            )
         }
         
         composable(WalletRoutes.Receive) {
