@@ -8,6 +8,7 @@ import io.ktor.client.engine.cio.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.request.*
 import io.ktor.serialization.kotlinx.json.*
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
@@ -47,4 +48,21 @@ class RegistryClient(private val baseUrl: String) {
             parameter("index", index)
         }.body()
     }
+
+    /**
+     * Získá všechny adresy peněženky (receive + change).
+     * Pokud type je specifikován, vrátí jen daný typ.
+     */
+    suspend fun getAllAddresses(walletId: String, type: String? = null): List<AddressDto> {
+        val response: WalletAddressesResponse = client.get("$baseUrl/registry/wallets/$walletId/addresses") {
+            if (type != null) parameter("type", type)
+        }.body()
+        return response.addresses
+    }
 }
+
+@Serializable
+data class WalletAddressesResponse(
+    val walletId: String,
+    val addresses: List<AddressDto>
+)

@@ -3,45 +3,38 @@ package cz.majny.wallet.registry.importer
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
-/**
- * Parses Bitcoin output descriptors into structured wallet definitions.
- *
- * Supported formats:
- *   - wsh(sortedmulti(M, [fp/path]xpub/chain/*, ...))   → P2WSH multisig
- *   - wsh(multi(M, [fp/path]xpub/chain/*, ...))          → P2WSH multisig (unsorted)
- *   - sh(wsh(sortedmulti(M, ...)))                        → P2SH-P2WSH multisig
- *   - wpkh([fp/path]xpub/chain/*)                         → P2WPKH single-sig
- *   - tr([fp/path]xpub/chain/*)                           → P2TR single-sig
- *
- * BIP-67 sorting: For `sortedmulti`, cosigner xpubs are sorted lexicographically
- * by their serialized public key at each derivation index. We store them in the
- * canonical BIP-67 order (sorted by xpub string as a proxy, matching Sparrow/Specter behavior).
- */
+//
+// Parses Bitcoin output descriptors into structured wallet definitions.
+//
+// Supported formats:
+//   - wsh(sortedmulti(M, [fp/path]xpub/chain/STAR, ...))  -> P2WSH multisig
+//   - wsh(multi(M, [fp/path]xpub/chain/STAR, ...))         -> P2WSH multisig (unsorted)
+//   - sh(wsh(sortedmulti(M, ...)))                         -> P2SH-P2WSH multisig
+//   - wpkh([fp/path]xpub/chain/STAR)                       -> P2WPKH single-sig
+//   - tr([fp/path]xpub/chain/STAR)                         -> P2TR single-sig
+//
+// BIP-67 sorting: For sortedmulti, cosigner xpubs are sorted lexicographically
+// by their serialized public key at each derivation index.
+//
 object DescriptorParser {
 
     private val log = LoggerFactory.getLogger(DescriptorParser::class.java)
 
-    /**
-     * Regex for a single key origin + xpub inside a descriptor.
-     * Captures: [fingerprint/derivation_path]xpub.../chain_and_wildcard
-     *
-     * Group 1: fingerprint (hex, 8 chars)
-     * Group 2: origin derivation path (e.g. 48'/0'/0'/2')
-     * Group 3: xpub (or tpub) base58 string
-     * Group 4: trailing path (e.g. /0/* or /*)
-     */
+    // Regex for a single key origin + xpub inside a descriptor.
+    // Captures: [fingerprint/derivation_path]xpub.../chain_and_wildcard
+    //
+    // Group 1: fingerprint (hex, 8 chars)
+    // Group 2: origin derivation path (e.g. 48'/0'/0'/2')
+    // Group 3: xpub (or tpub) base58 string
+    // Group 4: trailing path (e.g. /0/STAR or /STAR)
     private val KEY_ORIGIN_RE = Regex(
         """\[([0-9a-fA-F]{8})/([^\]]+)\]([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})(/[0-9*/<>;{}]+)?"""
     )
 
-    /**
-     * Regex to extract M from multi(M, ...) or sortedmulti(M, ...)
-     */
+    // Regex to extract M from multi(M, ...) or sortedmulti(M, ...)
     private val MULTI_M_RE = Regex("""(?:sorted)?multi\((\d+)\s*,""")
 
-    /**
-     * Descriptor checksum regex: #checksum at the end.
-     */
+    // Descriptor checksum regex: #checksum at the end.
     private val CHECKSUM_RE = Regex("""#([0-9a-z]{8})\s*$""")
 
     // ------------------------------------------------------------------
@@ -220,10 +213,8 @@ object DescriptorParser {
     private fun stripChecksum(desc: String): String =
         CHECKSUM_RE.replace(desc, "").trim()
 
-    /**
-     * Derive the change descriptor from a receive descriptor.
-     * Replaces /0/* with /1/* in the trailing paths.
-     */
+    // Derive the change descriptor from a receive descriptor.
+    // Replaces /0/STAR with /1/STAR in the trailing paths.
     private fun deriveCounterpart(receiveDesc: String): String {
         // For descriptors ending with /0/* → replace with /1/*
         val result = receiveDesc.replace("/0/*", "/1/*")

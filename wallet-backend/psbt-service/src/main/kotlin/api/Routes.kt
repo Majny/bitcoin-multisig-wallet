@@ -378,6 +378,7 @@ fun Route.psbtRoutes(
 
 /**
  * Vybere konkrétní UTXOs podle seznamu txid:vout.
+ * Prohledá VŠECHNY adresy peněženky (receive + change).
  */
 private suspend fun selectSpecificUtxos(
     selections: List<UtxoSelection>,
@@ -385,28 +386,36 @@ private suspend fun selectSpecificUtxos(
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient
 ): List<SelectedUtxo> {
-    // Získej všechny adresy peněženky
-    val receiveAddr = registryClient.getReceiveAddress(walletId)
-    val allUtxos = blockchainClient.getUtxos(receiveAddr.address)
-    
-    // Filtruj podle výběru
     val selectionSet = selections.map { "${it.txid}:${it.vout}" }.toSet()
-    
-    return allUtxos
-        .filter { "${it.txid}:${it.vout}" in selectionSet }
-        .map { utxo ->
-            SelectedUtxo(
-                txid = utxo.txid,
-                vout = utxo.vout,
-                value = utxo.value,
-                scriptPubKey = null // TODO: získat z raw tx
-            )
+
+    // Získej VŠECHNY adresy peněženky z registru
+    val allAddresses = registryClient.getAllAddresses(walletId)
+
+    // Pro každou adresu získej UTXOs a filtruj
+    val result = mutableListOf<SelectedUtxo>()
+    for (addrDto in allAddresses) {
+        val utxos = blockchainClient.getUtxos(addrDto.address)
+        for (utxo in utxos) {
+            val key = "${utxo.txid}:${utxo.vout}"
+            if (key in selectionSet) {
+                result.add(SelectedUtxo(
+                    txid = utxo.txid,
+                    vout = utxo.vout,
+                    value = utxo.value,
+                    scriptPubKey = null,
+                    addressIndex = addrDto.index,
+                    addressType = addrDto.type,
+                    address = addrDto.address
+                ))
+            }
         }
+    }
+    return result
 }
 
 /**
  * Automaticky vybere UTXOs pro pokrytí požadované částky + fee.
- * Používá jednoduchou strategii "largest first".
+ * Prohledá VŠECHNY adresy peněženky a seřadí od největšího (largest-first).
  */
 private suspend fun autoSelectUtxos(
     walletId: String,
@@ -415,25 +424,36 @@ private suspend fun autoSelectUtxos(
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient
 ): List<SelectedUtxo> {
-    // Získej receive adresu
-    val receiveAddr = registryClient.getReceiveAddress(walletId)
-    val allUtxos = blockchainClient.getUtxos(receiveAddr.address)
-    
+    // Získej VŠECHNY adresy peněženky z registru
+    val allAddresses = registryClient.getAllAddresses(walletId)
+
+    // Sbírej UTXOs ze všech adres
+    data class RichUtxo(val utxo: UtxoDto, val addrDto: AddressDto)
+    val allUtxos = mutableListOf<RichUtxo>()
+    for (addrDto in allAddresses) {
+        val utxos = blockchainClient.getUtxos(addrDto.address)
+        for (utxo in utxos) {
+            allUtxos.add(RichUtxo(utxo, addrDto))
+        }
+    }
+
     // Seřaď od největšího
-    val sortedUtxos = allUtxos.sortedByDescending { it.value }
+    val sortedUtxos = allUtxos.sortedByDescending { it.utxo.value }
     
     val selected = mutableListOf<SelectedUtxo>()
     var totalSelected = 0L
     
-    // Odhadni potřebnou částku včetně fee
-    for (utxo in sortedUtxos) {
+    for (rich in sortedUtxos) {
         selected.add(SelectedUtxo(
-            txid = utxo.txid,
-            vout = utxo.vout,
-            value = utxo.value,
-            scriptPubKey = null
+            txid = rich.utxo.txid,
+            vout = rich.utxo.vout,
+            value = rich.utxo.value,
+            scriptPubKey = null,
+            addressIndex = rich.addrDto.index,
+            addressType = rich.addrDto.type,
+            address = rich.addrDto.address
         ))
-        totalSelected += utxo.value
+        totalSelected += rich.utxo.value
         
         // Odhadni fee pro aktuální počet vstupů
         val estimatedFee = (68 * selected.size + 31 * 2 + 10) * feeRate

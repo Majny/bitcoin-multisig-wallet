@@ -1,7 +1,6 @@
 package cz.majny.wallet.registry
 
 import org.bitcoinj.base.BitcoinNetwork
-import org.bitcoinj.base.Bech32
 import org.bitcoinj.base.Network
 import org.bitcoinj.base.ScriptType
 import org.bitcoinj.crypto.DeterministicKey
@@ -14,10 +13,10 @@ import java.security.MessageDigest
  * Derives Bitcoin addresses from output descriptors using BitcoinJ.
  *
  * Supported descriptor types:
- * - wpkh([fp/84h/0h/0h]xpub.../0/star) -> P2WPKH (Native SegWit, bc1q...)
- * - tr([fp/86h/0h/0h]xpub.../0/star)   -> P2TR (Taproot, bc1p...) -- limited
- * - wsh(sortedmulti(M,[fp/48h/0h/0h/2h]xpub.../0/*,...)) -> P2WSH (multisig, bc1q...)
- * - wsh(multi(M,...)) -> P2WSH (multisig, unsorted)
+ * - `wpkh([fp/84h/0h/0h]xpub.../0/star)` -> P2WPKH (Native SegWit, bc1q...)
+ * - `tr([fp/86h/0h/0h]xpub.../0/star)` -> P2TR (Taproot, bc1p...) -- limited
+ * - `wsh(sortedmulti(M,[fp/48h/0h/0h/2h]xpub.../0/star,...))` -> P2WSH (multisig, bc1q...)
+ * - `wsh(multi(M,...))` -> P2WSH (multisig, unsorted)
  *
  * Uses BIP-32 hierarchical deterministic key derivation:
  *   xpub (account level) -> /chain/index -> public key -> address
@@ -190,8 +189,8 @@ object AddressDerivation {
             // P2WSH: SHA256(witnessScript) → 32-byte witness program
             val sha256 = MessageDigest.getInstance("SHA-256").digest(witnessScript)
 
-            // Bech32 encode: version 0 + 32-byte program
-            val addr = Bech32.segwitToBech32(hrp, 0, sha256)
+            // Bech32 encode: witness version 0 + 32-byte program
+            val addr = segwitToBech32(hrp, 0, sha256)
 
             DerivedAddress(index = idx, address = addr)
         }
@@ -266,6 +265,71 @@ object AddressDerivation {
     }
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    // ------------------------------------------------------------------
+    // Manual bech32 encoding (BitcoinJ 0.17 has no segwitToBech32 method)
+    // ------------------------------------------------------------------
+
+    private val BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+
+    private fun segwitToBech32(hrp: String, witnessVersion: Int, program: ByteArray): String {
+        // Convert 8-bit witness program to 5-bit groups
+        val data = convertBits8to5(program)
+        // Prepend witness version
+        val payload = intArrayOf(witnessVersion) + data
+        // Compute bech32 checksum
+        val checksum = createBech32Checksum(hrp, payload)
+        val sb = StringBuilder(hrp.length + 1 + payload.size + checksum.size)
+        sb.append(hrp).append('1')
+        for (v in payload) sb.append(BECH32_CHARSET[v])
+        for (v in checksum) sb.append(BECH32_CHARSET[v])
+        return sb.toString()
+    }
+
+    private fun convertBits8to5(data: ByteArray): IntArray {
+        var acc = 0
+        var bits = 0
+        val result = mutableListOf<Int>()
+        for (b in data) {
+            acc = (acc shl 8) or (b.toInt() and 0xFF)
+            bits += 8
+            while (bits >= 5) {
+                bits -= 5
+                result.add((acc shr bits) and 31)
+            }
+        }
+        if (bits > 0) {
+            result.add((acc shl (5 - bits)) and 31)
+        }
+        return result.toIntArray()
+    }
+
+    private fun bech32Polymod(values: IntArray): Int {
+        val gen = intArrayOf(0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3)
+        var chk = 1
+        for (v in values) {
+            val top = chk shr 25
+            chk = ((chk and 0x1ffffff) shl 5) xor v
+            for (i in gen.indices) {
+                if ((top shr i) and 1 == 1) chk = chk xor gen[i]
+            }
+        }
+        return chk
+    }
+
+    private fun bech32HrpExpand(hrp: String): IntArray {
+        val result = IntArray(hrp.length * 2 + 1)
+        for (i in hrp.indices) result[i] = hrp[i].code shr 5
+        // result[hrp.length] = 0 (separator)
+        for (i in hrp.indices) result[hrp.length + 1 + i] = hrp[i].code and 31
+        return result
+    }
+
+    private fun createBech32Checksum(hrp: String, data: IntArray): IntArray {
+        val values = bech32HrpExpand(hrp) + data + intArrayOf(0, 0, 0, 0, 0, 0)
+        val polymod = bech32Polymod(values) xor 1
+        return IntArray(6) { (polymod shr (5 * (5 - it))) and 31 }
+    }
 
     private enum class DescriptorType { P2WPKH, P2TR, P2WSH_MULTISIG }
 
