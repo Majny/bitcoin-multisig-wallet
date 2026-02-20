@@ -9,45 +9,34 @@ import java.time.ZoneId
 
 /**
  * Repository for wallet data.
- * Combines blockchain data with price data to provide complete wallet info.
+ * Uses explorer-service (via gateway) for wallet-level aggregated data
+ * and price-service for fiat conversions.
  */
 class WalletRepository(
     private val apiClient: WalletApiClient
 ) {
     
     /**
-     * Get the receive address for a wallet.
-     * 
+     * Get wallet balance (aggregated across all addresses) with fiat conversion.
+     *
      * @param walletId Wallet ID
-     * @param accessToken JWT access token
-     * @return Bitcoin receive address
-     */
-    suspend fun getWalletReceiveAddress(walletId: String, accessToken: String): String {
-        val result = apiClient.getWalletAddress(walletId, accessToken)
-        return result.address
-    }
-    
-    /**
-     * Get wallet balance in BTC and fiat.
-     * 
-     * @param address Bitcoin address to check balance for
      * @param accessToken JWT access token
      * @param fiatCurrency Target fiat currency (default: CZK)
      */
     suspend fun getWalletBalance(
-        address: String,
+        walletId: String,
         accessToken: String,
         fiatCurrency: String = "czk"
     ): WalletBalance {
-        // Get balance from blockchain
-        val addressInfo = apiClient.getAddressInfo(address, accessToken)
-        val balanceSats = addressInfo.balance
+        // Explorer-service aggregates balance across all wallet addresses
+        val balanceDto = apiClient.getWalletBalance(walletId, accessToken)
+        val balanceSats = balanceDto.totalSats
         
-        // Convert to fiat
+        // Convert to fiat via price-service
         val conversion = try {
-            apiClient.convertSatsToFiat(balanceSats, fiatCurrency)
+            apiClient.convertSatsToFiat(accessToken, balanceSats, fiatCurrency)
         } catch (e: Exception) {
-            // If price service fails, return 0 fiat
+            // If price service is unavailable, show 0 fiat
             null
         }
         
@@ -59,26 +48,29 @@ class WalletRepository(
     }
     
     /**
-     * Get transaction history for address.
-     * Determines if each transaction is sent or received based on address involvement.
-     * 
-     * @param address Bitcoin address to check transactions for
+     * Get transaction history for the entire wallet.
+     * Explorer-service already classifies each tx as SENT/RECEIVED with correct amount.
+     *
+     * @param walletId Wallet ID
      * @param accessToken JWT access token
+     * @param limit Max transactions to fetch
+     * @param offset Pagination offset
      */
     suspend fun getTransactionHistory(
-        address: String,
-        accessToken: String
+        walletId: String,
+        accessToken: String,
+        limit: Int = 50,
+        offset: Int = 0
     ): List<Transaction> {
-        val transactions = apiClient.getAddressTransactions(address, accessToken)
+        val response = apiClient.getWalletTransactions(walletId, accessToken, limit, offset)
         
-        return transactions.map { tx ->
-            // Determine transaction type and amount
-            // For now, we'll use a simplified approach
-            // In a real implementation, we'd check vin/vout to determine direction
-            val type = TransactionType.RECEIVED // Placeholder - needs proper implementation
-            val amount = tx.fee // Placeholder - needs proper calculation from vin/vout
+        return response.transactions.map { tx ->
+            val type = when (tx.type) {
+                "SENT" -> TransactionType.SENT
+                else   -> TransactionType.RECEIVED
+            }
             
-            val date = tx.status.block_time?.let { timestamp ->
+            val date = tx.blockTime?.let { timestamp ->
                 Instant.ofEpochSecond(timestamp)
                     .atZone(ZoneId.systemDefault())
                     .toLocalDate()
@@ -88,24 +80,38 @@ class WalletRepository(
                 id = tx.txid,
                 txid = tx.txid,
                 type = type,
-                amount = amount,
-                date = date
+                amount = tx.amountSats,
+                date = date,
+                confirmed = tx.confirmed,
+                confirmations = tx.confirmations
             )
         }
     }
     
     /**
-     * Get current Bitcoin prices.
+     * Get the first unused receive address for a wallet.
+     *
+     * @param walletId Wallet ID
+     * @param accessToken JWT access token
+     * @return Bitcoin receive address string
      */
-    suspend fun getBitcoinPrices(currencies: String = "czk,usd,eur"): BitcoinPricesDto {
-        return apiClient.getBitcoinPrices(currencies)
+    suspend fun getReceiveAddress(walletId: String, accessToken: String): String {
+        val dto = apiClient.getReceiveAddress(walletId, accessToken)
+        return dto.address
     }
     
     /**
-     * Get UTXOs for coin control.
+     * Get all UTXOs for the wallet (coin control).
      */
-    suspend fun getUtxos(address: String, accessToken: String): List<UtxoDto> {
-        return apiClient.getAddressUtxos(address, accessToken)
+    suspend fun getWalletUtxos(walletId: String, accessToken: String): WalletUtxosDto {
+        return apiClient.getWalletUtxos(walletId, accessToken)
+    }
+    
+    /**
+     * Get current Bitcoin prices.
+     */
+    suspend fun getBitcoinPrices(accessToken: String, currencies: String = "czk,usd,eur"): BitcoinPricesDto {
+        return apiClient.getBitcoinPrices(accessToken, currencies)
     }
     
     /**
@@ -113,5 +119,16 @@ class WalletRepository(
      */
     suspend fun getFeeEstimates(accessToken: String): FeeEstimatesDto {
         return apiClient.getFeeEstimates(accessToken)
+    }
+    
+    /**
+     * Get detailed transaction info (inputs/outputs).
+     */
+    suspend fun getTransactionDetail(
+        txid: String,
+        accessToken: String,
+        walletId: String? = null
+    ): TransactionDetailDto {
+        return apiClient.getTransactionDetail(txid, accessToken, walletId)
     }
 }

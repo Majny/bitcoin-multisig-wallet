@@ -12,62 +12,80 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /**
- * API client for wallet data - balance, transactions, prices.
- * Communicates with API Gateway which routes to blockchain-service and price-service.
+ * API client for wallet data.
+ * Communicates with API Gateway which routes to explorer-service, blockchain-service, and price-service.
  */
 class WalletApiClient(
     private val baseUrl: String,
     private val client: HttpClient = defaultClient()
 ) {
     
-    // ============ Blockchain Endpoints ============
+    // ============ Explorer Endpoints (wallet-level) ============
     
     /**
-     * GET /api/v1/wallets/{walletId}/address
-     * Get the receive address for a wallet.
+     * GET /api/v1/explorer/wallet/{walletId}/balance
+     * Aggregated balance across all wallet addresses.
      */
-    suspend fun getWalletAddress(walletId: String, accessToken: String): WalletAddressDto {
-        return client.get("$baseUrl/wallets/$walletId/address") {
+    suspend fun getWalletBalance(walletId: String, accessToken: String): WalletBalanceDto {
+        return client.get("$baseUrl/explorer/wallet/$walletId/balance") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
     
     /**
-     * GET /api/v1/blockchain/address/{address}
-     * Get address info including balance and tx count.
+     * GET /api/v1/explorer/wallet/{walletId}/transactions?limit=50&offset=0
+     * Transaction history with SENT/RECEIVED classification.
      */
-    suspend fun getAddressInfo(address: String, accessToken: String): AddressInfoDto {
-        return client.get("$baseUrl/blockchain/address/$address") {
+    suspend fun getWalletTransactions(
+        walletId: String,
+        accessToken: String,
+        limit: Int = 50,
+        offset: Int = 0
+    ): WalletTransactionsDto {
+        return client.get("$baseUrl/explorer/wallet/$walletId/transactions") {
+            header("Authorization", "Bearer $accessToken")
+            parameter("limit", limit)
+            parameter("offset", offset)
+        }.body()
+    }
+    
+    /**
+     * GET /api/v1/explorer/wallet/{walletId}/utxos
+     * All UTXOs enriched with address info for coin control.
+     */
+    suspend fun getWalletUtxos(walletId: String, accessToken: String): WalletUtxosDto {
+        return client.get("$baseUrl/explorer/wallet/$walletId/utxos") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
     
     /**
-     * GET /api/v1/blockchain/address/{address}/utxos
-     * Get UTXOs for coin control.
+     * GET /api/v1/explorer/wallet/{walletId}/receive-address
+     * First unused receive address.
      */
-    suspend fun getAddressUtxos(address: String, accessToken: String): List<UtxoDto> {
-        return client.get("$baseUrl/blockchain/address/$address/utxos") {
+    suspend fun getReceiveAddress(walletId: String, accessToken: String): ReceiveAddressDto {
+        return client.get("$baseUrl/explorer/wallet/$walletId/receive-address") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
     
     /**
-     * GET /api/v1/blockchain/address/{address}/txs
-     * Get transaction history for address.
+     * GET /api/v1/explorer/tx/{txid}
+     * Transaction detail with inputs/outputs.
      */
-    suspend fun getAddressTransactions(address: String, accessToken: String): List<TransactionDto> {
-        return client.get("$baseUrl/blockchain/address/$address/txs") {
+    suspend fun getTransactionDetail(txid: String, accessToken: String, walletId: String? = null): TransactionDetailDto {
+        return client.get("$baseUrl/explorer/tx/$txid/detail") {
             header("Authorization", "Bearer $accessToken")
+            walletId?.let { parameter("walletId", it) }
         }.body()
     }
     
     /**
-     * GET /api/v1/blockchain/fees
-     * Get recommended fee rates.
+     * GET /api/v1/explorer/fees
+     * Recommended fee rates.
      */
     suspend fun getFeeEstimates(accessToken: String): FeeEstimatesDto {
-        return client.get("$baseUrl/blockchain/fees") {
+        return client.get("$baseUrl/explorer/fees") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
@@ -78,8 +96,9 @@ class WalletApiClient(
      * GET /api/v1/price
      * Get current Bitcoin prices in various currencies.
      */
-    suspend fun getBitcoinPrices(currencies: String = "czk,usd,eur"): BitcoinPricesDto {
+    suspend fun getBitcoinPrices(accessToken: String, currencies: String = "czk,usd,eur"): BitcoinPricesDto {
         return client.get("$baseUrl/price") {
+            header("Authorization", "Bearer $accessToken")
             parameter("currencies", currencies)
         }.body()
     }
@@ -88,8 +107,9 @@ class WalletApiClient(
      * GET /api/v1/price/convert
      * Convert satoshis to fiat value.
      */
-    suspend fun convertSatsToFiat(sats: Long, currency: String = "czk"): ConversionResultDto {
+    suspend fun convertSatsToFiat(accessToken: String, sats: Long, currency: String = "czk"): ConversionResultDto {
         return client.get("$baseUrl/price/convert") {
+            header("Authorization", "Bearer $accessToken")
             parameter("sats", sats)
             parameter("currency", currency)
         }.body()
@@ -112,57 +132,106 @@ class WalletApiClient(
     }
 }
 
-// ============ DTOs ============
+// ============ Explorer DTOs ============
 
 @Serializable
-data class WalletAddressDto(
+data class WalletBalanceDto(
     val walletId: String,
-    val address: String,
-    val index: Int = 0,
-    val type: String = "receive"
+    val confirmedSats: Long,
+    val unconfirmedSats: Long,
+    val totalSats: Long,
+    val utxoCount: Int,
+    val addressCount: Int
 )
 
 @Serializable
-data class AddressInfoDto(
-    val address: String,
-    val txCount: Int,
-    val balance: Long
+data class WalletTransactionsDto(
+    val walletId: String,
+    val transactions: List<WalletTransactionDto>,
+    val total: Int,
+    val limit: Int,
+    val offset: Int
 )
 
 @Serializable
-data class UtxoDto(
+data class WalletTransactionDto(
+    val txid: String,
+    val type: String,           // "SENT" or "RECEIVED"
+    val amountSats: Long,
+    val fee: Long = 0,
+    val confirmed: Boolean,
+    val blockHeight: Int? = null,
+    val blockTime: Long? = null,
+    val confirmations: Int = 0,
+    val inputCount: Int = 0,
+    val outputCount: Int = 0,
+    val size: Int = 0,
+    val weight: Int = 0
+)
+
+@Serializable
+data class WalletUtxosDto(
+    val walletId: String,
+    val utxos: List<WalletUtxoDto>,
+    val totalSats: Long,
+    val count: Int
+)
+
+@Serializable
+data class WalletUtxoDto(
     val txid: String,
     val vout: Int,
-    val value: Long,
-    val status: UtxoStatusDto
-)
-
-@Serializable
-data class UtxoStatusDto(
+    val valueSats: Long,
+    val address: String,
+    val addressIndex: Int,
+    val addressType: String,
     val confirmed: Boolean,
-    val block_height: Int? = null,
-    val block_hash: String? = null,
-    val block_time: Long? = null
+    val blockHeight: Int? = null,
+    val blockTime: Long? = null
 )
 
 @Serializable
-data class TransactionDto(
+data class ReceiveAddressDto(
+    val walletId: String,
+    val address: String,
+    val index: Int,
+    val isNew: Boolean = true,
+    val needsDerivation: Boolean = false
+)
+
+@Serializable
+data class TransactionDetailDto(
     val txid: String,
     val version: Int = 2,
     val locktime: Int = 0,
     val size: Int = 0,
     val weight: Int = 0,
     val fee: Long = 0,
-    val status: TxStatusDto = TxStatusDto()
+    val confirmed: Boolean = false,
+    val blockHeight: Int? = null,
+    val blockTime: Long? = null,
+    val inputs: List<TxInputDto> = emptyList(),
+    val outputs: List<TxOutputDto> = emptyList()
 )
 
 @Serializable
-data class TxStatusDto(
-    val confirmed: Boolean = false,
-    val block_height: Int? = null,
-    val block_hash: String? = null,
-    val block_time: Long? = null
+data class TxInputDto(
+    val txid: String,
+    val vout: Int,
+    val address: String,
+    val valueSats: Long,
+    val isMine: Boolean = false
 )
+
+@Serializable
+data class TxOutputDto(
+    val index: Int,
+    val address: String,
+    val valueSats: Long,
+    val isMine: Boolean = false
+)
+
+// ============ Price DTOs ============
 
 @Serializable
 data class FeeEstimatesDto(

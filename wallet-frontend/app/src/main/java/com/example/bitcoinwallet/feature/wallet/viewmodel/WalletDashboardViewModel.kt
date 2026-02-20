@@ -7,6 +7,7 @@ import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.feature.wallet.model.Transaction
 import com.example.bitcoinwallet.feature.wallet.model.WalletBalance
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -26,7 +27,7 @@ data class WalletDashboardUiState(
 
 /**
  * ViewModel for the Wallet Dashboard screen.
- * Manages wallet balance and transaction history using API Gateway.
+ * Fetches wallet-level data via explorer-service through the API Gateway.
  */
 class WalletDashboardViewModel : ViewModel() {
     
@@ -40,7 +41,8 @@ class WalletDashboardViewModel : ViewModel() {
     }
     
     /**
-     * Load wallet data including balance and transaction history.
+     * Load wallet data – balance and transaction history – in parallel.
+     * Uses explorer-service wallet-level endpoints (no address lookup needed).
      */
     fun loadWalletData() {
         viewModelScope.launch {
@@ -67,15 +69,18 @@ class WalletDashboardViewModel : ViewModel() {
             try {
                 Log.d(TAG, "Loading wallet data for wallet: $walletId")
                 
-                // Get wallet address from backend
-                val address = repository.getWalletReceiveAddress(walletId, accessToken)
-                Log.d(TAG, "Wallet receive address: $address")
-                
                 // Fetch balance and transactions in parallel
-                val balance = repository.getWalletBalance(address, accessToken)
-                val transactions = repository.getTransactionHistory(address, accessToken)
+                val balanceDeferred = async {
+                    repository.getWalletBalance(walletId, accessToken)
+                }
+                val txDeferred = async {
+                    repository.getTransactionHistory(walletId, accessToken)
+                }
                 
-                Log.d(TAG, "Balance: ${balance.balanceSats} sats, Transactions: ${transactions.size}")
+                val balance = balanceDeferred.await()
+                val transactions = txDeferred.await()
+                
+                Log.d(TAG, "Balance: ${balance.balanceSats} sats (${balance.formatBtc()}), Transactions: ${transactions.size}")
                 
                 _uiState.value = WalletDashboardUiState(
                     balance = balance,
@@ -93,7 +98,7 @@ class WalletDashboardViewModel : ViewModel() {
     }
     
     /**
-     * Refresh wallet data.
+     * Refresh wallet data (pull-to-refresh).
      */
     fun refresh() {
         loadWalletData()
