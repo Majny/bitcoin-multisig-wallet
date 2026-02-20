@@ -2,6 +2,7 @@ package cz.majny.wallet.gateway.http
 
 import cz.majny.wallet.gateway.deps
 import io.ktor.http.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -12,6 +13,7 @@ import kotlinx.serialization.Serializable
  * API Gateway only routes requests to the dedicated blockchain microservice.
  */
 fun Route.blockchainRoutes() {
+    authenticate("auth-jwt") {
     route("/blockchain") {
         
         /**
@@ -86,6 +88,8 @@ fun Route.blockchainRoutes() {
             call.respond(result)
         }
     }
+}
+
 }
 
 @Serializable

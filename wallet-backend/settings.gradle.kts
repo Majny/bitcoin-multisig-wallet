@@ -27,8 +27,6 @@ rootProject.name = "wallet"
 
 include(":app")
 include(":utils")
-include(":signer-service")
-include(":mobile-signer")
 include(":api-gateway")
 include(":auth-service")
 

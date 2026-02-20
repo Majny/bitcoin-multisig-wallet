@@ -1,6 +1,7 @@
 package cz.majny.wallet.gateway.http
 
 import cz.majny.wallet.gateway.deps
+import io.ktor.server.auth.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
@@ -8,6 +9,7 @@ import io.ktor.server.routing.*
  * Routes for price data - proxies to price-service.
  */
 fun Route.priceRoutes() {
+    authenticate("auth-jwt") {
     val priceClient by lazy { application.deps.price }
     
     route("/price") {
@@ -44,5 +46,6 @@ fun Route.priceRoutes() {
             val result = priceClient.convertSatsToFiat(sats, currency)
             call.respond(result)
         }
+    }
     }
 }

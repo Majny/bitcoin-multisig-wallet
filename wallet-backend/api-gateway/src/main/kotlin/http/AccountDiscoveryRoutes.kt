@@ -4,6 +4,7 @@ import cz.majny.wallet.gateway.clients.BlockchainClient
 import cz.majny.wallet.gateway.deps
 import cz.majny.wallet.gateway.dto.*
 import io.ktor.http.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -14,6 +15,7 @@ import io.ktor.server.routing.*
  * Uses blockchain-service for address activity checks.
  */
 fun Route.accountDiscoveryRoutes() {
+    authenticate("auth-jwt") {
 
     /**
      * POST /api/v1/accounts/scan
@@ -82,6 +84,7 @@ fun Route.accountDiscoveryRoutes() {
         
         val result = call.application.deps.blockchain.hasActivity(address)
         call.respond(result)
+    }
     }
 }
 

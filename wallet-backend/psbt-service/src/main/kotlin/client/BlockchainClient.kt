@@ -26,23 +26,23 @@ class BlockchainClient(private val baseUrl: String) {
      * Získá UTXOs pro adresu.
      */
     suspend fun getUtxos(address: String): List<UtxoDto> {
-        return client.get("$baseUrl/blockchain/address/$address/utxos").body()
+        return client.get("$baseUrl/api/v1/blockchain/address/$address/utxos").body()
     }
     
     /**
      * Získá raw transakci podle txid.
      */
     suspend fun getRawTransaction(txid: String): RawTxResponse {
-        return client.get("$baseUrl/blockchain/tx/$txid/hex").body()
+        return client.get("$baseUrl/api/v1/blockchain/tx/$txid/hex").body()
     }
     
     /**
      * Broadcast raw transakce.
      */
     suspend fun broadcastTransaction(txHex: String): BroadcastResult {
-        val response = client.post("$baseUrl/blockchain/tx/broadcast") {
+        val response = client.post("$baseUrl/api/v1/blockchain/tx/broadcast") {
             contentType(ContentType.Application.Json)
-            setBody(BroadcastRequest(txHex))
+            setBody(BroadcastRequest(hex = txHex))
         }
         return response.body()
     }
@@ -51,7 +51,7 @@ class BlockchainClient(private val baseUrl: String) {
      * Získá doporučené fee rates.
      */
     suspend fun getFeeEstimates(): FeeEstimates {
-        return client.get("$baseUrl/blockchain/fees").body()
+        return client.get("$baseUrl/api/v1/blockchain/fees").body()
     }
 }
 
@@ -62,7 +62,7 @@ data class RawTxResponse(
 
 @Serializable
 data class BroadcastRequest(
-    val txHex: String
+    val hex: String
 )
 
 @Serializable

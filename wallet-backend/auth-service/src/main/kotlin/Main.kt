@@ -8,7 +8,7 @@ import io.ktor.server.plugins.contentnegotiation.*
 import kotlinx.serialization.json.Json
 
 fun main() {
-    val port = ("8081").toInt()
+    val port = System.getenv("PORT")?.toIntOrNull() ?: 8081
 
     embeddedServer(Netty, host = "0.0.0.0", port = port) {
         install(ContentNegotiation) {
