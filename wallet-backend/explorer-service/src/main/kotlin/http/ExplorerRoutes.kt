@@ -178,11 +178,7 @@ fun Route.explorerRoutes(
                 // Pokud je walletId, načti adresy pro "isMine" labeling
                 val myAddresses = if (walletId != null) {
                     try {
-                        explorer.let {
-                            // Access registry through explorer is not ideal,
-                            // let's fetch addresses via a wallet-level helper
-                            emptySet<String>() // TODO: expose helper
-                        }
+                        explorer.getWalletAddresses(walletId)
                     } catch (_: Exception) {
                         emptySet()
                     }

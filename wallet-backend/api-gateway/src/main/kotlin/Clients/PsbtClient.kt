@@ -20,6 +20,7 @@ interface PsbtClient {
     suspend fun combine(id: String, req: CombinePsbtsRequest): PsbtDetailResponse
     suspend fun finalize(id: String): FinalizeResponse
     suspend fun broadcast(id: String): BroadcastResponse
+    suspend fun getSigners(id: String): SignerStatusResponse
     suspend fun delete(id: String)
 }
 
@@ -114,6 +115,14 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
         requireAttached(this::client.isInitialized, "psbt")
         val resp = upstreamRequest("psbt") {
             client.post("${cfg.psbtBaseUrl}/psbt/$id/broadcast")
+        }.ensureSuccess("psbt")
+        return resp.body()
+    }
+
+    override suspend fun getSigners(id: String): SignerStatusResponse {
+        requireAttached(this::client.isInitialized, "psbt")
+        val resp = upstreamRequest("psbt") {
+            client.get("${cfg.psbtBaseUrl}/psbt/$id/signers")
         }.ensureSuccess("psbt")
         return resp.body()
     }

@@ -166,14 +166,23 @@ fun Route.psbtRoutes(
                 return@post
             }
             
-            // Aktualizuj PSBT a přidej podpis
-            val newSigCount = existing.currentSigs + 1
-            val newStatus = if (newSigCount >= existing.requiredSigs) "signed" else "pending"
+            // Kombinuj uložený PSBT s nově podepsaným (sloučí partial_sigs)
+            val combinedBase64 = try {
+                PsbtBuilder.combinePsbts(listOf(existing.psbtBase64, request.psbtBase64))
+            } catch (e: Exception) {
+                log.warn("Combine failed, using submitted PSBT as-is: {}", e.message)
+                request.psbtBase64
+            }
+
+            // Analyzuj výsledný PSBT pro skutečný počet podpisů
+            val analysis = PsbtBuilder.analyzePsbt(combinedBase64)
+            val actualSigCount = maxOf(analysis.signatureCount, existing.currentSigs + 1)
+            val newStatus = if (actualSigCount >= existing.requiredSigs) "signed" else "pending"
             
             repository.updatePsbt(
                 id = uuid,
-                psbtBase64 = request.psbtBase64,
-                currentSigs = newSigCount,
+                psbtBase64 = combinedBase64,
+                currentSigs = actualSigCount,
                 status = newStatus
             )
             
@@ -370,6 +379,64 @@ fun Route.psbtRoutes(
             
             repository.delete(uuid)
             appCall.respond(HttpStatusCode.NoContent)
+        }
+
+        /**
+         * GET /psbt/{id}/signers
+         * Vrátí stav podpisů — kteří cosigneři podepsali a kteří chybí.
+         */
+        get("/{id}/signers") {
+            val appCall = call
+            val id = appCall.parameters["id"]
+            if (id == null) {
+                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
+                return@get
+            }
+
+            val uuid = try {
+                UUID.fromString(id)
+            } catch (e: Exception) {
+                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
+                return@get
+            }
+
+            val psbt = repository.findById(uuid)
+            if (psbt == null) {
+                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
+                return@get
+            }
+
+            try {
+                // Načti wallet detail (cosigner list)
+                val wallet = registryClient.getWallet(psbt.walletId)
+
+                // Mapuj existující podpisy podle fingerprintu
+                val signedMap = psbt.signatures.associateBy { it.fingerprint }
+
+                val signers = wallet.cosigners.map { cosigner ->
+                    val sig = signedMap[cosigner.fingerprint]
+                    SignerDetail(
+                        fingerprint = cosigner.fingerprint,
+                        cosignerIndex = cosigner.idx,
+                        signed = sig != null,
+                        deviceId = sig?.deviceId,
+                        signedAt = sig?.signedAt
+                    )
+                }
+
+                appCall.respond(SignerStatusResponse(
+                    psbtId = id,
+                    walletId = psbt.walletId,
+                    status = psbt.status,
+                    requiredSigs = psbt.requiredSigs,
+                    currentSigs = psbt.currentSigs,
+                    signers = signers
+                ))
+            } catch (e: Exception) {
+                log.error("Failed to get signers for PSBT {}", id, e)
+                appCall.respond(HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Failed to get signer status")))
+            }
         }
     }
 }

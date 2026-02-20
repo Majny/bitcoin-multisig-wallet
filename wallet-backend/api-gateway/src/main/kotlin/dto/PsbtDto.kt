@@ -115,3 +115,24 @@ data class BroadcastResponse(
     val txid: String,
     val success: Boolean
 )
+
+// ========== Signers endpoint ==========
+
+@Serializable
+data class SignerStatusResponse(
+    val psbtId: String,
+    val walletId: String,
+    val status: String,
+    val requiredSigs: Int,
+    val currentSigs: Int,
+    val signers: List<SignerDetail>
+)
+
+@Serializable
+data class SignerDetail(
+    val fingerprint: String,
+    val cosignerIndex: Int,
+    val signed: Boolean,
+    val deviceId: String? = null,
+    val signedAt: String? = null
+)

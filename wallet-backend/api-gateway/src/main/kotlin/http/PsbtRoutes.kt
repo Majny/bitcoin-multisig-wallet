@@ -79,6 +79,13 @@ fun Route.psbtRoutes() {
                 val resp = call.application.deps.psbt.broadcast(id)
                 call.respond(resp)
             }
+
+            // GET /psbt/{id}/signers - stav podpisů (kdo podepsal, kdo chybí)
+            get("/{id}/signers") {
+                val id = call.parameters["id"] ?: error("id missing")
+                val resp = call.application.deps.psbt.getSigners(id)
+                call.respond(resp)
+            }
             
             // DELETE /psbt/{id} - smaže PSBT
             delete("/{id}") {

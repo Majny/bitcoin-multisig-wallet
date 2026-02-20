@@ -29,6 +29,14 @@ class WalletExplorer(
         const val GAP_LIMIT = 20
     }
 
+    /**
+     * Vrátí množinu všech adres dané peněženky.
+     * Používá se pro isMine labeling v transaction detail.
+     */
+    suspend fun getWalletAddresses(walletId: String): Set<String> {
+        return registry.getAddresses(walletId).map { it.address }.toSet()
+    }
+
     // ========================================================================
     // BALANCE
     // ========================================================================
