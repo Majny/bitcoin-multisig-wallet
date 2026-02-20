@@ -9,13 +9,16 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navigation
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
+import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.CoinControlViewModel
 
 object WalletRoutes {
     const val Graph = "wallet_graph"
     const val Dashboard = "wallet_dashboard"
     const val Send = "wallet_send"
+    const val CoinControl = "wallet_coin_control"
     const val Receive = "wallet_receive"
     const val TransactionDetail = "wallet_transaction_detail/{txId}"
     
@@ -62,7 +65,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onAutoSelectChanged = viewModel::onAutoSelectChanged,
                 onCustomFeeRateChanged = viewModel::onCustomFeeRateChanged,
                 onEditSelection = {
-                    // TODO: navigate to Coin Control / UTXO selection screen
+                    navController.navigate(WalletRoutes.CoinControl)
                 },
                 onCreateTransaction = {
                     viewModel.createTransaction { psbtId ->
@@ -73,6 +76,31 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
         
+        composable(WalletRoutes.CoinControl) {
+            val coinControlVm: CoinControlViewModel = viewModel()
+            val coinControlState by coinControlVm.uiState.collectAsState()
+
+            // Get the Send VM from the parent back stack entry so state is shared
+            val sendBackStackEntry = navController.getBackStackEntry(WalletRoutes.Send)
+            val sendVm: SendTransactionViewModel = viewModel(sendBackStackEntry)
+
+            // Pre-select UTXOs that were already selected
+            coinControlVm.setPreSelected(sendVm.getSelectedUtxoKeys())
+
+            CoinControlScreen(
+                state = coinControlState,
+                onClose = { navController.popBackStack() },
+                onConfirm = {
+                    // Pass selected UTXOs back to Send VM
+                    sendVm.onUtxosSelected(coinControlVm.getSelectedUtxos())
+                    navController.popBackStack()
+                },
+                onToggleUtxo = coinControlVm::toggleUtxo,
+                onToggleSortMenu = coinControlVm::toggleSortMenu,
+                onSortOrderChanged = coinControlVm::onSortOrderChanged
+            )
+        }
+
         composable(WalletRoutes.Receive) {
             // TODO: ReceiveBtcScreen
         }

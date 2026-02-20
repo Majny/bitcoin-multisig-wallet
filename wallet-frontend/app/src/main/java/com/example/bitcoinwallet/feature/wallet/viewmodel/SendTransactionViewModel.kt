@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitcoinwallet.core.api.FeeEstimatesDto
+import com.example.bitcoinwallet.core.api.UtxoSelectionDto
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -12,6 +13,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 private const val TAG = "SendTransactionVM"
+
+/**
+ * Represents a UTXO selected through Coin Control.
+ */
+data class SelectedUtxoInfo(
+    val txid: String,
+    val vout: Int,
+    val valueSats: Long,
+    val address: String
+) {
+    val key: String get() = "$txid:$vout"
+}
 
 /**
  * Fee priority level — maps to different fee rate estimates.
@@ -32,6 +45,7 @@ data class SendTransactionUiState(
     val autoSelect: Boolean = true,
     val customFeeRate: String = "",   // sat/vB — used when autoSelect is off
     val selectedUtxoCount: Int = 0,   // how many UTXOs manually selected
+    val selectedUtxos: List<SelectedUtxoInfo> = emptyList(),
 
     // Loaded data
     val balanceSats: Long = 0L,
@@ -147,6 +161,26 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     /**
+     * Called from CoinControl screen when user confirms UTXO selection.
+     */
+    fun onUtxosSelected(utxos: List<SelectableUtxo>) {
+        val mapped = utxos.map {
+            SelectedUtxoInfo(txid = it.txid, vout = it.vout, valueSats = it.valueSats, address = it.address)
+        }
+        _uiState.value = _uiState.value.copy(
+            selectedUtxos = mapped,
+            selectedUtxoCount = mapped.size
+        )
+        recalculate()
+    }
+
+    /**
+     * Returns the set of currently selected UTXO keys for pre-selection in CoinControl.
+     */
+    fun getSelectedUtxoKeys(): Set<String> =
+        _uiState.value.selectedUtxos.map { it.key }.toSet()
+
+    /**
      * Create the PSBT transaction on the backend.
      */
     fun createTransaction(onSuccess: (String) -> Unit) {
@@ -172,7 +206,12 @@ class SendTransactionViewModel : ViewModel() {
             try {
                 val feeRate = getSelectedFeeRate().toDouble()
 
-                Log.d(TAG, "Creating PSBT: to=${state.recipientAddress}, amount=${state.amountSats} sats, feeRate=$feeRate sat/vB")
+                // In manual mode, pass selected UTXOs to backend
+                val utxoSelection = if (!state.autoSelect && state.selectedUtxos.isNotEmpty()) {
+                    state.selectedUtxos.map { UtxoSelectionDto(txid = it.txid, vout = it.vout) }
+                } else null
+
+                Log.d(TAG, "Creating PSBT: to=${state.recipientAddress}, amount=${state.amountSats} sats, feeRate=$feeRate sat/vB, utxos=${utxoSelection?.size ?: "auto"}")
 
                 // Use the new PSBT endpoint via WalletApiClient
                 val response = WalletApi.client.createPsbt(
@@ -180,7 +219,8 @@ class SendTransactionViewModel : ViewModel() {
                     walletId = walletId,
                     destinationAddress = state.recipientAddress,
                     amountSats = state.amountSats,
-                    feeRate = feeRate
+                    feeRate = feeRate,
+                    utxos = utxoSelection
                 )
 
                 Log.d(TAG, "PSBT created: id=${response.id}, fee=${response.estimatedFee}")
