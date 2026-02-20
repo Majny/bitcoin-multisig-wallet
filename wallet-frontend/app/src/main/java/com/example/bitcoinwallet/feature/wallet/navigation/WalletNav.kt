@@ -7,9 +7,14 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.navigation
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import com.example.bitcoinwallet.core.session.SessionStore
+import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
+import com.example.bitcoinwallet.feature.wallet.ui.TransactionSentScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.CoinControlViewModel
@@ -19,7 +24,10 @@ object WalletRoutes {
     const val Dashboard = "wallet_dashboard"
     const val Send = "wallet_send"
     const val CoinControl = "wallet_coin_control"
+    const val TransactionSent = "wallet_tx_sent/{amountSats}/{feeSats}"
     const val Receive = "wallet_receive"
+
+    fun transactionSent(amountSats: Long, feeSats: Long) = "wallet_tx_sent/$amountSats/$feeSats"
     const val TransactionDetail = "wallet_transaction_detail/{txId}"
     
     fun transactionDetail(txId: String) = "wallet_transaction_detail/$txId"
@@ -55,6 +63,26 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         composable(WalletRoutes.Send) {
             val viewModel: SendTransactionViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
+            val context = LocalContext.current
+            val trezorLauncher = TrezorDeeplinkLauncher()
+
+            // Check if Trezor returned a signed PSBT (via SessionStore)
+            LaunchedEffect(Unit) {
+                val signedPsbt = SessionStore.pendingSignedPsbt
+                if (signedPsbt != null && state.awaitingTrezor) {
+                    SessionStore.pendingSignedPsbt = null
+                    viewModel.onTrezorSigned(signedPsbt) {
+                        // On broadcast success, navigate to TransactionSent screen
+                        val s = viewModel.uiState.value
+                        navController.navigate(
+                            WalletRoutes.transactionSent(s.totalSats, s.feeSats)
+                        ) {
+                            // Pop Send screen from backstack
+                            popUpTo(WalletRoutes.Dashboard) { inclusive = false }
+                        }
+                    }
+                }
+            }
 
             SendTransactionScreen(
                 state = state,
@@ -68,9 +96,24 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
                 onCreateTransaction = {
-                    viewModel.createTransaction { psbtId ->
-                        // After PSBT created, navigate back (or to sign screen in future)
-                        navController.popBackStack()
+                    viewModel.createTransaction { psbtBase64 ->
+                        // Open Trezor Suite to sign the PSBT
+                        trezorLauncher.openSignTransaction(context, psbtBase64)
+                    }
+                }
+            )
+        }
+
+        composable(WalletRoutes.TransactionSent) { backStackEntry ->
+            val amountSats = backStackEntry.arguments?.getString("amountSats")?.toLongOrNull() ?: 0L
+            val feeSats = backStackEntry.arguments?.getString("feeSats")?.toLongOrNull() ?: 0L
+
+            TransactionSentScreen(
+                amountSats = amountSats,
+                feeSats = feeSats,
+                onReturnToWallet = {
+                    navController.navigate(WalletRoutes.Dashboard) {
+                        popUpTo(WalletRoutes.Graph) { inclusive = false }
                     }
                 }
             )

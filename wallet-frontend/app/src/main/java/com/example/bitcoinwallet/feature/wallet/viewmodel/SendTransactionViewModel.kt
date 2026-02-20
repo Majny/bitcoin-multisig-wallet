@@ -62,6 +62,11 @@ data class SendTransactionUiState(
     val isSending: Boolean = false,
     val error: String? = null,
     val txCreatedId: String? = null,
+    val psbtBase64: String? = null,      // PSBT to be signed by Trezor
+    val awaitingTrezor: Boolean = false,  // waiting for Trezor callback
+    val isSubmitting: Boolean = false,    // submitting signed PSBT to backend
+    val broadcastSuccess: Boolean = false,
+    val broadcastTxid: String? = null,
 
     // Validation
     val addressError: String? = null,
@@ -182,8 +187,11 @@ class SendTransactionViewModel : ViewModel() {
 
     /**
      * Create the PSBT transaction on the backend.
+     * After creation, signals the caller to open Trezor for signing.
+     *
+     * @param onPsbtReady Called with psbtBase64 when PSBT is ready for Trezor signing.
      */
-    fun createTransaction(onSuccess: (String) -> Unit) {
+    fun createTransaction(onPsbtReady: (psbtBase64: String) -> Unit) {
         val state = _uiState.value
 
         // Validate
@@ -213,7 +221,6 @@ class SendTransactionViewModel : ViewModel() {
 
                 Log.d(TAG, "Creating PSBT: to=${state.recipientAddress}, amount=${state.amountSats} sats, feeRate=$feeRate sat/vB, utxos=${utxoSelection?.size ?: "auto"}")
 
-                // Use the new PSBT endpoint via WalletApiClient
                 val response = WalletApi.client.createPsbt(
                     accessToken = accessToken,
                     walletId = walletId,
@@ -227,14 +234,84 @@ class SendTransactionViewModel : ViewModel() {
 
                 _uiState.value = _uiState.value.copy(
                     isSending = false,
-                    txCreatedId = response.id
+                    txCreatedId = response.id,
+                    psbtBase64 = response.psbtBase64,
+                    feeSats = response.estimatedFee,
+                    awaitingTrezor = true
                 )
-                onSuccess(response.id)
+
+                // Signal caller to open Trezor deeplink
+                onPsbtReady(response.psbtBase64)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create PSBT", e)
                 _uiState.value = _uiState.value.copy(
                     isSending = false,
                     error = e.message ?: "Failed to create transaction"
+                )
+            }
+        }
+    }
+
+    /**
+     * Called when Trezor returns a signed PSBT.
+     * Submits the signature to backend, then finalizes and broadcasts.
+     *
+     * @param signedPsbtBase64 The PSBT signed by Trezor.
+     * @param onBroadcastSuccess Called when tx is successfully broadcast.
+     */
+    fun onTrezorSigned(signedPsbtBase64: String, onBroadcastSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                awaitingTrezor = false,
+                isSubmitting = true,
+                error = null
+            )
+
+            val accessToken = SessionStore.session?.accessToken
+            val psbtId = _uiState.value.txCreatedId
+            val fingerprint = SessionStore.session?.user?.trezorFingerprint ?: "unknown"
+
+            if (accessToken == null || psbtId == null) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = "No active session or PSBT"
+                )
+                return@launch
+            }
+
+            try {
+                // 1. Submit signed PSBT to backend
+                Log.d(TAG, "Submitting signed PSBT to backend...")
+                WalletApi.client.addSignature(
+                    psbtId = psbtId,
+                    accessToken = accessToken,
+                    signedPsbtBase64 = signedPsbtBase64,
+                    deviceId = "trezor",
+                    fingerprint = fingerprint
+                )
+
+                // 2. Finalize
+                Log.d(TAG, "Finalizing PSBT...")
+                WalletApi.client.finalizePsbt(psbtId, accessToken)
+
+                // 3. Broadcast
+                Log.d(TAG, "Broadcasting transaction...")
+                val broadcastResp = WalletApi.client.broadcastPsbt(psbtId, accessToken)
+
+                Log.d(TAG, "Transaction broadcast! txid=${broadcastResp.txid}")
+
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    broadcastSuccess = true,
+                    broadcastTxid = broadcastResp.txid
+                )
+
+                onBroadcastSuccess()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to submit/finalize/broadcast", e)
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = e.message ?: "Failed to broadcast transaction"
                 )
             }
         }

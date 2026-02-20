@@ -71,6 +71,39 @@ class TrezorDeeplinkLauncher(
     }
 
     /**
+     * Opens Trezor Suite to sign a PSBT transaction.
+     * The user confirms on the Trezor device, then Trezor Suite calls back
+     * with the signed PSBT.
+     *
+     * Uses Trezor Connect deeplink method "signTransaction" with PSBT payload.
+     */
+    fun openSignTransaction(context: Context, psbtBase64: String): Boolean {
+        val paramsJson = JSONObject().apply {
+            put("coin", "btc")
+            put("psbt", psbtBase64)
+        }.toString()
+
+        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&action=sign"
+
+        val uri = Uri.parse(connectBaseUrl).buildUpon()
+            .appendQueryParameter("method", "signTransaction")
+            .appendQueryParameter("params", paramsJson)
+            .appendQueryParameter("callback", callbackUrl)
+            .build()
+
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            false
+        }
+    }
+
+    /**
      * Opens Trezor Suite to get public keys for multiple derivation paths.
      * Returns the request ID for tracking the callback.
      */

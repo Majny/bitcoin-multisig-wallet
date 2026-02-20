@@ -135,7 +135,51 @@ class WalletApiClient(
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
-    
+
+    /**
+     * POST /api/v1/psbt/{id}/sign
+     * Add a signature (signed PSBT) to a PSBT.
+     */
+    suspend fun addSignature(
+        psbtId: String,
+        accessToken: String,
+        signedPsbtBase64: String,
+        deviceId: String,
+        fingerprint: String
+    ): PsbtDetailDto {
+        return client.post("$baseUrl/psbt/$psbtId/sign") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(
+                AddSignatureRequestDto(
+                    psbtBase64 = signedPsbtBase64,
+                    deviceId = deviceId,
+                    fingerprint = fingerprint
+                )
+            )
+        }.body()
+    }
+
+    /**
+     * POST /api/v1/psbt/{id}/finalize
+     * Finalize a fully-signed PSBT into a raw transaction.
+     */
+    suspend fun finalizePsbt(psbtId: String, accessToken: String): FinalizeResponseDto {
+        return client.post("$baseUrl/psbt/$psbtId/finalize") {
+            header("Authorization", "Bearer $accessToken")
+        }.body()
+    }
+
+    /**
+     * POST /api/v1/psbt/{id}/broadcast
+     * Broadcast a finalized transaction to the network.
+     */
+    suspend fun broadcastPsbt(psbtId: String, accessToken: String): BroadcastResponseDto {
+        return client.post("$baseUrl/psbt/$psbtId/broadcast") {
+            header("Authorization", "Bearer $accessToken")
+        }.body()
+    }
+
     // ============ Price Endpoints ============
     
     /**
@@ -360,4 +404,25 @@ data class PsbtSignatureDto(
     val fingerprint: String,
     val deviceId: String,
     val signedAt: String
+)
+
+@Serializable
+data class AddSignatureRequestDto(
+    val psbtBase64: String,
+    val deviceId: String,
+    val fingerprint: String
+)
+
+@Serializable
+data class FinalizeResponseDto(
+    val psbtId: String,
+    val txHex: String,
+    val txid: String
+)
+
+@Serializable
+data class BroadcastResponseDto(
+    val psbtId: String,
+    val txid: String,
+    val success: Boolean
 )
