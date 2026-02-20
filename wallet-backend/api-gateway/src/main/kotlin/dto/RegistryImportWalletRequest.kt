@@ -13,6 +13,45 @@ data class RegistryImportWalletRequest(
     val deviceLabel: String? = null
 )
 
+// ========== Wallet Import DTOs ==========
+
+/**
+ * Gateway request for importing a wallet via descriptor.
+ * The gateway enriches this with device info from JWT before forwarding to registry.
+ */
+@Serializable
+data class ImportWalletFromAppRequest(
+    val descriptor: String,
+    val network: String = "mainnet",
+    val label: String? = null,
+    val birthHeight: Int? = null
+)
+
+/**
+ * Request forwarded to wallet-registry's /wallets/import endpoint.
+ */
+@Serializable
+data class ImportWalletGatewayRequest(
+    val descriptor: String,
+    val network: String = "mainnet",
+    val label: String? = null,
+    val birthHeight: Int? = null,
+    val deviceId: String? = null,
+    val deviceFingerprint: String? = null
+)
+
+/**
+ * Response from wallet-registry's /wallets/import endpoint.
+ */
+@Serializable
+data class ImportWalletGatewayResponse(
+    val success: Boolean,
+    val walletId: String? = null,
+    val isNew: Boolean = false,
+    val error: String? = null,
+    val wallet: WalletDetail? = null
+)
+
 
 
 

@@ -13,7 +13,7 @@ import io.ktor.http.contentType
 interface RegistryClient {
     suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse
 
-    suspend fun createWallet(req: CreateWalletRequest)
+    suspend fun createWallet(req: CreateWalletRequest): WalletDetail
 
     suspend fun getWallet(walletId: String): WalletDetail
 
@@ -24,6 +24,8 @@ interface RegistryClient {
     suspend fun getWalletAddress(walletId: String, type: String = "receive", index: Int = 0): WalletAddressResponse
 
     suspend fun getWalletAddresses(walletId: String, type: String? = null): WalletAddressesResponse
+
+    suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse
 }
 
 class RegistryClientImpl(
@@ -48,13 +50,11 @@ class RegistryClientImpl(
         }.body()
     }
 
-    override suspend fun createWallet(req: CreateWalletRequest) {
-        val resp = client().post("$baseUrl/registry/wallets") {
+    override suspend fun createWallet(req: CreateWalletRequest): WalletDetail {
+        return client().post("$baseUrl/registry/wallets") {
             contentType(ContentType.Application.Json)
             setBody(req)
-        }
-
-        resp.bodyAsText()
+        }.body()
     }
 
     override suspend fun getWallet(walletId: String): WalletDetail {
@@ -87,6 +87,13 @@ class RegistryClientImpl(
     override suspend fun getWalletAddresses(walletId: String, type: String?): WalletAddressesResponse {
         return client().get("$baseUrl/registry/wallets/$walletId/addresses") {
             if (type != null) url { parameters.append("type", type) }
+        }.body()
+    }
+
+    override suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse {
+        return client().post("$baseUrl/registry/wallets/import") {
+            contentType(ContentType.Application.Json)
+            setBody(req)
         }.body()
     }
 }

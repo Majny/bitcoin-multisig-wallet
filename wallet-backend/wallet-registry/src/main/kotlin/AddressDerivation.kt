@@ -1,11 +1,14 @@
 package cz.majny.wallet.registry
 
 import org.bitcoinj.base.BitcoinNetwork
+import org.bitcoinj.base.Bech32
 import org.bitcoinj.base.Network
 import org.bitcoinj.base.ScriptType
 import org.bitcoinj.crypto.DeterministicKey
+import org.bitcoinj.crypto.ECKey
 import org.bitcoinj.crypto.HDKeyDerivation
 import org.slf4j.LoggerFactory
+import java.security.MessageDigest
 
 /**
  * Derives Bitcoin addresses from output descriptors using BitcoinJ.
@@ -13,6 +16,8 @@ import org.slf4j.LoggerFactory
  * Supported descriptor types:
  * - wpkh([fp/84h/0h/0h]xpub.../0/star) -> P2WPKH (Native SegWit, bc1q...)
  * - tr([fp/86h/0h/0h]xpub.../0/star)   -> P2TR (Taproot, bc1p...) -- limited
+ * - wsh(sortedmulti(M,[fp/48h/0h/0h/2h]xpub.../0/*,...)) -> P2WSH (multisig, bc1q...)
+ * - wsh(multi(M,...)) -> P2WSH (multisig, unsorted)
  *
  * Uses BIP-32 hierarchical deterministic key derivation:
  *   xpub (account level) -> /chain/index -> public key -> address
@@ -24,6 +29,12 @@ object AddressDerivation {
 
     /** Regex to extract xpub/tpub from a descriptor string. */
     private val XPUB_RE = Regex("""([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})""")
+
+    /** Regex to extract ALL xpubs from a multisig descriptor. */
+    private val ALL_XPUBS_RE = Regex("""([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})""")
+
+    /** Regex to extract M from multi(M, ...) or sortedmulti(M, ...) */
+    private val MULTI_M_RE = Regex("""(?:sorted)?multi\((\d+)\s*,""")
 
     /**
      * Default number of receive + change addresses to derive for a new wallet.
@@ -53,24 +64,15 @@ object AddressDerivation {
         count: Int = DEFAULT_GAP_LIMIT
     ): List<DerivedAddress> {
         val btcNetwork = bitcoinNetwork(network)
-        val xpub = extractXpub(descriptor)
-            ?: throw IllegalArgumentException("No xpub found in descriptor: ${descriptor.take(60)}")
         val scriptType = detectScriptType(descriptor)
 
-        log.info(
-            "Deriving {} addresses: script={}, chain={}, range=[{}..{}), network={}",
-            count, scriptType, chain, fromIndex, fromIndex + count, network
-        )
-
-        val accountKey = DeterministicKey.deserializeB58(xpub, btcNetwork)
-
-        // child key for the chain (0 = receive, 1 = change)
-        val chainKey = HDKeyDerivation.deriveChildKey(accountKey, chain)
-
-        return (fromIndex until fromIndex + count).map { idx ->
-            val childKey = HDKeyDerivation.deriveChildKey(chainKey, idx)
-            val addr = toAddress(childKey, scriptType, btcNetwork)
-            DerivedAddress(index = idx, address = addr)
+        return when (scriptType) {
+            DescriptorType.P2WSH_MULTISIG -> deriveMultisigAddresses(
+                descriptor, btcNetwork, network, chain, fromIndex, count
+            )
+            else -> deriveSinglesigAddresses(
+                descriptor, btcNetwork, scriptType, chain, fromIndex, count
+            )
         }
     }
 
@@ -87,6 +89,141 @@ object AddressDerivation {
             .first().address
 
     // ------------------------------------------------------------------
+    // Single-sig derivation (P2WPKH, P2TR)
+    // ------------------------------------------------------------------
+
+    private fun deriveSinglesigAddresses(
+        descriptor: String,
+        btcNetwork: BitcoinNetwork,
+        scriptType: DescriptorType,
+        chain: Int,
+        fromIndex: Int,
+        count: Int
+    ): List<DerivedAddress> {
+        val xpub = extractXpub(descriptor)
+            ?: throw IllegalArgumentException("No xpub found in descriptor: ${descriptor.take(60)}")
+
+        log.info(
+            "Deriving {} singlesig addresses: script={}, chain={}, range=[{}..{})",
+            count, scriptType, chain, fromIndex, fromIndex + count
+        )
+
+        val accountKey = DeterministicKey.deserializeB58(xpub, btcNetwork)
+        val chainKey = HDKeyDerivation.deriveChildKey(accountKey, chain)
+
+        return (fromIndex until fromIndex + count).map { idx ->
+            val childKey = HDKeyDerivation.deriveChildKey(chainKey, idx)
+            val addr = toAddress(childKey, scriptType, btcNetwork)
+            DerivedAddress(index = idx, address = addr)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Multisig P2WSH derivation
+    // ------------------------------------------------------------------
+
+    /**
+     * Derives P2WSH multisig addresses.
+     *
+     * For each address index:
+     * 1. Derive child pubkey from each cosigner's xpub at chain/index
+     * 2. Sort pubkeys lexicographically (BIP-67, for sortedmulti)
+     * 3. Build witness script: OP_M <pubkey1> <pubkey2> ... <pubkeyN> OP_N OP_CHECKMULTISIG
+     * 4. SHA256 hash the witness script → 32-byte witness program
+     * 5. Encode as bech32 P2WSH address (bc1q... 62 chars)
+     */
+    private fun deriveMultisigAddresses(
+        descriptor: String,
+        btcNetwork: BitcoinNetwork,
+        network: String,
+        chain: Int,
+        fromIndex: Int,
+        count: Int
+    ): List<DerivedAddress> {
+        // Extract M from descriptor
+        val mMatch = MULTI_M_RE.find(descriptor)
+            ?: throw IllegalArgumentException("Cannot find M in multi(): ${descriptor.take(60)}")
+        val m = mMatch.groupValues[1].toInt()
+        val isSorted = descriptor.contains("sortedmulti(")
+
+        // Extract all xpubs
+        val xpubs = ALL_XPUBS_RE.findAll(descriptor).map { it.value }.toList()
+        if (xpubs.isEmpty()) {
+            throw IllegalArgumentException("No xpubs found in multisig descriptor")
+        }
+        val n = xpubs.size
+
+        log.info(
+            "Deriving {} P2WSH multisig addresses: {}of{}, sorted={}, chain={}, range=[{}..{})",
+            count, m, n, isSorted, chain, fromIndex, fromIndex + count
+        )
+
+        // Parse all account-level keys
+        val accountKeys = xpubs.map { xpub ->
+            DeterministicKey.deserializeB58(xpub, btcNetwork)
+        }
+
+        // Derive chain-level keys (once per cosigner)
+        val chainKeys = accountKeys.map { key ->
+            HDKeyDerivation.deriveChildKey(key, chain)
+        }
+
+        val hrp = if (network.lowercase() in listOf("mainnet", "bitcoin")) "bc" else "tb"
+
+        return (fromIndex until fromIndex + count).map { idx ->
+            // Derive child pubkey for each cosigner at this index
+            val childPubkeys = chainKeys.map { chainKey ->
+                val childKey = HDKeyDerivation.deriveChildKey(chainKey, idx)
+                childKey.pubKey // compressed 33-byte pubkey
+            }
+
+            // BIP-67: sort pubkeys lexicographically
+            val orderedPubkeys = if (isSorted) {
+                childPubkeys.sortedWith(compareBy<ByteArray> { it.size }.thenBy { it.toHex() })
+            } else {
+                childPubkeys
+            }
+
+            // Build witness script: OP_M <pubkey1> ... <pubkeyN> OP_N OP_CHECKMULTISIG
+            val witnessScript = buildMultisigWitnessScript(m, orderedPubkeys)
+
+            // P2WSH: SHA256(witnessScript) → 32-byte witness program
+            val sha256 = MessageDigest.getInstance("SHA-256").digest(witnessScript)
+
+            // Bech32 encode: version 0 + 32-byte program
+            val addr = Bech32.segwitToBech32(hrp, 0, sha256)
+
+            DerivedAddress(index = idx, address = addr)
+        }
+    }
+
+    /**
+     * Build the multisig witness script bytes:
+     *   OP_M <pubkey1_push> <pubkey1> ... <pubkeyN_push> <pubkeyN> OP_N OP_CHECKMULTISIG
+     */
+    private fun buildMultisigWitnessScript(m: Int, pubkeys: List<ByteArray>): ByteArray {
+        val n = pubkeys.size
+        val buf = mutableListOf<Byte>()
+
+        // OP_M (OP_1 = 0x51, OP_2 = 0x52, ..., OP_16 = 0x60)
+        buf.add((0x50 + m).toByte())
+
+        // Push each pubkey (33 bytes = 0x21 push)
+        for (pk in pubkeys) {
+            buf.add(pk.size.toByte())
+            buf.addAll(pk.toList())
+        }
+
+        // OP_N
+        buf.add((0x50 + n).toByte())
+
+        // OP_CHECKMULTISIG
+        buf.add(0xAE.toByte())
+
+        return buf.toByteArray()
+    }
+
+    // ------------------------------------------------------------------
     // Internals
     // ------------------------------------------------------------------
 
@@ -99,23 +236,24 @@ object AddressDerivation {
             key.toAddress(ScriptType.P2WPKH, network).toString()
 
         DescriptorType.P2TR ->
-            // BitcoinJ 0.17 has limited Taproot support.
-            // Try P2TR first; fall back to P2WPKH derivation with a warning.
             try {
                 key.toAddress(ScriptType.P2TR, network).toString()
             } catch (_: Exception) {
-                log.warn("P2TR not fully supported by BitcoinJ 0.17 - falling back to P2WPKH address")
+                log.warn("P2TR not fully supported by BitcoinJ — falling back to P2WPKH address")
                 key.toAddress(ScriptType.P2WPKH, network).toString()
             }
+
+        DescriptorType.P2WSH_MULTISIG ->
+            throw IllegalStateException("P2WSH_MULTISIG should use deriveMultisigAddresses()")
     }
 
     private fun extractXpub(descriptor: String): String? =
         XPUB_RE.find(descriptor)?.value
 
     private fun detectScriptType(descriptor: String): DescriptorType = when {
+        (descriptor.contains("wsh(") && descriptor.contains("multi(")) -> DescriptorType.P2WSH_MULTISIG
         descriptor.startsWith("wpkh(") || descriptor.contains("wpkh(") -> DescriptorType.P2WPKH
         descriptor.startsWith("tr(")   || descriptor.contains("tr(")   -> DescriptorType.P2TR
-        descriptor.startsWith("wsh(")  || descriptor.contains("wsh(")  -> DescriptorType.P2WPKH // multisig fallback
         else -> {
             log.warn("Unknown descriptor prefix, defaulting to P2WPKH: {}", descriptor.take(30))
             DescriptorType.P2WPKH
@@ -127,7 +265,9 @@ object AddressDerivation {
         else -> BitcoinNetwork.TESTNET
     }
 
-    private enum class DescriptorType { P2WPKH, P2TR }
+    private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    private enum class DescriptorType { P2WPKH, P2TR, P2WSH_MULTISIG }
 
     data class DerivedAddress(val index: Int, val address: String)
 }

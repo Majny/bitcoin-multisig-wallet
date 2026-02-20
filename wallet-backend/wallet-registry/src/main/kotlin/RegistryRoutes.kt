@@ -1,6 +1,7 @@
 package cz.majny.wallet.registry
 
 import cz.majny.wallet.registry.api.*
+import cz.majny.wallet.registry.importer.*
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
@@ -8,6 +9,8 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
 fun Application.configureRegistryRoutes(repo: RegistryRepository) {
+
+    val importer = WalletImporter(repo)
 
     routing {
         get("/health") { call.respondText("ok") }
@@ -27,6 +30,38 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                     call.respond(created)
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "bad request"))
+                }
+            }
+
+            /**
+             * POST /registry/wallets/import
+             *
+             * Import a wallet from an output descriptor string.
+             * Supports single-sig and multisig descriptors.
+             * Auto-attaches the calling device if its fingerprint matches a cosigner.
+             *
+             * Body: ImportWalletRequest { descriptor, network?, label?, deviceId?, deviceFingerprint? }
+             * Response: ImportResult { success, walletId, isNew, error?, wallet? }
+             */
+            post("/wallets/import") {
+                try {
+                    val req = call.receive<ImportWalletRequest>()
+
+                    if (req.descriptor.isBlank()) {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse("descriptor is required"))
+                        return@post
+                    }
+
+                    val result = importer.importWallet(req)
+
+                    if (result.success) {
+                        val status = if (result.isNew) HttpStatusCode.Created else HttpStatusCode.OK
+                        call.respond(status, result)
+                    } else {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.error ?: "import failed"))
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "invalid request"))
                 }
             }
 
