@@ -161,6 +161,16 @@ class WalletApiClient(
     }
 
     /**
+     * GET /api/v1/psbt/wallet/{walletId}
+     * List all PSBTs for a wallet.
+     */
+    suspend fun listPsbtsForWallet(walletId: String, accessToken: String): PsbtListResponseDto {
+        return client.get("$baseUrl/psbt/wallet/$walletId") {
+            header("Authorization", "Bearer $accessToken")
+        }.body()
+    }
+
+    /**
      * POST /api/v1/psbt/{id}/sign
      * Add a signature (signed PSBT) to a PSBT.
      */
@@ -416,11 +426,17 @@ data class PsbtDetailDto(
     val status: String,
     val requiredSigs: Int,
     val currentSigs: Int,
+    val totalOutputSats: Long = 0,
     val signatures: List<PsbtSignatureDto> = emptyList(),
     val label: String? = null,
     val txid: String? = null,
     val createdAt: String = "",
     val updatedAt: String = ""
+)
+
+@Serializable
+data class PsbtListResponseDto(
+    val psbts: List<PsbtDetailDto>
 )
 
 @Serializable

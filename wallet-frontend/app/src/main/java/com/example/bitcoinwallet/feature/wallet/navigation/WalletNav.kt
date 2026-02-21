@@ -25,8 +25,10 @@ import com.example.bitcoinwallet.feature.wallet.ui.SettingsScreen
 import com.example.bitcoinwallet.feature.wallet.ui.MultisigWalletsScreen
 import com.example.bitcoinwallet.feature.wallet.ui.ImportWalletScreen
 import com.example.bitcoinwallet.feature.wallet.ui.MultisigDetailScreen
+import com.example.bitcoinwallet.feature.wallet.ui.PsbtListScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ImportWalletViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigDetailViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtListViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletsViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
@@ -59,6 +61,10 @@ object WalletRoutes {
         val encoded = java.net.URLEncoder.encode(walletName, "UTF-8")
         return "wallet_multisig_detail/$walletId/$encoded/$m/$n"
     }
+
+    const val PsbtList = "wallet_psbt_list/{walletId}"
+
+    fun psbtList(walletId: String) = "wallet_psbt_list/$walletId"
 }
 
 fun NavGraphBuilder.walletGraph(navController: NavController) {
@@ -283,7 +289,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 state = state,
                 onClose = { navController.popBackStack() },
                 onPsbtsClick = {
-                    // TODO: navigate to PSBT list for this wallet
+                    navController.navigate(WalletRoutes.psbtList(walletId))
                 },
                 onReceiveClick = {
                     navController.navigate(WalletRoutes.Receive)
@@ -310,6 +316,31 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         // On success, go back to multisig list
                         navController.popBackStack()
                     }
+                }
+            )
+        }
+
+        composable(WalletRoutes.PsbtList) { backStackEntry ->
+            val walletId = backStackEntry.arguments?.getString("walletId") ?: ""
+
+            val viewModel: PsbtListViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+
+            LaunchedEffect(walletId) {
+                viewModel.loadPsbts(walletId)
+            }
+
+            PsbtListScreen(
+                state = state,
+                onClose = { navController.popBackStack() },
+                onCreatePsbt = {
+                    // TODO: navigate to create PSBT flow for multisig
+                },
+                onImportPsbt = {
+                    // TODO: import PSBT from file/QR
+                },
+                onPsbtClick = { psbt ->
+                    // TODO: navigate to PSBT detail screen
                 }
             )
         }
