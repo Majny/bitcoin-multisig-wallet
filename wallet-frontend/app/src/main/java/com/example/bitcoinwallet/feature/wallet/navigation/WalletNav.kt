@@ -23,6 +23,8 @@ import com.example.bitcoinwallet.feature.wallet.ui.ReceiveBtcScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionDetailScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SettingsScreen
 import com.example.bitcoinwallet.feature.wallet.ui.MultisigWalletsScreen
+import com.example.bitcoinwallet.feature.wallet.ui.ImportWalletScreen
+import com.example.bitcoinwallet.feature.wallet.viewmodel.ImportWalletViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletsViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
@@ -41,6 +43,7 @@ object WalletRoutes {
     const val TransactionSent = "wallet_tx_sent/{amountSats}/{feeSats}"
     const val Receive = "wallet_receive"
     const val MultisigWallets = "wallet_multisig_list"
+    const val ImportWallet = "wallet_import"
     const val Settings = "wallet_settings"
 
     fun transactionSent(amountSats: Long, feeSats: Long) = "wallet_tx_sent/$amountSats/$feeSats"
@@ -236,13 +239,33 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     state = state,
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onImportWallet = {
-                        // TODO: navigate to import screen
+                        navController.navigate(WalletRoutes.ImportWallet)
                     },
                     onWalletClick = { wallet ->
                         // TODO: navigate to multisig wallet detail / PSBT overview
                     }
                 )
             }
+        }
+
+        composable(WalletRoutes.ImportWallet) {
+            val viewModel: ImportWalletViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+
+            ImportWalletScreen(
+                state = state,
+                onClose = { navController.popBackStack() },
+                onDescriptorChanged = viewModel::onDescriptorChanged,
+                onWalletNameChanged = viewModel::onWalletNameChanged,
+                onFileContent = viewModel::onDescriptorScanned,
+                onScanQr = { /* TODO: launch QR scanner */ },
+                onImport = {
+                    viewModel.importWallet {
+                        // On success, go back to multisig list
+                        navController.popBackStack()
+                    }
+                }
+            )
         }
 
         composable(WalletRoutes.Settings) {
