@@ -24,7 +24,9 @@ import com.example.bitcoinwallet.feature.wallet.ui.TransactionDetailScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SettingsScreen
 import com.example.bitcoinwallet.feature.wallet.ui.MultisigWalletsScreen
 import com.example.bitcoinwallet.feature.wallet.ui.ImportWalletScreen
+import com.example.bitcoinwallet.feature.wallet.ui.MultisigDetailScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ImportWalletViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigDetailViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletsViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
@@ -50,6 +52,13 @@ object WalletRoutes {
     const val TransactionDetail = "wallet_transaction_detail/{txId}"
     
     fun transactionDetail(txId: String) = "wallet_transaction_detail/$txId"
+
+    const val MultisigDetail = "wallet_multisig_detail/{walletId}/{walletName}/{m}/{n}"
+
+    fun multisigDetail(walletId: String, walletName: String, m: Int, n: Int): String {
+        val encoded = java.net.URLEncoder.encode(walletName, "UTF-8")
+        return "wallet_multisig_detail/$walletId/$encoded/$m/$n"
+    }
 }
 
 fun NavGraphBuilder.walletGraph(navController: NavController) {
@@ -242,10 +251,47 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         navController.navigate(WalletRoutes.ImportWallet)
                     },
                     onWalletClick = { wallet ->
-                        // TODO: navigate to multisig wallet detail / PSBT overview
+                        navController.navigate(
+                            WalletRoutes.multisigDetail(
+                                walletId = wallet.walletId,
+                                walletName = wallet.label,
+                                m = wallet.m,
+                                n = wallet.n
+                            )
+                        )
                     }
                 )
             }
+        }
+
+        composable(WalletRoutes.MultisigDetail) { backStackEntry ->
+            val walletId = backStackEntry.arguments?.getString("walletId") ?: ""
+            val walletName = java.net.URLDecoder.decode(
+                backStackEntry.arguments?.getString("walletName") ?: "", "UTF-8"
+            )
+            val m = backStackEntry.arguments?.getString("m")?.toIntOrNull() ?: 0
+            val n = backStackEntry.arguments?.getString("n")?.toIntOrNull() ?: 0
+
+            val viewModel: MultisigDetailViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+
+            LaunchedEffect(walletId) {
+                viewModel.loadWallet(walletId, walletName, m, n)
+            }
+
+            MultisigDetailScreen(
+                state = state,
+                onClose = { navController.popBackStack() },
+                onPsbtsClick = {
+                    // TODO: navigate to PSBT list for this wallet
+                },
+                onReceiveClick = {
+                    navController.navigate(WalletRoutes.Receive)
+                },
+                onTransactionClick = { transaction ->
+                    navController.navigate(WalletRoutes.transactionDetail(transaction.txid))
+                }
+            )
         }
 
         composable(WalletRoutes.ImportWallet) {
