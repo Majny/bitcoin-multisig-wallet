@@ -13,12 +13,16 @@ object SessionStore {
     /** Signed PSBT base64 returned from Trezor after signing. */
     @Volatile var pendingSignedPsbt: String? = null
 
+    /** Preferred fiat currency for balance display (czk, usd, eur). */
+    @Volatile var preferredCurrency: String = "czk"
+
     fun clearAuth() {
         pendingIdentity = null
         session = null
         activeWalletId = null
         walletsFetchedAtMs = null
         pendingSignedPsbt = null
+        preferredCurrency = "czk"
     }
 
     fun hasWalletSelected(): Boolean = !activeWalletId.isNullOrBlank()

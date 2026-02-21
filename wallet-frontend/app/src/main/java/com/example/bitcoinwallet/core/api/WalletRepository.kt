@@ -1,5 +1,6 @@
 package com.example.bitcoinwallet.core.api
 
+import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.feature.wallet.model.Transaction
 import com.example.bitcoinwallet.feature.wallet.model.TransactionType
 import com.example.bitcoinwallet.feature.wallet.model.WalletBalance
@@ -26,7 +27,7 @@ class WalletRepository(
     suspend fun getWalletBalance(
         walletId: String,
         accessToken: String,
-        fiatCurrency: String = "czk"
+        fiatCurrency: String = SessionStore.preferredCurrency
     ): WalletBalance {
         // Explorer-service aggregates balance across all wallet addresses
         val balanceDto = apiClient.getWalletBalance(walletId, accessToken)

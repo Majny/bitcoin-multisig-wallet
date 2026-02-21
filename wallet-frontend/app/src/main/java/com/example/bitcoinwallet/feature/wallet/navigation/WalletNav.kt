@@ -438,7 +438,15 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
 
         composable(WalletRoutes.Settings) {
             SettingsScreen(
-                onClose = { navController.popBackStack() }
+                onClose = { navController.popBackStack() },
+                onDisconnect = {
+                    SessionStore.clearAuth()
+                    navController.navigate(
+                        com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.Graph
+                    ) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
             )
         }
     }
