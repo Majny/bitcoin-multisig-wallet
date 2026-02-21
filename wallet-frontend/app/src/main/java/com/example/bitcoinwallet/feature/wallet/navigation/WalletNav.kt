@@ -16,10 +16,12 @@ import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionSentScreen
 import com.example.bitcoinwallet.feature.wallet.ui.ReceiveBtcScreen
+import com.example.bitcoinwallet.feature.wallet.ui.TransactionDetailScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.CoinControlViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ReceiveBtcViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.TransactionDetailViewModel
 
 object WalletRoutes {
     const val Graph = "wallet_graph"
@@ -164,7 +166,17 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         
         composable(WalletRoutes.TransactionDetail) { backStackEntry ->
             val txId = backStackEntry.arguments?.getString("txId") ?: ""
-            // TODO: TransactionDetailScreen(txId = txId)
+            val viewModel: TransactionDetailViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+
+            LaunchedEffect(txId) {
+                viewModel.loadTransaction(txId)
+            }
+
+            TransactionDetailScreen(
+                state = state,
+                onClose = { navController.popBackStack() }
+            )
         }
     }
 }

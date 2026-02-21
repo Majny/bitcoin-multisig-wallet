@@ -24,6 +24,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.tooling.preview.Preview
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ReceiveBtcUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.theme.*
@@ -213,4 +214,21 @@ private fun copyToClipboard(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
     val clip = ClipData.newPlainText("Bitcoin Address", text)
     clipboard.setPrimaryClip(clip)
+}
+
+// ============ Preview ============
+
+@Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
+@Composable
+private fun ReceiveBtcPreview() {
+    ReceiveBtcScreen(
+        state = ReceiveBtcUiState(
+            address = "bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh",
+            qrBitmap = null,  // QR bitmap can't be previewed without ZXing runtime
+            isLoading = false
+        ),
+        onClose = {},
+        onCopied = {},
+        onShowOnTrezor = {}
+    )
 }
