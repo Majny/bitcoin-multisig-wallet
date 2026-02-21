@@ -63,6 +63,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.6")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
+    // --- QR Code (ZXing core) ---
+    implementation("com.google.zxing:core:3.5.3")
+
     // --- Ktor 3 ---
     implementation("io.ktor:ktor-client-core:3.0.0")
     implementation("io.ktor:ktor-client-android:3.0.0")

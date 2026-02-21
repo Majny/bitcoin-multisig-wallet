@@ -104,6 +104,37 @@ class TrezorDeeplinkLauncher(
     }
 
     /**
+     * Opens Trezor Suite to display an address on the Trezor device screen.
+     * This lets the user verify the receive address on the hardware device.
+     */
+    fun openGetAddress(context: Context, derivationPath: String = "m/84'/0'/0'/0/0"): Boolean {
+        val paramsJson = JSONObject().apply {
+            put("coin", "btc")
+            put("path", derivationPath)
+            put("showOnTrezor", true)
+        }.toString()
+
+        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&action=showAddress"
+
+        val uri = Uri.parse(connectBaseUrl).buildUpon()
+            .appendQueryParameter("method", "getAddress")
+            .appendQueryParameter("params", paramsJson)
+            .appendQueryParameter("callback", callbackUrl)
+            .build()
+
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            false
+        }
+    }
+
+    /**
      * Opens Trezor Suite to get public keys for multiple derivation paths.
      * Returns the request ID for tracking the callback.
      */

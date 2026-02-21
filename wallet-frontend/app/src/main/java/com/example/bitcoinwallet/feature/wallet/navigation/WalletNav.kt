@@ -15,9 +15,11 @@ import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionSentScreen
+import com.example.bitcoinwallet.feature.wallet.ui.ReceiveBtcScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.CoinControlViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.ReceiveBtcViewModel
 
 object WalletRoutes {
     const val Graph = "wallet_graph"
@@ -145,7 +147,19 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         }
 
         composable(WalletRoutes.Receive) {
-            // TODO: ReceiveBtcScreen
+            val viewModel: ReceiveBtcViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+            val context = LocalContext.current
+            val trezorLauncher = TrezorDeeplinkLauncher()
+
+            ReceiveBtcScreen(
+                state = state,
+                onClose = { navController.popBackStack() },
+                onCopied = { viewModel.onCopied() },
+                onShowOnTrezor = {
+                    trezorLauncher.openGetAddress(context)
+                }
+            )
         }
         
         composable(WalletRoutes.TransactionDetail) { backStackEntry ->
