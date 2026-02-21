@@ -17,9 +17,8 @@ private const val TAG = "CoinControlVM"
  * Sort order for UTXO list.
  */
 enum class UtxoSortOrder(val label: String) {
-    AMOUNT_DESC("Amount ↓"),
-    AMOUNT_ASC("Amount ↑"),
-    STATUS("Status"),
+    AMOUNT("Amount"),
+    STATUS("Confirmation Status"),
     ADDRESS("Address")
 }
 
@@ -49,7 +48,7 @@ data class SelectableUtxo(
  */
 data class CoinControlUiState(
     val utxos: List<SelectableUtxo> = emptyList(),
-    val sortOrder: UtxoSortOrder = UtxoSortOrder.AMOUNT_DESC,
+    val sortOrder: UtxoSortOrder = UtxoSortOrder.AMOUNT,
     val isLoading: Boolean = true,
     val error: String? = null,
     val showSortMenu: Boolean = false
@@ -169,8 +168,7 @@ class CoinControlViewModel : ViewModel() {
 
     private fun sortUtxos(utxos: List<SelectableUtxo>, order: UtxoSortOrder): List<SelectableUtxo> =
         when (order) {
-            UtxoSortOrder.AMOUNT_DESC -> utxos.sortedByDescending { it.valueSats }
-            UtxoSortOrder.AMOUNT_ASC -> utxos.sortedBy { it.valueSats }
+            UtxoSortOrder.AMOUNT -> utxos.sortedByDescending { it.valueSats }
             UtxoSortOrder.STATUS -> utxos.sortedByDescending { it.confirmed }
             UtxoSortOrder.ADDRESS -> utxos.sortedBy { it.address }
         }

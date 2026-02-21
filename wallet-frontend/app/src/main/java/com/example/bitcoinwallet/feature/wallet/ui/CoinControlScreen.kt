@@ -91,32 +91,20 @@ fun CoinControlScreen(
 
         Spacer(modifier = Modifier.height(10.dp))
 
-        // Order By with dropdown
-        Box {
-            SecondaryButton(
-                text = "Order By",
-                onClick = onToggleSortMenu,
-                modifier = Modifier.fillMaxWidth()
-            )
+        // Order By button
+        SecondaryButton(
+            text = "Order By",
+            onClick = onToggleSortMenu,
+            modifier = Modifier.fillMaxWidth()
+        )
 
-            DropdownMenu(
-                expanded = state.showSortMenu,
-                onDismissRequest = onToggleSortMenu,
-                modifier = Modifier.background(DarkSurface)
-            ) {
-                UtxoSortOrder.entries.forEach { order ->
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = order.label,
-                                color = if (order == state.sortOrder) AccentTeal else TextPrimary,
-                                fontWeight = if (order == state.sortOrder) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        onClick = { onSortOrderChanged(order) }
-                    )
-                }
-            }
+        // Sort order dialog
+        if (state.showSortMenu) {
+            SortOrderDialog(
+                currentOrder = state.sortOrder,
+                onSelect = onSortOrderChanged,
+                onDismiss = onToggleSortMenu
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -206,6 +194,51 @@ private fun UtxoRow(
             )
         )
     }
+}
+
+// ===== Sort Order Dialog =====
+
+@Composable
+private fun SortOrderDialog(
+    currentOrder: UtxoSortOrder,
+    onSelect: (UtxoSortOrder) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Text(
+                text = "Order by UTXOs",
+                color = TextMuted,
+                fontSize = 13.sp
+            )
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                UtxoSortOrder.entries.forEachIndexed { index, order ->
+                    if (index > 0) {
+                        HorizontalDivider(color = DarkCard.copy(alpha = 0.5f), thickness = 1.dp)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSelect(order) }
+                            .padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = order.label,
+                            color = if (order == currentOrder) AccentTeal else TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = if (order == currentOrder) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {}
+    )
 }
 
 // ===== Preview =====
