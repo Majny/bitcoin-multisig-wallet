@@ -11,6 +11,8 @@ object PsbtsTable : Table("psbts") {
     val txType = varchar("tx_type", 50).default("send")
     val requiredSigs = integer("required_sigs").default(1)
     val currentSigs = integer("current_sigs").default(0)
+    val totalOutputSats = long("total_output_sats").default(0)
+    val estimatedFeeSats = long("estimated_fee_sats").default(0)
     val label = varchar("label", 255).nullable()
     val txid = varchar("txid", 64).nullable()
     val createdAt = timestampWithTimeZone("created_at")

@@ -1,0 +1,1 @@
+ALTER TABLE psbts ADD COLUMN estimated_fee_sats BIGINT NOT NULL DEFAULT 0;

@@ -57,6 +57,8 @@ data class PsbtResponse(
     val status: String,
     val requiredSigs: Int,
     val currentSigs: Int,
+    val totalOutputSats: Long = 0,
+    val estimatedFeeSats: Long = 0,
     val signatures: List<SignatureInfo> = emptyList(),
     val label: String? = null,
     val txid: String? = null,

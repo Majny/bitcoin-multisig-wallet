@@ -427,6 +427,7 @@ data class PsbtDetailDto(
     val requiredSigs: Int,
     val currentSigs: Int,
     val totalOutputSats: Long = 0,
+    val estimatedFeeSats: Long = 0,
     val signatures: List<PsbtSignatureDto> = emptyList(),
     val label: String? = null,
     val txid: String? = null,

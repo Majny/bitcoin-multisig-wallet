@@ -19,13 +19,17 @@ class PsbtRepository {
         psbtBase64: String,
         requiredSigs: Int,
         label: String? = null,
-        txType: String = "send"
+        txType: String = "send",
+        totalOutputSats: Long = 0,
+        estimatedFeeSats: Long = 0
     ): UUID = transaction {
         val now = OffsetDateTime.now()
         PsbtsTable.insert {
             it[PsbtsTable.walletId] = walletId
             it[PsbtsTable.psbtBase64] = psbtBase64
             it[PsbtsTable.requiredSigs] = requiredSigs
+            it[PsbtsTable.totalOutputSats] = totalOutputSats
+            it[PsbtsTable.estimatedFeeSats] = estimatedFeeSats
             it[PsbtsTable.label] = label
             it[PsbtsTable.txType] = txType
             it[createdAt] = now
@@ -149,6 +153,8 @@ class PsbtRepository {
         status = row[PsbtsTable.status],
         requiredSigs = row[PsbtsTable.requiredSigs],
         currentSigs = row[PsbtsTable.currentSigs],
+        totalOutputSats = row[PsbtsTable.totalOutputSats],
+        estimatedFeeSats = row[PsbtsTable.estimatedFeeSats],
         signatures = signatures,
         label = row[PsbtsTable.label],
         txid = row[PsbtsTable.txid],

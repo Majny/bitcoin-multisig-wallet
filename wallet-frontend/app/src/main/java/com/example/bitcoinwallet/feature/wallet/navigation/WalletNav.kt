@@ -26,9 +26,11 @@ import com.example.bitcoinwallet.feature.wallet.ui.MultisigWalletsScreen
 import com.example.bitcoinwallet.feature.wallet.ui.ImportWalletScreen
 import com.example.bitcoinwallet.feature.wallet.ui.MultisigDetailScreen
 import com.example.bitcoinwallet.feature.wallet.ui.PsbtListScreen
+import com.example.bitcoinwallet.feature.wallet.ui.PsbtDetailScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ImportWalletViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigDetailViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtListViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtDetailViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletsViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
@@ -65,6 +67,10 @@ object WalletRoutes {
     const val PsbtList = "wallet_psbt_list/{walletId}"
 
     fun psbtList(walletId: String) = "wallet_psbt_list/$walletId"
+
+    const val PsbtDetail = "wallet_psbt_detail/{psbtId}"
+
+    fun psbtDetail(psbtId: String) = "wallet_psbt_detail/$psbtId"
 }
 
 fun NavGraphBuilder.walletGraph(navController: NavController) {
@@ -340,7 +346,50 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     // TODO: import PSBT from file/QR
                 },
                 onPsbtClick = { psbt ->
-                    // TODO: navigate to PSBT detail screen
+                    navController.navigate(WalletRoutes.psbtDetail(psbt.id))
+                }
+            )
+        }
+
+        composable(WalletRoutes.PsbtDetail) { backStackEntry ->
+            val psbtId = backStackEntry.arguments?.getString("psbtId") ?: ""
+
+            val viewModel: PsbtDetailViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+            val context = LocalContext.current
+            val trezorLauncher = TrezorDeeplinkLauncher()
+
+            LaunchedEffect(psbtId) {
+                viewModel.loadPsbt(psbtId)
+            }
+
+            // Check if Trezor returned a signed PSBT
+            LaunchedEffect(Unit) {
+                val signedPsbt = SessionStore.pendingSignedPsbt
+                if (signedPsbt != null) {
+                    SessionStore.pendingSignedPsbt = null
+                    // Reload to reflect the new signature
+                    viewModel.refresh()
+                }
+            }
+
+            PsbtDetailScreen(
+                state = state,
+                onClose = { navController.popBackStack() },
+                onSignPsbt = {
+                    // Launch Trezor to sign the PSBT
+                    trezorLauncher.openSignTransaction(context, state.psbtBase64)
+                },
+                onExportPsbt = {
+                    // TODO: share/export PSBT base64
+                },
+                onBroadcast = {
+                    viewModel.broadcast {
+                        // Stay on screen to show success
+                    }
+                },
+                onShowRecipients = {
+                    // TODO: show recipients dialog
                 }
             )
         }

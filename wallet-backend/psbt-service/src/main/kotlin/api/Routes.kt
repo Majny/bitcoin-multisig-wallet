@@ -65,11 +65,14 @@ fun Route.psbtRoutes(
                 
                 // 5. Ulož do DB
                 val requiredSigs = if (wallet.type == "multisig") wallet.m ?: 1 else 1
+                val totalOutputSats = request.outputs.sumOf { it.amountSats }
                 val id = repository.create(
                     walletId = request.walletId,
                     psbtBase64 = result.psbtBase64,
                     requiredSigs = requiredSigs,
-                    label = request.label
+                    label = request.label,
+                    totalOutputSats = totalOutputSats,
+                    estimatedFeeSats = result.estimatedFee
                 )
                 
                 appCall.respond(CreatePsbtResponse(
