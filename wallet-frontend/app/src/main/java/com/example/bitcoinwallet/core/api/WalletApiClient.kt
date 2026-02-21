@@ -24,6 +24,30 @@ class WalletApiClient(
     private val client: HttpClient = defaultClient()
 ) {
     
+    // ============ Wallet Management Endpoints ============
+
+    /**
+     * GET /api/v1/wallets
+     * List all wallets for the authenticated device.
+     */
+    suspend fun listWallets(accessToken: String): List<MultisigWalletSummaryDto> {
+        return client.get("$baseUrl/wallets") {
+            header("Authorization", "Bearer $accessToken")
+        }.body()
+    }
+
+    /**
+     * POST /api/v1/wallets/import
+     * Import a wallet from an output descriptor.
+     */
+    suspend fun importWallet(accessToken: String, request: ImportWalletRequestDto): ImportWalletResponseDto {
+        return client.post("$baseUrl/wallets/import") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+    }
+
     // ============ Explorer Endpoints (wallet-level) ============
     
     /**
@@ -425,4 +449,35 @@ data class BroadcastResponseDto(
     val psbtId: String,
     val txid: String,
     val success: Boolean
+)
+
+// ============ Wallet Management DTOs ============
+
+@Serializable
+data class MultisigWalletSummaryDto(
+    val id: String = "",
+    val walletId: String = "",
+    val label: String = "",
+    val type: String = "",
+    val balanceSats: Long = 0,
+    val network: String = "mainnet",
+    val scriptType: String = "",
+    val m: Int? = null,
+    val n: Int? = null
+)
+
+@Serializable
+data class ImportWalletRequestDto(
+    val descriptor: String,
+    val network: String = "mainnet",
+    val label: String? = null,
+    val birthHeight: Int? = null
+)
+
+@Serializable
+data class ImportWalletResponseDto(
+    val success: Boolean,
+    val walletId: String? = null,
+    val isNew: Boolean = false,
+    val error: String? = null
 )

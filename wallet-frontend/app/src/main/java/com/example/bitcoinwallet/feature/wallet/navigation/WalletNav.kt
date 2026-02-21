@@ -22,7 +22,9 @@ import com.example.bitcoinwallet.feature.wallet.ui.TransactionSentScreen
 import com.example.bitcoinwallet.feature.wallet.ui.ReceiveBtcScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionDetailScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SettingsScreen
+import com.example.bitcoinwallet.feature.wallet.ui.MultisigWalletsScreen
 import com.example.bitcoinwallet.feature.wallet.viewmodel.WalletDashboardViewModel
+import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletsViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.CoinControlViewModel
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ReceiveBtcViewModel
@@ -208,7 +210,39 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         }
 
         composable(WalletRoutes.MultisigWallets) {
-            // TODO: MultisigWalletsScreen — will be built next
+            val viewModel: MultisigWalletsViewModel = viewModel()
+            val state by viewModel.uiState.collectAsState()
+            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+            val scope = rememberCoroutineScope()
+
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    DrawerContent(
+                        onItemClick = { item ->
+                            scope.launch { drawerState.close() }
+                            when (item) {
+                                DrawerItem.HOME -> navController.navigate(WalletRoutes.Dashboard) {
+                                    popUpTo(WalletRoutes.Graph) { inclusive = false }
+                                }
+                                DrawerItem.MULTISIG -> { /* already here */ }
+                                DrawerItem.SETTINGS -> navController.navigate(WalletRoutes.Settings)
+                            }
+                        }
+                    )
+                }
+            ) {
+                MultisigWalletsScreen(
+                    state = state,
+                    onMenuClick = { scope.launch { drawerState.open() } },
+                    onImportWallet = {
+                        // TODO: navigate to import screen
+                    },
+                    onWalletClick = { wallet ->
+                        // TODO: navigate to multisig wallet detail / PSBT overview
+                    }
+                )
+            }
         }
 
         composable(WalletRoutes.Settings) {
