@@ -389,7 +389,10 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     }
                 },
                 onShowRecipients = {
-                    // TODO: show recipients dialog
+                    viewModel.showSignersDialog()
+                },
+                onDismissRecipients = {
+                    viewModel.dismissSignersDialog()
                 }
             )
         }

@@ -214,6 +214,16 @@ class WalletApiClient(
         }.body()
     }
 
+    /**
+     * GET /api/v1/psbt/{id}/signers
+     * Get cosigner signing status for a PSBT.
+     */
+    suspend fun getSignerStatus(psbtId: String, accessToken: String): SignerStatusResponseDto {
+        return client.get("$baseUrl/psbt/$psbtId/signers") {
+            header("Authorization", "Bearer $accessToken")
+        }.body()
+    }
+
     // ============ Price Endpoints ============
     
     /**
@@ -466,6 +476,27 @@ data class BroadcastResponseDto(
     val psbtId: String,
     val txid: String,
     val success: Boolean
+)
+
+// ============ Signer Status DTOs ============
+
+@Serializable
+data class SignerStatusResponseDto(
+    val psbtId: String,
+    val walletId: String,
+    val status: String,
+    val requiredSigs: Int,
+    val currentSigs: Int,
+    val signers: List<SignerDetailDto>
+)
+
+@Serializable
+data class SignerDetailDto(
+    val fingerprint: String,
+    val cosignerIndex: Int,
+    val signed: Boolean,
+    val deviceId: String? = null,
+    val signedAt: String? = null
 )
 
 // ============ Wallet Management DTOs ============

@@ -22,8 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import com.example.bitcoinwallet.feature.wallet.viewmodel.CosignerUiInfo
 import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtDetailUiState
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SignatureUiInfo
+import com.example.bitcoinwallet.feature.wallet.viewmodel.SignerStatus
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.components.SecondaryButton
 import com.example.bitcoinwallet.ui.theme.*
@@ -40,8 +43,18 @@ fun PsbtDetailScreen(
     onExportPsbt: () -> Unit,
     onBroadcast: () -> Unit,
     onShowRecipients: () -> Unit,
+    onDismissRecipients: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // Signers dialog
+    if (state.showSignersDialog) {
+        SignersDialog(
+            cosigners = state.cosigners,
+            isLoading = state.signersLoading,
+            onDismiss = onDismissRecipients
+        )
+    }
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -350,6 +363,101 @@ private fun ActionButtonsSection(
     }
 }
 
+// ─── Signers dialog (Show Recipients) ──────────────────────────────
+
+@Composable
+private fun SignersDialog(
+    cosigners: List<CosignerUiInfo>,
+    isLoading: Boolean,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(DarkBackground)
+                .padding(20.dp)
+        ) {
+            // Header: title + X button
+            Box(modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    text = "Recipients",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.CenterStart)
+                )
+
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.CenterEnd)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = TextPrimary
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 24.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = AccentTeal)
+                }
+            } else if (cosigners.isEmpty()) {
+                Text(
+                    text = "No cosigners found",
+                    color = TextMuted,
+                    fontSize = 14.sp,
+                    modifier = Modifier.padding(vertical = 16.dp)
+                )
+            } else {
+                cosigners.forEach { cosigner ->
+                    val statusText = when (cosigner.status) {
+                        SignerStatus.SIGNED -> "Signed"
+                        SignerStatus.PENDING -> "Pending"
+                        SignerStatus.MISSING -> "Missing"
+                    }
+                    val statusColor = when (cosigner.status) {
+                        SignerStatus.SIGNED -> ReceiveGreen
+                        SignerStatus.PENDING -> BitcoinOrangeLight
+                        SignerStatus.MISSING -> ErrorRed
+                    }
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = cosigner.fingerprint,
+                            color = TextPrimary,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = statusText,
+                            color = statusColor,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ============ Previews ============
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
@@ -373,7 +481,8 @@ private fun PsbtDetailPendingPreview() {
             onSignPsbt = {},
             onExportPsbt = {},
             onBroadcast = {},
-            onShowRecipients = {}
+            onShowRecipients = {},
+            onDismissRecipients = {}
         )
     }
 }
@@ -400,7 +509,8 @@ private fun PsbtDetailReadyPreview() {
             onSignPsbt = {},
             onExportPsbt = {},
             onBroadcast = {},
-            onShowRecipients = {}
+            onShowRecipients = {},
+            onDismissRecipients = {}
         )
     }
 }

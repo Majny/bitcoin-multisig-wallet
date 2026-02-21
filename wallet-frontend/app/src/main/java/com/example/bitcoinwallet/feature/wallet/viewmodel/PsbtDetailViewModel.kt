@@ -14,6 +14,21 @@ import kotlinx.coroutines.launch
 private const val TAG = "PsbtDetailVM"
 
 /**
+ * Signing status of a single cosigner.
+ */
+enum class SignerStatus { SIGNED, PENDING, MISSING }
+
+/**
+ * Single cosigner display info.
+ */
+data class CosignerUiInfo(
+    val fingerprint: String,
+    val cosignerIndex: Int,
+    val status: SignerStatus,
+    val deviceId: String? = null
+)
+
+/**
  * UI State for the PSBT Detail screen.
  */
 data class PsbtDetailUiState(
@@ -28,6 +43,9 @@ data class PsbtDetailUiState(
     val label: String? = null,
     val txid: String? = null,
     val signatures: List<SignatureUiInfo> = emptyList(),
+    val cosigners: List<CosignerUiInfo> = emptyList(),
+    val showSignersDialog: Boolean = false,
+    val signersLoading: Boolean = false,
     val isLoading: Boolean = true,
     val error: String? = null,
     val broadcastSuccess: Boolean = false
@@ -155,6 +173,50 @@ class PsbtDetailViewModel : ViewModel() {
         if (psbtId.isNotBlank()) {
             fetchPsbtDetail(psbtId)
         }
+    }
+
+    /**
+     * Open the signers dialog and load cosigner status from backend.
+     */
+    fun showSignersDialog() {
+        _uiState.value = _uiState.value.copy(showSignersDialog = true, signersLoading = true)
+        viewModelScope.launch {
+            val accessToken = SessionStore.session?.accessToken ?: return@launch
+            val psbtId = _uiState.value.psbtId
+
+            try {
+                Log.d(TAG, "Loading signers for PSBT: $psbtId")
+                val response = WalletApi.client.getSignerStatus(psbtId, accessToken)
+
+                val cosigners = response.signers.map { signer ->
+                    val status = when {
+                        signer.signed -> SignerStatus.SIGNED
+                        // If PSBT is pending and this cosigner hasn't signed → PENDING
+                        _uiState.value.status == "pending" || _uiState.value.status == "signed" ->
+                            SignerStatus.PENDING
+                        else -> SignerStatus.MISSING
+                    }
+                    CosignerUiInfo(
+                        fingerprint = signer.fingerprint,
+                        cosignerIndex = signer.cosignerIndex,
+                        status = status,
+                        deviceId = signer.deviceId
+                    )
+                }
+
+                _uiState.value = _uiState.value.copy(
+                    cosigners = cosigners,
+                    signersLoading = false
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error loading signers", e)
+                _uiState.value = _uiState.value.copy(signersLoading = false)
+            }
+        }
+    }
+
+    fun dismissSignersDialog() {
+        _uiState.value = _uiState.value.copy(showSignersDialog = false)
     }
 
     private fun mapDtoToState(dto: PsbtDetailDto): PsbtDetailUiState {
