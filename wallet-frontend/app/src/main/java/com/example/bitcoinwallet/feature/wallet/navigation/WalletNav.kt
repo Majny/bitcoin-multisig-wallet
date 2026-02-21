@@ -68,6 +68,10 @@ object WalletRoutes {
 
     fun psbtList(walletId: String) = "wallet_psbt_list/$walletId"
 
+    const val CreatePsbt = "wallet_create_psbt/{walletId}"
+
+    fun createPsbt(walletId: String) = "wallet_create_psbt/$walletId"
+
     const val PsbtDetail = "wallet_psbt_detail/{psbtId}"
 
     fun psbtDetail(psbtId: String) = "wallet_psbt_detail/$psbtId"
@@ -340,7 +344,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 state = state,
                 onClose = { navController.popBackStack() },
                 onCreatePsbt = {
-                    // TODO: navigate to create PSBT flow for multisig
+                    navController.navigate(WalletRoutes.createPsbt(walletId))
                 },
                 onImportPsbt = {
                     // TODO: import PSBT from file/QR
@@ -351,11 +355,50 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
 
+        composable(WalletRoutes.CreatePsbt) { backStackEntry ->
+            val walletId = backStackEntry.arguments?.getString("walletId") ?: ""
+
+            // Temporarily use multisig walletId so SendTransactionViewModel picks it up
+            val previousWalletId = SessionStore.activeWalletId
+            LaunchedEffect(walletId) {
+                SessionStore.activeWalletId = walletId
+            }
+
+            val viewModel: SendTransactionViewModel = viewModel()
+            val sendState by viewModel.uiState.collectAsState()
+
+            SendTransactionScreen(
+                state = sendState,
+                title = "New PSBT",
+                buttonText = "Create PSBT",
+                onClose = {
+                    SessionStore.activeWalletId = previousWalletId
+                    navController.popBackStack()
+                },
+                onRecipientChanged = viewModel::onRecipientChanged,
+                onAmountChanged = viewModel::onAmountChanged,
+                onFeePriorityChanged = viewModel::onFeePriorityChanged,
+                onAutoSelectChanged = viewModel::onAutoSelectChanged,
+                onCustomFeeRateChanged = viewModel::onCustomFeeRateChanged,
+                onEditSelection = {
+                    navController.navigate(WalletRoutes.CoinControl)
+                },
+                onCreateTransaction = {
+                    viewModel.createTransaction { _ ->
+                        // PSBT is stored in DB — all cosigners will see it
+                        // Restore wallet ID and navigate back to PSBT list
+                        SessionStore.activeWalletId = previousWalletId
+                        navController.popBackStack()
+                    }
+                }
+            )
+        }
+
         composable(WalletRoutes.PsbtDetail) { backStackEntry ->
             val psbtId = backStackEntry.arguments?.getString("psbtId") ?: ""
 
             val viewModel: PsbtDetailViewModel = viewModel()
-            val state by viewModel.uiState.collectAsState()
+            val detailState by viewModel.uiState.collectAsState()
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
 
@@ -368,25 +411,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 val signedPsbt = SessionStore.pendingSignedPsbt
                 if (signedPsbt != null) {
                     SessionStore.pendingSignedPsbt = null
-                    // Reload to reflect the new signature
                     viewModel.refresh()
                 }
             }
 
             PsbtDetailScreen(
-                state = state,
+                state = detailState,
                 onClose = { navController.popBackStack() },
                 onSignPsbt = {
-                    // Launch Trezor to sign the PSBT
-                    trezorLauncher.openSignTransaction(context, state.psbtBase64)
+                    trezorLauncher.openSignTransaction(context, detailState.psbtBase64)
                 },
                 onExportPsbt = {
                     // TODO: share/export PSBT base64
                 },
                 onBroadcast = {
-                    viewModel.broadcast {
-                        // Stay on screen to show success
-                    }
+                    viewModel.broadcast()
                 },
                 onShowRecipients = {
                     viewModel.showSignersDialog()

@@ -46,6 +46,8 @@ fun SendTransactionScreen(
     onCustomFeeRateChanged: (String) -> Unit,
     onEditSelection: () -> Unit,
     onCreateTransaction: () -> Unit,
+    title: String = "New Transaction",
+    buttonText: String = "Create Transaction",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -58,7 +60,7 @@ fun SendTransactionScreen(
         // ===== Header with close button =====
         Box(modifier = Modifier.fillMaxWidth()) {
             Text(
-                text = "New Transaction",
+                text = title,
                 color = TextPrimary,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
@@ -207,7 +209,7 @@ fun SendTransactionScreen(
 
         // ===== Create Transaction button =====
         PrimaryButton(
-            text = if (state.isSending) "Creating..." else "Create Transaction",
+            text = if (state.isSending) "Creating..." else buttonText,
             onClick = onCreateTransaction,
             enabled = !state.isSending && !state.isLoading,
             modifier = Modifier.fillMaxWidth()
