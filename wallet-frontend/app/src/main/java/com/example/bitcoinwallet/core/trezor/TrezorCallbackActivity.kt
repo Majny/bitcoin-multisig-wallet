@@ -71,7 +71,7 @@ class TrezorCallbackActivity : ComponentActivity() {
             return
         }
 
-        SessionStore.pendingSignedPsbt = signedPsbt
+        SessionStore.setPendingSignedPsbt(signedPsbt)
 
         startActivity(
             Intent(this@TrezorCallbackActivity, MainActivity::class.java)

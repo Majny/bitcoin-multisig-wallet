@@ -12,7 +12,7 @@ services:
       - wallet_pg_data:/var/lib/postgresql/data
       - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wallet"]
+      test: ["CMD-SHELL", "pg_isready -U wallet -d wallet_registry"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -56,6 +56,7 @@ services:
       PORT: "8081"
       JWT_ISSUER: wallet-auth
       JWT_AUDIENCE: wallet-gateway
+      JWT_DEV_ALLOW_GENERATE_KEYS: "true"
     depends_on:
       - postgres
     restart: unless-stopped

@@ -61,9 +61,16 @@ object PsbtBuilder {
             )
         }
         
-        // Dust limit check
+        // Dust limit check — pokud je change pod limitem, přidá se do fee
         val dustLimit = 546L
-        val finalChange = if (changeAmount > dustLimit) changeAmount else 0L
+        val finalChange = if (changeAmount > dustLimit) {
+            changeAmount
+        } else {
+            if (changeAmount > 0) {
+                log.info("Change amount {} sats je pod dust limitem ({}), přidáno do fee", changeAmount, dustLimit)
+            }
+            0L
+        }
         
         // Vytvoř PSBT strukturu
         val psbtBase64 = buildPsbtBase64(
@@ -240,8 +247,14 @@ object PsbtBuilder {
         }
     }
     
+    /**
+     * Převede Bitcoin adresu na scriptPubKey hex string.
+     * Používá se pro PSBT_IN_WITNESS_UTXO pole.
+     */
+    fun addressToScriptHex(address: String): String = bytesToHex(addressToScript(address))
+
     // ========== Helpers ==========
-    
+
     private fun estimateVsize(
         inputCount: Int,
         outputCount: Int,
@@ -727,12 +740,15 @@ object PsbtBuilder {
     private fun buildWitness(inputKvs: List<PsbtKV>): List<ByteArray> {
         val partialSigs = inputKvs.filter { it.keyType == PSBT_IN_PARTIAL_SIG }
         val witnessScript = inputKvs.firstOrNull { it.keyType == PSBT_IN_WITNESS_SCRIPT }
-        
+
         if (witnessScript != null) {
             // P2WSH multisig: OP_0 + signatures + witnessScript
+            // CHECKMULTISIG vyžaduje, aby podpisy byly ve stejném pořadí
+            // jako odpovídající pubklíče ve witness scriptu (BIP-67).
+            val sortedSigs = sortSigsByWitnessScript(partialSigs, witnessScript.value)
             val items = mutableListOf<ByteArray>()
             items.add(ByteArray(0)) // OP_0 for CHECKMULTISIG bug
-            for (sig in partialSigs) {
+            for (sig in sortedSigs) {
                 items.add(sig.value)
             }
             items.add(witnessScript.value)
@@ -745,6 +761,27 @@ object PsbtBuilder {
             } else {
                 emptyList()
             }
+        }
+    }
+
+    /**
+     * Seřadí partial_sigs podle pozice jejich pubklíče ve witness scriptu.
+     * Witness script formát: OP_M <0x21><pubkey1> ... <0x21><pubkeyN> OP_N OP_CHECKMULTISIG
+     */
+    private fun sortSigsByWitnessScript(sigs: List<PsbtKV>, witnessScript: ByteArray): List<PsbtKV> {
+        val pubkeyOrder = mutableListOf<String>()
+        var pos = 1 // přeskočí OP_M
+        while (pos < witnessScript.size - 2) { // -2 pro OP_N a OP_CHECKMULTISIG
+            val pushLen = witnessScript[pos].toInt() and 0xFF
+            if (pushLen == 0 || pushLen > 33) break
+            pos++
+            if (pos + pushLen > witnessScript.size) break
+            pubkeyOrder.add(bytesToHex(witnessScript.sliceArray(pos until pos + pushLen)))
+            pos += pushLen
+        }
+        return sigs.sortedBy { sig ->
+            val idx = pubkeyOrder.indexOf(bytesToHex(sig.keyData))
+            if (idx == -1) Int.MAX_VALUE else idx
         }
     }
     

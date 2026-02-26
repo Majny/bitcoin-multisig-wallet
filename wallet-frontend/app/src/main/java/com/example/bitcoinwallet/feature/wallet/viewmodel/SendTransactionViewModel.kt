@@ -286,7 +286,7 @@ class SendTransactionViewModel : ViewModel() {
                     psbtId = psbtId,
                     accessToken = accessToken,
                     signedPsbtBase64 = signedPsbtBase64,
-                    deviceId = "trezor",
+                    deviceId = fingerprint,   // byl hardcoded "trezor"; použij fingerprint jako identifikátor
                     fingerprint = fingerprint
                 )
 

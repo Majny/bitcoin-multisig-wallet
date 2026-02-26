@@ -124,9 +124,8 @@ class WalletExplorer(
             )
         }
 
-        // Paralelně stáhni tx pro všechny adresy
-        val rawTxMap = mutableMapOf<String, RawTransaction>()
-        addresses.map { addr ->
+        // Paralelně stáhni tx pro všechny adresy a aktuální výšku bloku
+        val txFetch = addresses.map { addr ->
             async {
                 try {
                     blockchain.getAddressTransactions(addr.address)
@@ -135,13 +134,21 @@ class WalletExplorer(
                     emptyList()
                 }
             }
-        }.awaitAll().flatten().forEach { tx ->
-            rawTxMap[tx.txid] = tx  // Deduplikace
         }
+        val tipFetch = async {
+            try { blockchain.getTipHeight() } catch (e: Exception) {
+                log.warn("Failed to get tip height: {}", e.message)
+                0
+            }
+        }
+
+        val rawTxMap = mutableMapOf<String, RawTransaction>()
+        txFetch.awaitAll().flatten().forEach { tx -> rawTxMap[tx.txid] = tx }
+        val currentHeight = tipFetch.await()
 
         // Klasifikuj a spočítej amount
         val classified = rawTxMap.values.map { tx ->
-            classifyTransaction(tx, myAddressSet)
+            classifyTransaction(tx, myAddressSet, currentHeight)
         }
 
         // Seřaď: unconfirmed first, pak podle času (nejnovější first)
@@ -249,13 +256,13 @@ class WalletExplorer(
                 isNew = true
             )
         } else {
-            // Všechny jsou použité — vrať poslední + 1 (frontend musí požádat o derivaci)
-            val lastIndex = receiveAddresses.maxOfOrNull { it.index } ?: 0
-            val lastAddr = receiveAddresses.lastOrNull()
+            // Všechny adresy jsou použité — nevrátíme žádnou existující adresu (předejdeme reuse),
+            // ale sdělíme frontendu, jaký index má dál odvozovat.
+            val nextIndex = (receiveAddresses.maxOfOrNull { it.index } ?: -1) + 1
             ReceiveAddressResponse(
                 walletId = walletId,
-                address = lastAddr?.address ?: "",
-                index = lastIndex,
+                address = "",
+                index = nextIndex,
                 isNew = false,
                 needsDerivation = true
             )
@@ -276,7 +283,11 @@ class WalletExplorer(
      * - SENT: suma mých inputů - suma mých outputů (change) = skutečně odesláno + fee
      * - RECEIVED: suma outputů na mé adresy
      */
-    private fun classifyTransaction(tx: RawTransaction, myAddresses: Set<String>): WalletTransaction {
+    private fun classifyTransaction(
+        tx: RawTransaction,
+        myAddresses: Set<String>,
+        currentBlockHeight: Int = 0
+    ): WalletTransaction {
         // Input adresy
         val myInputSum = tx.vin.sumOf { input ->
             val addr = input.prevout?.scriptpubkey_address ?: ""
@@ -302,10 +313,10 @@ class WalletExplorer(
             amount = myOutputSum
         }
 
-        // Počet konfirmací (zjednodušeně — blockchain-service by mohl poskytnout current tip)
+        // Počet konfirmací: currentHeight - txBlockHeight + 1
         val confirmations = if (tx.status.confirmed && tx.status.block_height != null) {
-            // Odhadneme — vracíme jen block_height, frontend může dopočítat
-            1  // minimum, pokud je confirmed
+            if (currentBlockHeight > 0) maxOf(currentBlockHeight - tx.status.block_height + 1, 1)
+            else 1
         } else {
             0
         }

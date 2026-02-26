@@ -237,9 +237,11 @@ object AddressDerivation {
         DescriptorType.P2TR ->
             try {
                 key.toAddress(ScriptType.P2TR, network).toString()
-            } catch (_: Exception) {
-                log.warn("P2TR not fully supported by BitcoinJ — falling back to P2WPKH address")
-                key.toAddress(ScriptType.P2WPKH, network).toString()
+            } catch (e: Exception) {
+                throw UnsupportedOperationException(
+                    "P2TR (Taproot) adresy nejsou podporovány aktuální verzí BitcoinJ. " +
+                    "Použij P2WPKH (wpkh) nebo P2WSH (wsh) descriptor.", e
+                )
             }
 
         DescriptorType.P2WSH_MULTISIG ->

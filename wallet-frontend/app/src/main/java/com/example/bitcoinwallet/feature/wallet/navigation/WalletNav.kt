@@ -1,7 +1,9 @@
 package com.example.bitcoinwallet.feature.wallet.navigation
 
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
@@ -128,18 +130,18 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
 
-            // Check if Trezor returned a signed PSBT (via SessionStore)
-            LaunchedEffect(Unit) {
-                val signedPsbt = SessionStore.pendingSignedPsbt
+            // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný PSBT,
+            // včetně případu kdy activity přežila přes onNewIntent (FLAG_SINGLE_TOP).
+            val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
+            LaunchedEffect(pendingSignedPsbt) {
+                val signedPsbt = pendingSignedPsbt
                 if (signedPsbt != null && state.awaitingTrezor) {
-                    SessionStore.pendingSignedPsbt = null
+                    SessionStore.setPendingSignedPsbt(null)
                     viewModel.onTrezorSigned(signedPsbt) {
-                        // On broadcast success, navigate to TransactionSent screen
                         val s = viewModel.uiState.value
                         navController.navigate(
                             WalletRoutes.transactionSent(s.totalSats, s.feeSats)
                         ) {
-                            // Pop Send screen from backstack
                             popUpTo(WalletRoutes.Dashboard) { inclusive = false }
                         }
                     }
@@ -189,8 +191,11 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val sendBackStackEntry = navController.getBackStackEntry(WalletRoutes.Send)
             val sendVm: SendTransactionViewModel = viewModel(sendBackStackEntry)
 
-            // Pre-select UTXOs that were already selected
-            coinControlVm.setPreSelected(sendVm.getSelectedUtxoKeys())
+            // Pre-select UTXOs jednou při prvním zobrazení — nesmí být v těle composable,
+            // protože by se volalo při každé rekomposici a resetovalo uživatelův výběr.
+            LaunchedEffect(Unit) {
+                coinControlVm.setPreSelected(sendVm.getSelectedUtxoKeys())
+            }
 
             CoinControlScreen(
                 state = coinControlState,
@@ -358,23 +363,26 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         composable(WalletRoutes.CreatePsbt) { backStackEntry ->
             val walletId = backStackEntry.arguments?.getString("walletId") ?: ""
 
-            // Temporarily use multisig walletId so SendTransactionViewModel picks it up
-            val previousWalletId = SessionStore.activeWalletId
-            LaunchedEffect(walletId) {
-                SessionStore.activeWalletId = walletId
-            }
+            // Ulož předchozí walletId pro obnovení při odchodu
+            val previousWalletId = remember { SessionStore.activeWalletId }
+
+            // Nastav activeWalletId SYNCHRONNĚ pomocí remember() — volá se před viewModel(),
+            // takže ViewModel.init() načte správnou peněženku. LaunchedEffect by byl příliš pozdě.
+            remember(walletId) { SessionStore.activeWalletId = walletId }
 
             val viewModel: SendTransactionViewModel = viewModel()
             val sendState by viewModel.uiState.collectAsState()
+
+            // Obnov walletId při opuštění composable (navigace zpět nebo jinam)
+            DisposableEffect(walletId) {
+                onDispose { SessionStore.activeWalletId = previousWalletId }
+            }
 
             SendTransactionScreen(
                 state = sendState,
                 title = "New PSBT",
                 buttonText = "Create PSBT",
-                onClose = {
-                    SessionStore.activeWalletId = previousWalletId
-                    navController.popBackStack()
-                },
+                onClose = { navController.popBackStack() },
                 onRecipientChanged = viewModel::onRecipientChanged,
                 onAmountChanged = viewModel::onAmountChanged,
                 onFeePriorityChanged = viewModel::onFeePriorityChanged,
@@ -385,9 +393,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 },
                 onCreateTransaction = {
                     viewModel.createTransaction { _ ->
-                        // PSBT is stored in DB — all cosigners will see it
-                        // Restore wallet ID and navigate back to PSBT list
-                        SessionStore.activeWalletId = previousWalletId
+                        // PSBT je uložen v DB — všichni cosigneři ho uvidí
                         navController.popBackStack()
                     }
                 }
@@ -406,11 +412,11 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 viewModel.loadPsbt(psbtId)
             }
 
-            // Check if Trezor returned a signed PSBT
-            LaunchedEffect(Unit) {
-                val signedPsbt = SessionStore.pendingSignedPsbt
-                if (signedPsbt != null) {
-                    SessionStore.pendingSignedPsbt = null
+            // Sleduj StateFlow — funguje i při návratu přes onNewIntent (FLAG_SINGLE_TOP)
+            val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
+            LaunchedEffect(pendingSignedPsbt) {
+                if (pendingSignedPsbt != null) {
+                    SessionStore.setPendingSignedPsbt(null)
                     viewModel.refresh()
                 }
             }

@@ -40,9 +40,9 @@ fun Route.psbtRoutes(
                     // Manuální výběr (coin control)
                     selectSpecificUtxos(request.utxos, request.walletId, blockchainClient, registryClient)
                 } else {
-                    // Automatický výběr
+                    // Automatický výběr — posíláme celý wallet pro správný výpočet fee (singlesig vs multisig)
                     val totalNeeded = request.outputs.sumOf { it.amountSats }
-                    autoSelectUtxos(request.walletId, totalNeeded, request.feeRate, blockchainClient, registryClient)
+                    autoSelectUtxos(wallet, totalNeeded, request.feeRate, blockchainClient, registryClient)
                 }
                 
                 if (utxos.isEmpty()) {
@@ -330,13 +330,7 @@ fun Route.psbtRoutes(
                 return@post
             }
             
-            // Finalizuj pokud ještě není
-            val finalResult = if (existing.status == "signed") {
-                PsbtBuilder.finalizePsbt(existing.psbtBase64)
-            } else {
-                // Už je finalizované, potřebujeme txHex
-                PsbtBuilder.finalizePsbt(existing.psbtBase64)
-            }
+            val finalResult = PsbtBuilder.finalizePsbt(existing.psbtBase64)
             
             if (finalResult.txHex.isEmpty()) {
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Failed to get transaction hex"))
@@ -449,6 +443,7 @@ fun Route.psbtRoutes(
 /**
  * Vybere konkrétní UTXOs podle seznamu txid:vout.
  * Prohledá VŠECHNY adresy peněženky (receive + change).
+ * scriptPubKey se odvozuje z adresy, aby ho Trezor mohl ověřit (PSBT_IN_WITNESS_UTXO).
  */
 private suspend fun selectSpecificUtxos(
     selections: List<UtxoSelection>,
@@ -458,21 +453,20 @@ private suspend fun selectSpecificUtxos(
 ): List<SelectedUtxo> {
     val selectionSet = selections.map { "${it.txid}:${it.vout}" }.toSet()
 
-    // Získej VŠECHNY adresy peněženky z registru
     val allAddresses = registryClient.getAllAddresses(walletId)
 
-    // Pro každou adresu získej UTXOs a filtruj
     val result = mutableListOf<SelectedUtxo>()
     for (addrDto in allAddresses) {
         val utxos = blockchainClient.getUtxos(addrDto.address)
         for (utxo in utxos) {
             val key = "${utxo.txid}:${utxo.vout}"
             if (key in selectionSet) {
+                val scriptHex = PsbtBuilder.addressToScriptHex(addrDto.address).ifEmpty { null }
                 result.add(SelectedUtxo(
                     txid = utxo.txid,
                     vout = utxo.vout,
                     value = utxo.value,
-                    scriptPubKey = null,
+                    scriptPubKey = scriptHex,
                     addressIndex = addrDto.index,
                     addressType = addrDto.type,
                     address = addrDto.address
@@ -486,18 +480,17 @@ private suspend fun selectSpecificUtxos(
 /**
  * Automaticky vybere UTXOs pro pokrytí požadované částky + fee.
  * Prohledá VŠECHNY adresy peněženky a seřadí od největšího (largest-first).
+ * Fee per input se počítá správně pro singlesig i multisig.
  */
 private suspend fun autoSelectUtxos(
-    walletId: String,
+    wallet: WalletDetailDto,
     targetAmount: Long,
     feeRate: Double,
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient
 ): List<SelectedUtxo> {
-    // Získej VŠECHNY adresy peněženky z registru
-    val allAddresses = registryClient.getAllAddresses(walletId)
+    val allAddresses = registryClient.getAllAddresses(wallet.walletId)
 
-    // Sbírej UTXOs ze všech adres
     data class RichUtxo(val utxo: UtxoDto, val addrDto: AddressDto)
     val allUtxos = mutableListOf<RichUtxo>()
     for (addrDto in allAddresses) {
@@ -507,31 +500,38 @@ private suspend fun autoSelectUtxos(
         }
     }
 
-    // Seřaď od největšího
     val sortedUtxos = allUtxos.sortedByDescending { it.utxo.value }
-    
+
+    // Velikost jednoho vstupu: singlesig P2WPKH = 68 vB,
+    // multisig P2WSH = 57 + 73*M + 34*N vB (viz PsbtBuilder.estimateVsize)
+    val isMultisig = wallet.type == "multisig"
+    val m = wallet.m ?: 1
+    val n = wallet.n ?: 1
+    val perInputVsize = if (isMultisig) (57 + 73 * m + 34 * n) else 68
+
     val selected = mutableListOf<SelectedUtxo>()
     var totalSelected = 0L
-    
+
     for (rich in sortedUtxos) {
+        val scriptHex = PsbtBuilder.addressToScriptHex(rich.addrDto.address).ifEmpty { null }
         selected.add(SelectedUtxo(
             txid = rich.utxo.txid,
             vout = rich.utxo.vout,
             value = rich.utxo.value,
-            scriptPubKey = null,
+            scriptPubKey = scriptHex,
             addressIndex = rich.addrDto.index,
             addressType = rich.addrDto.type,
             address = rich.addrDto.address
         ))
         totalSelected += rich.utxo.value
-        
-        // Odhadni fee pro aktuální počet vstupů
-        val estimatedFee = (68 * selected.size + 31 * 2 + 10) * feeRate
-        
+
+        // Odhadni fee pro aktuální počet vstupů (2 výstupy: recipient + change)
+        val estimatedFee = (perInputVsize * selected.size + 31 * 2 + 10) * feeRate
+
         if (totalSelected >= targetAmount + estimatedFee) {
             break
         }
     }
-    
+
     return selected
 }

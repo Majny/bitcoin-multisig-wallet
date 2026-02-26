@@ -47,6 +47,15 @@ class RegistryRepository {
             require(req.cosigners.isNotEmpty()) { "MULTI_SIG requires cosigners" }
         }
 
+        // Idempotent: return existing wallet if already created (e.g., on re-login)
+        val existing = WalletsTable.selectAll()
+            .where { WalletsTable.walletId eq req.walletId }
+            .singleOrNull()
+        if (existing != null) {
+            log.debug("Wallet {} already exists, skipping creation", req.walletId)
+            return@transaction getWallet(req.walletId) ?: error("Wallet ${req.walletId} not found after existence check")
+        }
+
         WalletsTable.insert {
             it[walletId] = req.walletId
             it[network] = req.network

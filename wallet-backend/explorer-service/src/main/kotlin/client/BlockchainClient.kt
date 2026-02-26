@@ -59,7 +59,19 @@ class BlockchainClient(
     suspend fun getFeeEstimates(): FeeEstimates {
         return client.get("$baseUrl/api/v1/blockchain/fees").body()
     }
+
+    /**
+     * Vrátí výšku aktuálního nejlepšího bloku.
+     * Používá se pro výpočet reálného počtu konfirmací.
+     */
+    suspend fun getTipHeight(): Int {
+        val resp: TipHeightResponse = client.get("$baseUrl/api/v1/blockchain/tip/height").body()
+        return resp.height
+    }
 }
+
+@kotlinx.serialization.Serializable
+data class TipHeightResponse(val height: Int)
 
 // ============ DTOs (mirror blockchain-service / Mempool.space responses) ============
 

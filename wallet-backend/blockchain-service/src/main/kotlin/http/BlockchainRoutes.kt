@@ -74,6 +74,16 @@ fun Route.blockchainRoutes(mempool: MempoolClient) {
             val fees = mempool.getFeeEstimates()
             call.respond(fees)
         }
+
+        /**
+         * GET /api/v1/blockchain/tip/height
+         * Vrátí výšku aktuálního nejlepšího bloku.
+         * Používá se pro výpočet počtu konfirmací v explorer-service.
+         */
+        get("/tip/height") {
+            val height = mempool.getTipHeight()
+            call.respond(TipHeightResponse(height))
+        }
         
         /**
          * GET /api/v1/blockchain/tx/{txid}
@@ -133,3 +143,6 @@ data class BroadcastResponse(
     val txid: String?,
     val error: String? = null
 )
+
+@Serializable
+data class TipHeightResponse(val height: Int)

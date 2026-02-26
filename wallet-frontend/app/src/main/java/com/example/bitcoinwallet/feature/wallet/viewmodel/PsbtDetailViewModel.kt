@@ -57,9 +57,13 @@ data class PsbtDetailUiState(
     val isFullySigned: Boolean
         get() = currentSigs >= requiredSigs
 
-    /** True when the PSBT has been finalized and can be broadcast */
+    /**
+     * True when the PSBT can be broadcast.
+     * "signed" = dost podpisů sesbíráno (backend finalizuje automaticky před broadcastem).
+     * "finalized" = PSBT byl explicitně finalizován.
+     */
     val canBroadcast: Boolean
-        get() = status == "finalized"
+        get() = (status == "finalized" || (status == "signed" && isFullySigned))
 
     /** True when the PSBT still needs more signatures */
     val canSign: Boolean

@@ -2,6 +2,9 @@ package com.example.bitcoinwallet.core.session
 
 import com.example.bitcoinwallet.core.signer.TrezorDeviceIdentity
 import com.example.bitcoinwallet.core.signer.UserSession
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 object SessionStore {
     @Volatile var pendingIdentity: TrezorDeviceIdentity? = null
@@ -10,8 +13,16 @@ object SessionStore {
     @Volatile var activeWalletId: String? = null
     @Volatile var walletsFetchedAtMs: Long? = null
 
-    /** Signed PSBT base64 returned from Trezor after signing. */
-    @Volatile var pendingSignedPsbt: String? = null
+    /**
+     * Signed PSBT base64 returned from Trezor after signing.
+     * StateFlow so that composables automatically re-observe when Trezor returns.
+     */
+    private val _pendingSignedPsbt = MutableStateFlow<String?>(null)
+    val pendingSignedPsbt: StateFlow<String?> = _pendingSignedPsbt.asStateFlow()
+
+    fun setPendingSignedPsbt(value: String?) {
+        _pendingSignedPsbt.value = value
+    }
 
     /** Preferred fiat currency for balance display (czk, usd, eur). */
     @Volatile var preferredCurrency: String = "czk"
@@ -21,7 +32,7 @@ object SessionStore {
         session = null
         activeWalletId = null
         walletsFetchedAtMs = null
-        pendingSignedPsbt = null
+        _pendingSignedPsbt.value = null
         preferredCurrency = "czk"
     }
 

@@ -50,6 +50,12 @@ interface MempoolClient {
      * Check if address has any activity (for account discovery).
      */
     suspend fun hasActivity(address: String): Boolean
+
+    /**
+     * Vrátí výšku aktuálního nejlepšího bloku (tip).
+     * Používá se pro výpočet počtu konfirmací.
+     */
+    suspend fun getTipHeight(): Int
 }
 
 // ============ DTOs ============
@@ -172,6 +178,12 @@ class MempoolClientImpl(
         } catch (e: Exception) {
             false
         }
+    }
+
+    override suspend fun getTipHeight(): Int {
+        // Mempool.space vrací číslo jako plain text, ne JSON
+        val response: HttpResponse = client.get("$baseUrl/blocks/tip/height")
+        return response.bodyAsText().trim().toInt()
     }
 }
 
