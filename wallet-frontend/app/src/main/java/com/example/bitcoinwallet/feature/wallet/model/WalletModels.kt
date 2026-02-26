@@ -30,7 +30,7 @@ data class WalletBalance(
 ) {
     val balanceBtc: Double get() = balanceSats / 100_000_000.0
     
-    fun formatBtc(): String = String.format("%.4f BTC", balanceBtc)
+    fun formatBtc(): String = String.format("%.8f BTC", balanceBtc)
     
     fun formatFiat(): String = String.format("≈ %,.0f %s", balanceFiat, fiatCurrency)
 }

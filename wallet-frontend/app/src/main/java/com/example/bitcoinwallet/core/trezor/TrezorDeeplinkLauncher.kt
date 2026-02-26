@@ -47,6 +47,8 @@ class TrezorDeeplinkLauncher(
         val paramsJson = JSONObject().apply {
             put("coin", "btc")
             put("path", derivationPath)
+            put("showOnTrezor", false)
+            put("suppressBackupWarning", true)
         }.toString()
 
         // to identify request callbacks

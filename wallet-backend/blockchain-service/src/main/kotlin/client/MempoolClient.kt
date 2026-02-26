@@ -5,6 +5,8 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 
 /**
@@ -140,16 +142,26 @@ class MempoolClientImpl(
     private val client: HttpClient
 ) : MempoolClient {
 
+    // mempool.space public API rate-limits aggressive parallel requests.
+    // Semaphore limits concurrent in-flight requests to avoid 429s.
+    private val rateLimiter = Semaphore(5)
+
     override suspend fun getAddressInfo(address: String): AddressInfo {
-        return client.get("$baseUrl/address/$address").body()
+        return rateLimiter.withPermit {
+            client.get("$baseUrl/address/$address").body()
+        }
     }
 
     override suspend fun getAddressUtxos(address: String): List<MempoolUtxo> {
-        return client.get("$baseUrl/address/$address/utxo").body()
+        return rateLimiter.withPermit {
+            client.get("$baseUrl/address/$address/utxo").body()
+        }
     }
 
     override suspend fun getAddressTransactions(address: String): List<MempoolTransaction> {
-        return client.get("$baseUrl/address/$address/txs").body()
+        return rateLimiter.withPermit {
+            client.get("$baseUrl/address/$address/txs").body()
+        }
     }
 
     override suspend fun getFeeEstimates(): FeeEstimates {

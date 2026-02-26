@@ -108,6 +108,8 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 WalletDashboardScreen(
                     balance = uiState.balance,
                     transactions = uiState.transactions,
+                    isLoading = uiState.isLoading,
+                    error = uiState.error,
                     onMenuClick = {
                         scope.launch { drawerState.open() }
                     },

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -36,6 +37,8 @@ fun WalletDashboardScreen(
     onSendClick: () -> Unit,
     onReceiveClick: () -> Unit,
     onTransactionClick: (Transaction) -> Unit,
+    isLoading: Boolean = false,
+    error: String? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -48,17 +51,31 @@ fun WalletDashboardScreen(
             title = "Bitcoin Wallet",
             onMenuClick = onMenuClick
         )
-        
+
+        // Error banner
+        if (error != null) {
+            Text(
+                text = error,
+                color = androidx.compose.ui.graphics.Color.Red,
+                fontSize = 13.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(androidx.compose.ui.graphics.Color(0x33FF0000))
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+        }
+
         // Balance section
         BalanceSection(
             balance = balance,
             onSendClick = onSendClick,
             onReceiveClick = onReceiveClick
         )
-        
+
         // Transaction history
         TransactionHistorySection(
             transactions = transactions,
+            isLoading = isLoading,
             onTransactionClick = onTransactionClick,
             modifier = Modifier.weight(1f)
         )
@@ -118,6 +135,7 @@ private fun BalanceSection(
 private fun TransactionHistorySection(
     transactions: List<Transaction>,
     onTransactionClick: (Transaction) -> Unit,
+    isLoading: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -135,23 +153,46 @@ private fun TransactionHistorySection(
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
         )
-        
+
         HorizontalDivider(
             color = DarkCard,
             thickness = 1.dp,
             modifier = Modifier.padding(horizontal = 20.dp)
         )
-        
-        // Transaction list
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(vertical = 8.dp)
-        ) {
-            items(transactions) { transaction ->
-                TransactionItem(
-                    transaction = transaction,
-                    onClick = { onTransactionClick(transaction) }
-                )
+
+        when {
+            isLoading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = TextPrimary)
+                }
+            }
+            transactions.isEmpty() -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Žádné transakce",
+                        color = TextMuted,
+                        fontSize = 14.sp
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    items(transactions) { transaction ->
+                        TransactionItem(
+                            transaction = transaction,
+                            onClick = { onTransactionClick(transaction) }
+                        )
+                    }
+                }
             }
         }
     }
