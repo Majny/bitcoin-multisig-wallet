@@ -295,6 +295,13 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val m = backStackEntry.arguments?.getString("m")?.toIntOrNull() ?: 0
             val n = backStackEntry.arguments?.getString("n")?.toIntOrNull() ?: 0
 
+            // Switch activeWalletId to this multisig wallet so Receive uses the right address
+            val previousWalletId = remember { SessionStore.activeWalletId }
+            remember(walletId) { SessionStore.activeWalletId = walletId }
+            DisposableEffect(walletId) {
+                onDispose { SessionStore.activeWalletId = previousWalletId }
+            }
+
             val viewModel: MultisigDetailViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
 

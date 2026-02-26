@@ -1,6 +1,7 @@
 package com.example.bitcoinwallet.feature.wallet.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -213,6 +214,7 @@ private fun TransactionItem(
     Row(
         modifier = modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

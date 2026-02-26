@@ -102,7 +102,7 @@ class WalletApiClient(
      * Transaction detail with inputs/outputs.
      */
     suspend fun getTransactionDetail(txid: String, accessToken: String, walletId: String? = null): TransactionDetailDto {
-        return client.get("$baseUrl/explorer/tx/$txid/detail") {
+        return client.get("$baseUrl/explorer/tx/$txid") {
             header("Authorization", "Bearer $accessToken")
             walletId?.let { parameter("walletId", it) }
         }.body()

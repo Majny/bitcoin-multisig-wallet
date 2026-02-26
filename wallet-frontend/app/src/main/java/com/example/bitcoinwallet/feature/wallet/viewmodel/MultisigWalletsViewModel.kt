@@ -49,7 +49,7 @@ class MultisigWalletsViewModel : ViewModel() {
 
                 // Filter only multisig wallets and enrich with balance
                 val multisigItems = dtos
-                    .filter { it.type == "multisig" }
+                    .filter { it.type.equals("MULTI_SIG", ignoreCase = true) }
                     .map { dto ->
                         val balance = try {
                             val walletId = dto.walletId.ifBlank { dto.id }
