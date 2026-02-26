@@ -115,7 +115,36 @@ data class MempoolTransaction(
     val size: Int = 0,
     val weight: Int = 0,
     val fee: Long = 0,
+    val vin: List<MempoolTxInput> = emptyList(),
+    val vout: List<MempoolTxOutput> = emptyList(),
     val status: TxStatus = TxStatus()
+)
+
+@Serializable
+data class MempoolTxInput(
+    val txid: String = "",
+    val vout: Int = 0,
+    val prevout: MempoolTxPrevout? = null,
+    val is_coinbase: Boolean = false,
+    val sequence: Long = 0
+)
+
+@Serializable
+data class MempoolTxPrevout(
+    val scriptpubkey: String = "",
+    val scriptpubkey_asm: String = "",
+    val scriptpubkey_type: String = "",
+    val scriptpubkey_address: String = "",
+    val value: Long = 0
+)
+
+@Serializable
+data class MempoolTxOutput(
+    val scriptpubkey: String = "",
+    val scriptpubkey_asm: String = "",
+    val scriptpubkey_type: String = "",
+    val scriptpubkey_address: String = "",
+    val value: Long = 0
 )
 
 @Serializable
