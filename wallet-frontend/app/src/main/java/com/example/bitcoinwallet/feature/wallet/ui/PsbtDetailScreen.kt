@@ -120,9 +120,9 @@ fun PsbtDetailScreen(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Show Recipients button
+                // Show Signers button
                 PrimaryButton(
-                    text = "Show Recipients",
+                    text = "Show Signers",
                     onClick = onShowRecipients
                 )
 
@@ -383,7 +383,7 @@ private fun SignersDialog(
             // Header: title + X button
             Box(modifier = Modifier.fillMaxWidth()) {
                 Text(
-                    text = "Recipients",
+                    text = "Signers",
                     color = TextPrimary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,

@@ -224,7 +224,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onClose = { navController.popBackStack() },
                 onCopied = { viewModel.onCopied() },
                 onShowOnTrezor = {
-                    trezorLauncher.openGetAddress(context)
+                    trezorLauncher.openGetAddress(context, state.derivationPath.ifBlank { "m/84'/0'/0'/0/0" })
                 }
             )
         }

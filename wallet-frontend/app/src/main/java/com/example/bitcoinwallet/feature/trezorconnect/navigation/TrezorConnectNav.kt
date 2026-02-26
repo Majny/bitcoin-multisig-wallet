@@ -6,6 +6,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.compose.composable
 import androidx.navigation.navigation
+import com.example.bitcoinwallet.core.api.ApiConfig
 import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.signer.MobileSigner
 import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
@@ -37,8 +38,7 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
         }
 
         composable(TrezorRoutes.Resolve) {
-            val backendBaseUrl = "http://100.91.223.40:8080/api/v1"
-            val signer = remember { MobileSigner(backendBaseUrl) }
+            val signer = remember { MobileSigner(ApiConfig.API_GATEWAY_BASE_URL) }
 
             ResolveWalletScreen(
                 onErrorGoBack = {

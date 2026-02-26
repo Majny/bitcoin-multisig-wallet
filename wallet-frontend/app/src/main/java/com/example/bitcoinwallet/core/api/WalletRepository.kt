@@ -27,7 +27,7 @@ class WalletRepository(
     suspend fun getWalletBalance(
         walletId: String,
         accessToken: String,
-        fiatCurrency: String = SessionStore.preferredCurrency
+        fiatCurrency: String = SessionStore.preferredCurrency.value
     ): WalletBalance {
         // Explorer-service aggregates balance across all wallet addresses
         val balanceDto = apiClient.getWalletBalance(walletId, accessToken)

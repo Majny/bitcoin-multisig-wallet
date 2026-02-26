@@ -40,11 +40,11 @@ data class PsbtListItem(
             }
         }
 
-    /** e.g. "-0.25 BTC" */
+    /** e.g. "0.00250000 BTC" */
     val amountBtcFormatted: String
         get() {
             val btc = totalOutputSats / 100_000_000.0
-            return "-%.2f BTC".format(btc)
+            return "%.8f BTC".format(btc)
         }
 
     /** Formatted date, e.g. "May 27" */

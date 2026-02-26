@@ -7,6 +7,7 @@ import com.example.bitcoinwallet.core.api.FeeEstimatesDto
 import com.example.bitcoinwallet.core.api.UtxoSelectionDto
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
+import com.example.bitcoinwallet.core.signer.WalletType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -324,8 +325,18 @@ class SendTransactionViewModel : ViewModel() {
         val btcAmount = state.amountBtc.toDoubleOrNull() ?: 0.0
         val amountSats = (btcAmount * 100_000_000).toLong()
 
-        // Estimate fee: ~140 vbytes for a simple 1-in 2-out segwit tx
-        val estimatedVsize = 140
+        // Estimate vsize based on wallet type (1-in, 2-out):
+        //   P2WPKH (singlesig):  ~141 vbytes
+        //   P2WSH m-of-n:        (base(113)*4 + witness(5 + 73m + 34n)) / 4
+        val walletId = SessionStore.activeWalletId
+        val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
+        val estimatedVsize = if (wallet?.type == WalletType.MULTI_SIG) {
+            val m = wallet.m ?: 2
+            val n = wallet.n ?: 3
+            (457 + 73 * m + 34 * n) / 4 + 1
+        } else {
+            141
+        }
         val feeRate = getSelectedFeeRate()
         val feeSats = (estimatedVsize * feeRate).toLong()
 
@@ -342,12 +353,13 @@ class SendTransactionViewModel : ViewModel() {
 
     private fun getSelectedFeeRate(): Int {
         val state = _uiState.value
-        // In manual mode, use custom fee rate
+        // In manual UTXO mode, use custom fee rate only if the user actually entered one
         if (!state.autoSelect) {
-            return state.customFeeRate.toIntOrNull() ?: 1
+            val customRate = state.customFeeRate.toIntOrNull()
+            if (customRate != null && customRate > 0) return customRate
         }
-        // In auto mode, use preset priorities
-        val fees = state.feeEstimates ?: return 5 // default fallback
+        // Fall back to preset priorities (also used when autoSelect=false but no custom rate entered)
+        val fees = state.feeEstimates ?: return 5
         return when (state.feePriority) {
             FeePriority.LOW -> fees.hourFee
             FeePriority.MEDIUM -> fees.halfHourFee

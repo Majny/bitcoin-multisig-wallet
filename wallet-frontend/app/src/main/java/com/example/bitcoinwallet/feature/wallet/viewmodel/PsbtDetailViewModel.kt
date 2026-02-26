@@ -224,6 +224,7 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     private fun mapDtoToState(dto: PsbtDetailDto): PsbtDetailUiState {
+        val current = _uiState.value
         return PsbtDetailUiState(
             psbtId = dto.id,
             walletId = dto.walletId,
@@ -242,6 +243,10 @@ class PsbtDetailViewModel : ViewModel() {
                     signedAt = it.signedAt
                 )
             },
+            // Preserve UI-only state that should survive a data refresh
+            showSignersDialog = current.showSignersDialog,
+            cosigners = current.cosigners,
+            broadcastSuccess = current.broadcastSuccess || dto.status == "broadcast",
             isLoading = false
         )
     }

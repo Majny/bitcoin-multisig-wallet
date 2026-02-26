@@ -173,7 +173,7 @@ class MempoolClientImpl(
 
     // mempool.space public API rate-limits aggressive parallel requests.
     // Semaphore limits concurrent in-flight requests to avoid 429s.
-    private val rateLimiter = Semaphore(5)
+    private val rateLimiter = Semaphore(3)
 
     override suspend fun getAddressInfo(address: String): AddressInfo {
         return rateLimiter.withPermit {

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
+import com.example.bitcoinwallet.core.signer.WalletType
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
@@ -15,6 +16,8 @@ import kotlinx.coroutines.launch
 
 data class ReceiveBtcUiState(
     val address: String = "",
+    val addressIndex: Int = 0,
+    val derivationPath: String = "",
     val qrBitmap: Bitmap? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
@@ -44,10 +47,31 @@ class ReceiveBtcViewModel : ViewModel() {
                     ?: throw IllegalStateException("Not authenticated")
 
                 val dto = WalletApi.client.getReceiveAddress(walletId, token)
+
+                if (dto.needsDerivation) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Address derivation pending – please try again in a moment"
+                    )
+                    return@launch
+                }
+
+                // Build derivation path for "Show on Trezor" verification
+                val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
+                val purpose = when (wallet?.scriptType?.uppercase()) {
+                    "P2TR", "TAPROOT" -> 86
+                    "P2SH-P2WPKH", "NESTED_SEGWIT" -> 49
+                    else -> 84  // P2WPKH default
+                }
+                val coinType = if (wallet?.network == "testnet") 1 else 0
+                val derivationPath = "m/$purpose'/0'/0'/0/${dto.index}"
+
                 val qr = generateQrBitmap("bitcoin:${dto.address}", size = 512)
 
                 _uiState.value = _uiState.value.copy(
                     address = dto.address,
+                    addressIndex = dto.index,
+                    derivationPath = derivationPath,
                     qrBitmap = qr,
                     isLoading = false
                 )

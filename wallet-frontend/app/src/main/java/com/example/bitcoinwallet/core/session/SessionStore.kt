@@ -25,7 +25,12 @@ object SessionStore {
     }
 
     /** Preferred fiat currency for balance display (czk, usd, eur). */
-    @Volatile var preferredCurrency: String = "czk"
+    private val _preferredCurrency = MutableStateFlow("czk")
+    val preferredCurrency: StateFlow<String> = _preferredCurrency.asStateFlow()
+
+    fun setPreferredCurrency(currency: String) {
+        _preferredCurrency.value = currency
+    }
 
     fun clearAuth() {
         pendingIdentity = null
@@ -33,7 +38,7 @@ object SessionStore {
         activeWalletId = null
         walletsFetchedAtMs = null
         _pendingSignedPsbt.value = null
-        preferredCurrency = "czk"
+        _preferredCurrency.value = "czk"
     }
 
     fun hasWalletSelected(): Boolean = !activeWalletId.isNullOrBlank()

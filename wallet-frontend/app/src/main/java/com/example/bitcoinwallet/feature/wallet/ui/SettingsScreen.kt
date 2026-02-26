@@ -33,7 +33,7 @@ fun SettingsScreen(
     modifier: Modifier = Modifier
 ) {
     var selectedCurrency by remember {
-        mutableStateOf(SessionStore.preferredCurrency.uppercase())
+        mutableStateOf(SessionStore.preferredCurrency.value.uppercase())
     }
 
     Column(
@@ -144,7 +144,7 @@ fun SettingsScreen(
                         )
                         .clickable {
                             selectedCurrency = code
-                            SessionStore.preferredCurrency = code.lowercase()
+                            SessionStore.setPreferredCurrency(code.lowercase())
                         },
                     contentAlignment = Alignment.Center
                 ) {

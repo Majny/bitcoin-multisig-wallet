@@ -87,7 +87,7 @@ fun SendTransactionScreen(
             value = state.recipientAddress,
             onValueChange = onRecipientChanged,
             placeholder = {
-                Text("Bitcoin adress", color = TextMuted)
+                Text("Bitcoin address", color = TextMuted)
             },
             isError = state.addressError != null,
             supportingText = state.addressError?.let { err ->
