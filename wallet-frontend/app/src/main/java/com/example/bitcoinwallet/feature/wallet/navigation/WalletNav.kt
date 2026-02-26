@@ -189,8 +189,16 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val coinControlVm: CoinControlViewModel = viewModel()
             val coinControlState by coinControlVm.uiState.collectAsState()
 
-            // Get the Send VM from the parent back stack entry so state is shared
-            val sendBackStackEntry = navController.getBackStackEntry(WalletRoutes.Send)
+            // Get the Send VM from the parent back stack entry so state is shared.
+            // CoinControl can be reached from both Send and CreatePsbt — try Send first,
+            // then fall back to the previous entry (CreatePsbt) to avoid a crash.
+            val sendBackStackEntry = remember {
+                try {
+                    navController.getBackStackEntry(WalletRoutes.Send)
+                } catch (_: IllegalArgumentException) {
+                    navController.previousBackStackEntry!!
+                }
+            }
             val sendVm: SendTransactionViewModel = viewModel(sendBackStackEntry)
 
             // Pre-select UTXOs jednou při prvním zobrazení — nesmí být v těle composable,
@@ -209,7 +217,10 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 },
                 onToggleUtxo = coinControlVm::toggleUtxo,
                 onToggleSortMenu = coinControlVm::toggleSortMenu,
-                onSortOrderChanged = coinControlVm::onSortOrderChanged
+                onSortOrderChanged = coinControlVm::onSortOrderChanged,
+                onUtxoDetail = { txid ->
+                    navController.navigate(WalletRoutes.transactionDetail(txid))
+                }
             )
         }
 

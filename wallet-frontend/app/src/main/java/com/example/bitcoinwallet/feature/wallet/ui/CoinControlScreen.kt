@@ -42,6 +42,7 @@ fun CoinControlScreen(
     onToggleUtxo: (String) -> Unit,
     onToggleSortMenu: () -> Unit,
     onSortOrderChanged: (UtxoSortOrder) -> Unit,
+    onUtxoDetail: ((txid: String) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -133,7 +134,8 @@ fun CoinControlScreen(
                 items(state.utxos, key = { it.key }) { utxo ->
                     UtxoRow(
                         utxo = utxo,
-                        onToggle = { onToggleUtxo(utxo.key) }
+                        onToggle = { onToggleUtxo(utxo.key) },
+                        onShowDetail = onUtxoDetail?.let { { it(utxo.txid) } }
                     )
                     HorizontalDivider(color = DarkCard.copy(alpha = 0.5f), thickness = 1.dp)
                 }
@@ -148,17 +150,24 @@ fun CoinControlScreen(
 private fun UtxoRow(
     utxo: SelectableUtxo,
     onToggle: () -> Unit,
+    onShowDetail: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle)
             .padding(vertical = 12.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left side: amount + address
-        Column(modifier = Modifier.weight(1f)) {
+        // Left side: amount + address — tapping navigates to transaction detail
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .then(
+                    if (onShowDetail != null) Modifier.clickable(onClick = onShowDetail)
+                    else Modifier
+                )
+        ) {
             Text(
                 text = utxo.formatBtc(),
                 color = TextPrimary,
@@ -183,7 +192,7 @@ private fun UtxoRow(
             modifier = Modifier.padding(end = 12.dp)
         )
 
-        // Checkbox
+        // Checkbox — tapping toggles selection
         Checkbox(
             checked = utxo.selected,
             onCheckedChange = { onToggle() },
