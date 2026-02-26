@@ -3,6 +3,8 @@ package cz.majny.wallet.explorer.client
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
+import io.ktor.http.*
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 
@@ -28,14 +30,22 @@ class BlockchainClient(
      * Vrátí UTXOs pro danou adresu.
      */
     suspend fun getAddressUtxos(address: String): List<UtxoInfo> {
-        return client.get("$baseUrl/api/v1/blockchain/address/$address/utxos").body()
+        val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/utxos")
+        if (!response.status.isSuccess()) {
+            throw Exception("blockchain-service error ${response.status.value} for $address/utxos")
+        }
+        return response.body()
     }
 
     /**
      * Vrátí transakce pro danou adresu.
      */
     suspend fun getAddressTransactions(address: String): List<RawTransaction> {
-        return client.get("$baseUrl/api/v1/blockchain/address/$address/txs").body()
+        val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/txs")
+        if (!response.status.isSuccess()) {
+            throw Exception("blockchain-service error ${response.status.value} for $address/txs")
+        }
+        return response.body()
     }
 
     /**

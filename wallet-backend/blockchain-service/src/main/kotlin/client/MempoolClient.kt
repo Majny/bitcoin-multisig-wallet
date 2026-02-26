@@ -5,6 +5,7 @@ import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
@@ -175,23 +176,34 @@ class MempoolClientImpl(
     // Semaphore limits concurrent in-flight requests to avoid 429s.
     private val rateLimiter = Semaphore(3)
 
-    override suspend fun getAddressInfo(address: String): AddressInfo {
-        return rateLimiter.withPermit {
-            client.get("$baseUrl/address/$address").body()
+    /**
+     * Executes a GET request with automatic retry on 429 Too Many Requests.
+     * Retries up to 3 times with increasing delays (500ms, 1000ms).
+     * The delay is held inside withPermit so the semaphore slot stays occupied
+     * during the wait — this throttles the overall request rate when rate-limited.
+     */
+    private suspend fun getChecked(url: String): HttpResponse {
+        for (attempt in 0..2) {
+            val response: HttpResponse = rateLimiter.withPermit {
+                val resp = client.get(url)
+                if (resp.status == HttpStatusCode.TooManyRequests && attempt < 2) {
+                    delay(500L * (attempt + 1))
+                }
+                resp
+            }
+            if (response.status != HttpStatusCode.TooManyRequests) return response
         }
+        error("Rate limited after 3 attempts: $url")
     }
 
-    override suspend fun getAddressUtxos(address: String): List<MempoolUtxo> {
-        return rateLimiter.withPermit {
-            client.get("$baseUrl/address/$address/utxo").body()
-        }
-    }
+    override suspend fun getAddressInfo(address: String): AddressInfo =
+        getChecked("$baseUrl/address/$address").body()
 
-    override suspend fun getAddressTransactions(address: String): List<MempoolTransaction> {
-        return rateLimiter.withPermit {
-            client.get("$baseUrl/address/$address/txs").body()
-        }
-    }
+    override suspend fun getAddressUtxos(address: String): List<MempoolUtxo> =
+        getChecked("$baseUrl/address/$address/utxo").body()
+
+    override suspend fun getAddressTransactions(address: String): List<MempoolTransaction> =
+        getChecked("$baseUrl/address/$address/txs").body()
 
     override suspend fun getFeeEstimates(): FeeEstimates {
         return client.get("$baseUrl/v1/fees/recommended").body()
