@@ -1,107 +1,55 @@
 @startuml
 skinparam backgroundColor #FFFFFF
-skinparam handwritten false
-skinparam wrapWidth 240
-skinparam maxMessageSize 200
-skinparam defaultTextAlignment center
 skinparam shadowing false
 skinparam linetype ortho
-skinparam FontColor #000000
-skinparam ArrowFontColor #000000
-skinparam ArrowThickness 1.2
-skinparam RectangleBorderColor #000000
-skinparam RectangleFontColor #000000
+skinparam defaultTextAlignment center
 skinparam RectangleFontSize 13
-skinparam NoteBackgroundColor #F9FAFB
-skinparam NoteBorderColor #000000
-skinparam NoteFontColor #111111
-skinparam cloud {
-  BackgroundColor #E5E7EB
-  BorderColor #000000
-}
-skinparam database {
-  BackgroundColor #E5E7EB
-  BorderColor #000000
-}
 
 left to right direction
 
-rectangle "**Android App**\n*Jetpack Compose UI*" as AndroidApp
-rectangle "**Trezor**\nHW signer & authenticator" as Trezor
-cloud "**TOR Network**" as TorNet
+rectangle "**Android App**" as App
+rectangle "**Trezor**" as Trezor
+cloud "**Blockstream Esplora**" as Esplora
+cloud "**CoinGecko**" as CoinGecko
 
-rectangle "**RPi @ Home**\n- bitcoind\n- RPC via onion\n- P2P přes Tor" as RPi {
-  rectangle "**Bitcoin Core**\n`bitcoind`\nRPC: 8332\nZMQ: 28332/28333" as Bitcoind
+rectangle "**Backend (Docker Compose)**" as Backend {
+  rectangle "**API Gateway** :8080" as ApiGw
+  rectangle "**Auth Service** :8081" as AuthSvc
+  rectangle "**Wallet Registry** :8082" as WalletReg
+  rectangle "**Explorer Service** :8083" as Explorer
+  rectangle "**PSBT Service** :8085" as PsbtSvc
+  rectangle "**Blockchain Service** :8086" as BlockchainSvc
+  rectangle "**Price Service** :8087" as PriceSvc
+  database "**PostgreSQL** :5432" as PG
 }
 
-rectangle "**CLOUD**" as Cloud {
-  rectangle "**API Gateway**" as ApiGw
-  rectangle "**Auth & Pairing Service**" as AuthSvc
-  rectangle "**Wallet Registry (Source of Truth)**" as WalletReg
-  rectangle "**Wallet Importer**\n(deskriptory / BSMS / Sparrow export)" as WalletImporter
-  rectangle "**Explorer Service**" as Explorer
-  rectangle "**PSBT Builder/Bridge**" as Bridge
-  rectangle "**Node Proxy (Tor RPC)**" as NodeProxy
-  rectangle "**Signer Service (HWI)**" as Signer
-  rectangle "**Electrum/Esplora **" as Electrum
-  rectangle "**Notification Service**\n(FCM / webhooks)" as Notify
-  database "**PostgreSQL**" as PG
-  rectangle "**Redis**" as Redis
-  rectangle "**Object Storage (S3/MinIO)**" as S3
-  rectangle "**Observability**" as Obs
-}
+App -down-> ApiGw
+App .left[dotted].. Trezor : USB
 
-rectangle "**Multisig Coordinator**" as MsCoordinator
+ApiGw --> AuthSvc
+ApiGw --> WalletReg
+ApiGw --> Explorer
+ApiGw --> PsbtSvc
+ApiGw --> BlockchainSvc
+ApiGw --> PriceSvc
 
-AndroidApp -down[#1D4ED8]-> ApiGw
-AndroidApp ..[#6B7280,dotted]-> Trezor
-Signer ..[#6B7280,dotted].. Trezor
+Explorer -[#F59E0B]-> WalletReg
+Explorer -[#F59E0B]-> BlockchainSvc
 
-ApiGw -[#1D4ED8]-> AuthSvc
-AuthSvc -[#10B981]-> PG
+PsbtSvc -[#F59E0B]-> WalletReg
+PsbtSvc -[#F59E0B]-> BlockchainSvc
 
-ApiGw -[#1D4ED8]-> WalletReg
-WalletReg -[#10B981]-> PG
-WalletImporter -[#1D4ED8]-> WalletReg
+BlockchainSvc -right[#EF4444,dashed]-> Esplora
+PriceSvc -right[#EF4444,dashed]-> CoinGecko
 
-ApiGw -[#1D4ED8]-> Explorer
-Explorer -[#1D4ED8]-> WalletReg
-Explorer -[#9333EA,dashed]-> Electrum
-Explorer -[#9333EA,dashed]-> NodeProxy
-Explorer -[#10B981]-> Redis
-Explorer -[#10B981]-> PG
-
-ApiGw -[#1D4ED8]-> Bridge
-Bridge -[#1D4ED8]-> WalletReg
-Bridge -[#1D4ED8]-> NodeProxy
-ApiGw -[#1D4ED8]-> WalletImporter
-
-Bridge -[#1D4ED8]-> MsCoordinator
-MsCoordinator -[#10B981]-> PG
-MsCoordinator -[#10B981]-> Redis
-MsCoordinator -[#1D4ED8]-> Notify
-
-ApiGw -[#1D4ED8]-> Signer
-Signer -[#1D4ED8]-> WalletReg
-Signer -[#10B981]-> PG
-Signer -[#10B981]-> S3
-
-NodeProxy -down[#EF4444,thickness=2]-> TorNet
-TorNet -down[#EF4444,thickness=2]-> Bitcoind
-
-Obs -[#1D4ED8]-> ApiGw
-Obs -[#1D4ED8]-> Explorer
-Obs -[#1D4ED8]-> Bridge
-Obs -[#1D4ED8]-> MsCoordinator
-Obs -[#1D4ED8]-> Signer
-Obs -[#1D4ED8]-> NodeProxy
+WalletReg -down[#10B981]-> PG
+PsbtSvc -down[#10B981]-> PG
 
 legend left
 |= Šipka |= Význam |
-| <color:#1D4ED8>■ modrá plná</color> | Sync **REST/HTTPS** volání |
-| <color:#9333EA>■ fialová čárkovaná</color> | **fallback** cesta |
-| <color:#6B7280>■ šedá tečkovaná</color> | **Lokální fyzické** spojení (USB) |
-| <color:#EF4444>■ červená tlustá</color> | **Tor/Onion** transport (Node → Core) |
-| <color:#10B981>■ zelená plná</color> | **Uložení/čtení** (DB/Redis/S3) |
+| <color:#000000>■ černá</color> | Gateway → služba |
+| <color:#F59E0B>■ oranžová</color> | Inter-service |
+| <color:#EF4444>■ červená čárkovaná</color> | Externí API |
+| <color:#10B981>■ zelená</color> | Databáze |
 endlegend
 @enduml
