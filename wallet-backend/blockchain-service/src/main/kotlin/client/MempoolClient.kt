@@ -173,9 +173,9 @@ class MempoolClientImpl(
 ) : MempoolClient {
 
     // Blockstream.info is much more lenient than mempool.space.
-    // Semaphore(5) allows 5 concurrent requests — keeps total latency under 5 s
-    // for a typical 30-address wallet while staying polite to the public API.
-    private val rateLimiter = Semaphore(5)
+    // Semaphore(10) allows 10 concurrent requests — reduces batch rounds from 8→4
+    // for a 40-address wallet and keeps total latency well under 60 s.
+    private val rateLimiter = Semaphore(10)
 
     /**
      * Executes a GET request with one retry on 429 Too Many Requests.

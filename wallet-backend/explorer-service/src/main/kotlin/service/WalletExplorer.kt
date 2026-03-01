@@ -316,7 +316,7 @@ class WalletExplorer(
      * tb1 / 2 / m / n  → testnet
      * bc1 / 1 / 3      → mainnet
      */
-    private fun detectNetwork(addresses: List<cz.majny.wallet.explorer.client.AddressRecord>): String {
+    private fun detectNetwork(addresses: List<cz.majny.wallet.explorer.client.WalletAddress>): String {
         val first = addresses.firstOrNull()?.address ?: return "mainnet"
         return if (first.startsWith("tb1") || first.startsWith("2") ||
                    first.startsWith("m")   || first.startsWith("n")) "testnet" else "mainnet"
