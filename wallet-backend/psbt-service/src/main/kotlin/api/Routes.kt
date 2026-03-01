@@ -6,6 +6,9 @@ import cz.majny.wallet.psbt.client.BlockchainClient
 import cz.majny.wallet.psbt.client.RegistryClient
 import cz.majny.wallet.psbt.db.PsbtRepository
 import io.ktor.http.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -454,31 +457,32 @@ private suspend fun selectSpecificUtxos(
     network: String,
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient
-): List<SelectedUtxo> {
+): List<SelectedUtxo> = coroutineScope {
     val selectionSet = selections.map { "${it.txid}:${it.vout}" }.toSet()
-
     val allAddresses = registryClient.getAllAddresses(walletId)
 
-    val result = mutableListOf<SelectedUtxo>()
-    for (addrDto in allAddresses) {
-        val utxos = blockchainClient.getUtxos(addrDto.address, network)
-        for (utxo in utxos) {
-            val key = "${utxo.txid}:${utxo.vout}"
-            if (key in selectionSet) {
-                val scriptHex = PsbtBuilder.addressToScriptHex(addrDto.address).ifEmpty { null }
-                result.add(SelectedUtxo(
-                    txid = utxo.txid,
-                    vout = utxo.vout,
-                    value = utxo.value,
-                    scriptPubKey = scriptHex,
-                    addressIndex = addrDto.index,
-                    addressType = addrDto.type,
-                    address = addrDto.address
-                ))
+    allAddresses.map { addrDto ->
+        async {
+            try {
+                blockchainClient.getUtxos(addrDto.address, network)
+                    .filter { utxo -> "${utxo.txid}:${utxo.vout}" in selectionSet }
+                    .map { utxo ->
+                        val scriptHex = PsbtBuilder.addressToScriptHex(addrDto.address).ifEmpty { null }
+                        SelectedUtxo(
+                            txid = utxo.txid,
+                            vout = utxo.vout,
+                            value = utxo.value,
+                            scriptPubKey = scriptHex,
+                            addressIndex = addrDto.index,
+                            addressType = addrDto.type,
+                            address = addrDto.address
+                        )
+                    }
+            } catch (e: Exception) {
+                emptyList()
             }
         }
-    }
-    return result
+    }.awaitAll().flatten()
 }
 
 /**
@@ -492,17 +496,19 @@ private suspend fun autoSelectUtxos(
     feeRate: Double,
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient
-): List<SelectedUtxo> {
+): List<SelectedUtxo> = coroutineScope {
     val allAddresses = registryClient.getAllAddresses(wallet.walletId)
 
     data class RichUtxo(val utxo: UtxoDto, val addrDto: AddressDto)
-    val allUtxos = mutableListOf<RichUtxo>()
-    for (addrDto in allAddresses) {
-        val utxos = blockchainClient.getUtxos(addrDto.address, wallet.network)
-        for (utxo in utxos) {
-            allUtxos.add(RichUtxo(utxo, addrDto))
+    val allUtxos = allAddresses.map { addrDto ->
+        async {
+            try {
+                blockchainClient.getUtxos(addrDto.address, wallet.network).map { RichUtxo(it, addrDto) }
+            } catch (e: Exception) {
+                emptyList()
+            }
         }
-    }
+    }.awaitAll().flatten()
 
     val sortedUtxos = allUtxos.sortedByDescending { it.utxo.value }
 
@@ -537,5 +543,5 @@ private suspend fun autoSelectUtxos(
         }
     }
 
-    return selected
+    selected
 }

@@ -213,7 +213,7 @@ class SendTransactionViewModel : ViewModel() {
             }
 
             try {
-                val feeRate = getSelectedFeeRate().toDouble()
+                val feeRate = getSelectedFeeRate()
 
                 // In manual mode, pass selected UTXOs to backend
                 val utxoSelection = if (!state.autoSelect && state.selectedUtxos.isNotEmpty()) {
@@ -351,19 +351,19 @@ class SendTransactionViewModel : ViewModel() {
         )
     }
 
-    private fun getSelectedFeeRate(): Int {
+    private fun getSelectedFeeRate(): Double {
         val state = _uiState.value
         // In manual UTXO mode, use custom fee rate only if the user actually entered one
         if (!state.autoSelect) {
-            val customRate = state.customFeeRate.toIntOrNull()
+            val customRate = state.customFeeRate.toDoubleOrNull()
             if (customRate != null && customRate > 0) return customRate
         }
         // Fall back to preset priorities (also used when autoSelect=false but no custom rate entered)
-        val fees = state.feeEstimates ?: return 5
+        val fees = state.feeEstimates ?: return 5.0
         return when (state.feePriority) {
-            FeePriority.LOW -> fees.hourFee
-            FeePriority.MEDIUM -> fees.halfHourFee
-            FeePriority.HIGH -> fees.fastestFee
+            FeePriority.LOW -> fees.hourFee.toDouble()
+            FeePriority.MEDIUM -> fees.halfHourFee.toDouble()
+            FeePriority.HIGH -> fees.fastestFee.toDouble()
         }
     }
 

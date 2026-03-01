@@ -21,6 +21,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.bitcoinwallet.core.api.FeeEstimatesDto
 import com.example.bitcoinwallet.feature.wallet.viewmodel.FeePriority
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
@@ -179,7 +180,8 @@ fun SendTransactionScreen(
         if (state.autoSelect) {
             FeePrioritySelector(
                 selected = state.feePriority,
-                onSelect = onFeePriorityChanged
+                onSelect = onFeePriorityChanged,
+                feeEstimates = state.feeEstimates
             )
         } else {
             CustomFeeInput(
@@ -234,7 +236,8 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun FeePrioritySelector(
     selected: FeePriority,
-    onSelect: (FeePriority) -> Unit
+    onSelect: (FeePriority) -> Unit,
+    feeEstimates: FeeEstimatesDto? = null
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -249,9 +252,9 @@ private fun FeePrioritySelector(
         )
 
         val options = listOf(
-            FeePriority.LOW to "Low",
-            FeePriority.MEDIUM to "Medium",
-            FeePriority.HIGH to "High"
+            FeePriority.LOW    to Pair("Low",    feeEstimates?.hourFee),
+            FeePriority.MEDIUM to Pair("Medium", feeEstimates?.halfHourFee),
+            FeePriority.HIGH   to Pair("High",   feeEstimates?.fastestFee)
         )
 
         Row(
@@ -259,20 +262,31 @@ private fun FeePrioritySelector(
                 .clip(RoundedCornerShape(8.dp))
                 .border(1.dp, DarkCard, RoundedCornerShape(8.dp))
         ) {
-            options.forEach { (priority, label) ->
+            options.forEach { (priority, labelRate) ->
+                val (label, rate) = labelRate
                 val isSelected = selected == priority
                 Box(
                     modifier = Modifier
                         .background(if (isSelected) AccentTeal else Color.Transparent)
                         .clickable { onSelect(priority) }
-                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = label,
-                        color = if (isSelected) TextPrimary else TextSecondary,
-                        fontSize = 13.sp,
-                        fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                    )
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = label,
+                            color = if (isSelected) TextPrimary else TextSecondary,
+                            fontSize = 13.sp,
+                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+                        )
+                        if (rate != null) {
+                            Text(
+                                text = "$rate sat/vB",
+                                color = if (isSelected) TextPrimary else TextMuted,
+                                fontSize = 10.sp
+                            )
+                        }
+                    }
                 }
             }
         }
