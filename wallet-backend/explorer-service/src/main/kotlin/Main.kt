@@ -44,7 +44,10 @@ fun main() {
             level = LogLevel.INFO
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 30_000
+            // blockchain-service batches up to 8 rounds of 5 addresses each (Semaphore 5).
+            // Each round can take up to 15 s if Blockstream is slow → 8×15 = 120 s worst case.
+            // In practice most rounds finish in 1-3 s, but give 50 s to handle a few slow ones.
+            requestTimeoutMillis = 50_000
             connectTimeoutMillis = 10_000
         }
     }

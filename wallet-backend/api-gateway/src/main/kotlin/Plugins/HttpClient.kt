@@ -18,10 +18,10 @@ fun Application.configureHttpClient() {
     if (attributes.contains(HttpClientKey)) return
 
     val client = HttpClient(CIO) {
-        // Explorer-service scans up to 40 addresses against an external API —
-        // default CIO requestTimeout (15 s) is too short; 60 s gives enough headroom.
+        // Explorer-service may take up to 50 s (8 batches × 15 s Blockstream timeout).
+        // Set 70 s to always outlast explorer-service.
         engine {
-            requestTimeout = 60_000
+            requestTimeout = 70_000
         }
 
         install(ContentNegotiation) {

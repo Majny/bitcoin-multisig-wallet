@@ -36,7 +36,7 @@ fun main() {
             level = LogLevel.INFO
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 30_000
+            requestTimeoutMillis = 15_000   // fail fast if Blockstream hangs
             connectTimeoutMillis = 10_000
         }
     }

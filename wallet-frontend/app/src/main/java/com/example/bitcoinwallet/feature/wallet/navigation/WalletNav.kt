@@ -18,6 +18,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
+import com.example.bitcoinwallet.feature.wallet.ui.QrScannerScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionSentScreen
@@ -77,6 +78,8 @@ object WalletRoutes {
     const val PsbtDetail = "wallet_psbt_detail/{psbtId}"
 
     fun psbtDetail(psbtId: String) = "wallet_psbt_detail/$psbtId"
+
+    const val QrScanner = "wallet_qr_scanner"
 }
 
 fun NavGraphBuilder.walletGraph(navController: NavController) {
@@ -131,7 +134,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             }
         }
         
-        composable(WalletRoutes.Send) {
+        composable(WalletRoutes.Send) { backStackEntry ->
             val viewModel: SendTransactionViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
             val context = LocalContext.current
@@ -139,6 +142,18 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val walletNetwork = remember {
                 SessionStore.session?.user?.wallets
                     ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
+            }
+
+            // Výsledek ze QR skeneru — QrScannerScreen ho uloží do savedStateHandle
+            val qrAddress by backStackEntry.savedStateHandle
+                .getStateFlow<String?>("qr_address", null)
+                .collectAsState()
+            LaunchedEffect(qrAddress) {
+                val addr = qrAddress
+                if (addr != null) {
+                    viewModel.onRecipientChanged(addr)
+                    backStackEntry.savedStateHandle.remove<String>("qr_address")
+                }
             }
 
             // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný PSBT,
@@ -167,6 +182,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onFeePriorityChanged = viewModel::onFeePriorityChanged,
                 onAutoSelectChanged = viewModel::onAutoSelectChanged,
                 onCustomFeeRateChanged = viewModel::onCustomFeeRateChanged,
+                onScanQr = { navController.navigate(WalletRoutes.QrScanner) },
                 onEditSelection = {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
@@ -415,6 +431,18 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onDispose { SessionStore.activeWalletId = previousWalletId }
             }
 
+            // Výsledek ze QR skeneru
+            val qrAddress by backStackEntry.savedStateHandle
+                .getStateFlow<String?>("qr_address", null)
+                .collectAsState()
+            LaunchedEffect(qrAddress) {
+                val addr = qrAddress
+                if (addr != null) {
+                    viewModel.onRecipientChanged(addr)
+                    backStackEntry.savedStateHandle.remove<String>("qr_address")
+                }
+            }
+
             SendTransactionScreen(
                 state = sendState,
                 title = "New PSBT",
@@ -425,6 +453,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onFeePriorityChanged = viewModel::onFeePriorityChanged,
                 onAutoSelectChanged = viewModel::onAutoSelectChanged,
                 onCustomFeeRateChanged = viewModel::onCustomFeeRateChanged,
+                onScanQr = { navController.navigate(WalletRoutes.QrScanner) },
                 onEditSelection = {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
@@ -494,6 +523,19 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         popUpTo(0) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(WalletRoutes.QrScanner) {
+            QrScannerScreen(
+                onResult = { address ->
+                    // Ulož naskenovanou adresu do savedStateHandle předchozí destinace (Send nebo CreatePsbt)
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("qr_address", address)
+                    navController.popBackStack()
+                },
+                onClose = { navController.popBackStack() }
             )
         }
     }

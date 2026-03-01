@@ -10,6 +10,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -45,6 +46,7 @@ fun SendTransactionScreen(
     onFeePriorityChanged: (FeePriority) -> Unit,
     onAutoSelectChanged: (Boolean) -> Unit,
     onCustomFeeRateChanged: (String) -> Unit,
+    onScanQr: () -> Unit,
     onEditSelection: () -> Unit,
     onCreateTransaction: () -> Unit,
     title: String = "New Transaction",
@@ -95,6 +97,15 @@ fun SendTransactionScreen(
                 { Text(err, color = ErrorRed, fontSize = 12.sp) }
             },
             singleLine = true,
+            trailingIcon = {
+                IconButton(onClick = onScanQr) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = "Scan QR",
+                        tint = TextSecondary
+                    )
+                }
+            },
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
             colors = outlinedFieldColors()
@@ -418,6 +429,7 @@ private fun SendTransactionScreenPreview() {
             onFeePriorityChanged = {},
             onAutoSelectChanged = {},
             onCustomFeeRateChanged = {},
+            onScanQr = {},
             onEditSelection = {},
             onCreateTransaction = {}
         )
@@ -449,6 +461,7 @@ private fun SendTransactionScreenManualPreview() {
             onFeePriorityChanged = {},
             onAutoSelectChanged = {},
             onCustomFeeRateChanged = {},
+            onScanQr = {},
             onEditSelection = {},
             onCreateTransaction = {}
         )
