@@ -40,6 +40,7 @@ fun WalletDashboardScreen(
     onTransactionClick: (Transaction) -> Unit,
     isLoading: Boolean = false,
     error: String? = null,
+    network: String = "mainnet",
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -50,7 +51,8 @@ fun WalletDashboardScreen(
         // Top bar
         WalletTopBar(
             title = "Bitcoin Wallet",
-            onMenuClick = onMenuClick
+            onMenuClick = onMenuClick,
+            network = network
         )
 
         // Error banner

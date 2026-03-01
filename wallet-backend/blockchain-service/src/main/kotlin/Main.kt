@@ -41,8 +41,12 @@ fun main() {
         }
     }
     
-    val mempoolClient = MempoolClientImpl(
-        baseUrl = cfg.mempoolBaseUrl,
+    val mainnetClient = MempoolClientImpl(
+        baseUrl = cfg.mainnetMempoolUrl,
+        client = httpClient
+    )
+    val testnetClient = MempoolClientImpl(
+        baseUrl = cfg.testnetMempoolUrl,
         client = httpClient
     )
 
@@ -74,7 +78,7 @@ fun main() {
                 call.respondText("ok") 
             }
             
-            blockchainRoutes(mempoolClient)
+            blockchainRoutes(mainnetClient, testnetClient)
         }
     }.start(wait = true)
 }

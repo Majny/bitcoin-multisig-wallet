@@ -23,6 +23,7 @@ val AccentTeal = Color(0xFF14B8A6)
 val AccentBlue = Color(0xFF4A90D9)
 val TrezorGreen = Color(0xFF1B8F2A)
 val ErrorRed = Color(0xFFE57373)
+val TestnetAmber = Color(0xFFF59E0B)
 
 // Button colors
 val ButtonPrimary = Color(0xFF14B8A6)

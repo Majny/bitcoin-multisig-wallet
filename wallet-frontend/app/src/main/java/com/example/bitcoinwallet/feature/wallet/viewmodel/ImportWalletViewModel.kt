@@ -49,9 +49,11 @@ class ImportWalletViewModel : ViewModel() {
                 val token = SessionStore.session?.accessToken
                     ?: throw IllegalStateException("Not authenticated")
 
+                val derivationPath = SessionStore.pendingIdentity?.derivationPath ?: ""
+                val network = if (derivationPath.contains("'/1'/")) "testnet" else "mainnet"
                 val request = ImportWalletRequestDto(
                     descriptor = state.descriptor.trim(),
-                    network = "mainnet",
+                    network = network,
                     label = state.walletName.ifBlank { null }
                 )
 

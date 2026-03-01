@@ -60,29 +60,31 @@ class WalletExplorer(
             )
         }
 
-        // Paralelně získej UTXOs pro všechny adresy
-        val allUtxos = addresses.map { addr ->
+        val network = detectNetwork(addresses)
+
+        // Paralelně získej AddressInfo pro všechny adresy.
+        // AddressInfo obsahuje přímo confirmed/unconfirmed zůstatek — nepotřebujeme
+        // načítat UTXOs jen kvůli výpočtu balance (to šetří ~30 API volání na mempool.space).
+        val infoList = addresses.map { addr ->
             async {
                 try {
-                    blockchain.getAddressUtxos(addr.address).map { utxo ->
-                        utxo to addr.address
-                    }
+                    blockchain.getAddressInfo(addr.address, network)
                 } catch (e: Exception) {
-                    log.warn("Failed to get UTXOs for {}: {}", addr.address, e.message)
-                    emptyList()
+                    log.warn("Failed to get address info for {}: {}", addr.address, e.message)
+                    null
                 }
             }
-        }.awaitAll().flatten()
+        }.awaitAll().filterNotNull()
 
-        val confirmed = allUtxos.filter { it.first.status.confirmed }.sumOf { it.first.value }
-        val unconfirmed = allUtxos.filter { !it.first.status.confirmed }.sumOf { it.first.value }
+        val confirmed = infoList.sumOf { it.confirmedBalance }
+        val unconfirmed = infoList.sumOf { it.unconfirmedBalance }
 
         WalletBalanceResponse(
             walletId = walletId,
             confirmedSats = confirmed,
             unconfirmedSats = unconfirmed,
             totalSats = confirmed + unconfirmed,
-            utxoCount = allUtxos.size,
+            utxoCount = infoList.sumOf { it.utxoCount },
             addressCount = addresses.size
         )
     }
@@ -124,21 +126,40 @@ class WalletExplorer(
             )
         }
 
-        // Paralelně stáhni tx pro všechny adresy a aktuální výšku bloku
-        val txFetch = addresses.map { addr ->
+        val network = detectNetwork(addresses)
+
+        // Krok 1: AddressInfo pro všechny adresy (výsledek je cachován 60 s —
+        // pokud frontend zavolal /balance těsně předtím, tato volání jsou zdarma).
+        val infoFetch = addresses.map { addr ->
             async {
-                try {
-                    blockchain.getAddressTransactions(addr.address)
-                } catch (e: Exception) {
-                    log.warn("Failed to get txs for {}: {}", addr.address, e.message)
-                    emptyList()
+                try { blockchain.getAddressInfo(addr.address, network) to addr }
+                catch (e: Exception) {
+                    log.warn("Failed to get address info for {}: {}", addr.address, e.message)
+                    null
                 }
             }
         }
         val tipFetch = async {
-            try { blockchain.getTipHeight() } catch (e: Exception) {
+            try { blockchain.getTipHeight(network) } catch (e: Exception) {
                 log.warn("Failed to get tip height: {}", e.message)
                 0
+            }
+        }
+
+        // Krok 2: stáhni tx jen pro adresy s alespoň jednou transakcí
+        val activeAddresses = infoFetch.awaitAll()
+            .filterNotNull()
+            .filter { (info, _) -> info.txCount > 0 }
+            .map { it.second }
+
+        val txFetch = activeAddresses.map { addr ->
+            async {
+                try {
+                    blockchain.getAddressTransactions(addr.address, network)
+                } catch (e: Exception) {
+                    log.warn("Failed to get txs for {}: {}", addr.address, e.message)
+                    emptyList()
+                }
             }
         }
 
@@ -182,10 +203,25 @@ class WalletExplorer(
 
         val addresses = registry.getAddresses(walletId)
 
-        val enrichedUtxos = addresses.map { addr ->
+        val network = detectNetwork(addresses)
+
+        // Pre-filter pomocí AddressInfo (cachováno 60 s — při přechodu z main menu zdarma).
+        // Adresy s utxoCount == 0 přeskočíme, abychom zbytečně nevolali /utxo endpoint.
+        val activeAddresses = addresses.map { addr ->
             async {
                 try {
-                    blockchain.getAddressUtxos(addr.address).map { utxo ->
+                    val info = blockchain.getAddressInfo(addr.address, network)
+                    if (info.utxoCount > 0) addr else null
+                } catch (e: Exception) {
+                    addr  // při chybě fetchujeme UTXOs raději i tak
+                }
+            }
+        }.awaitAll().filterNotNull()
+
+        val enrichedUtxos = activeAddresses.map { addr ->
+            async {
+                try {
+                    blockchain.getAddressUtxos(addr.address, network).map { utxo ->
                         WalletUtxo(
                             txid = utxo.txid,
                             vout = utxo.vout,
@@ -233,11 +269,13 @@ class WalletExplorer(
         val receiveAddresses = registry.getAddresses(walletId, "receive")
             .sortedBy { it.index }
 
+        val network = detectNetwork(receiveAddresses)
+
         // Paralelně zjisti aktivitu
         val withActivity = receiveAddresses.map { addr ->
             async {
                 val hasActivity = try {
-                    blockchain.hasActivity(addr.address)
+                    blockchain.hasActivity(addr.address, network)
                 } catch (e: Exception) {
                     false
                 }
@@ -272,6 +310,17 @@ class WalletExplorer(
     // ========================================================================
     // HELPERS
     // ========================================================================
+
+    /**
+     * Detekuje síť z formátu první adresy.
+     * tb1 / 2 / m / n  → testnet
+     * bc1 / 1 / 3      → mainnet
+     */
+    private fun detectNetwork(addresses: List<cz.majny.wallet.explorer.client.AddressRecord>): String {
+        val first = addresses.firstOrNull()?.address ?: return "mainnet"
+        return if (first.startsWith("tb1") || first.startsWith("2") ||
+                   first.startsWith("m")   || first.startsWith("n")) "testnet" else "mainnet"
+    }
 
     /**
      * Klasifikuje transakci z pohledu peněženky.

@@ -172,28 +172,22 @@ class MempoolClientImpl(
     private val client: HttpClient
 ) : MempoolClient {
 
-    // mempool.space public API rate-limits aggressive parallel requests.
-    // Semaphore limits concurrent in-flight requests to avoid 429s.
-    private val rateLimiter = Semaphore(3)
+    // Blockstream.info is much more lenient than mempool.space.
+    // Semaphore(5) allows 5 concurrent requests — keeps total latency under 5 s
+    // for a typical 30-address wallet while staying polite to the public API.
+    private val rateLimiter = Semaphore(5)
 
     /**
-     * Executes a GET request with automatic retry on 429 Too Many Requests.
-     * Retries up to 3 times with increasing delays (500ms, 1000ms).
-     * The delay is held inside withPermit so the semaphore slot stays occupied
-     * during the wait — this throttles the overall request rate when rate-limited.
+     * Executes a GET request with one retry on 429 Too Many Requests.
+     * The delay is outside withPermit so other queued requests can proceed during the wait.
+     * Only 1 retry: if the IP is in a penalty box, retrying many times just
+     * keeps the queue backed up for 20+ seconds — better to fail fast.
      */
     private suspend fun getChecked(url: String): HttpResponse {
-        for (attempt in 0..2) {
-            val response: HttpResponse = rateLimiter.withPermit {
-                val resp = client.get(url)
-                if (resp.status == HttpStatusCode.TooManyRequests && attempt < 2) {
-                    delay(500L * (attempt + 1))
-                }
-                resp
-            }
-            if (response.status != HttpStatusCode.TooManyRequests) return response
-        }
-        error("Rate limited after 3 attempts: $url")
+        val first = rateLimiter.withPermit { client.get(url) }
+        if (first.status != HttpStatusCode.TooManyRequests) return first
+        delay(1000L)
+        return rateLimiter.withPermit { client.get(url) }
     }
 
     override suspend fun getAddressInfo(address: String): AddressInfo =
@@ -206,7 +200,26 @@ class MempoolClientImpl(
         getChecked("$baseUrl/address/$address/txs").body()
 
     override suspend fun getFeeEstimates(): FeeEstimates {
-        return client.get("$baseUrl/v1/fees/recommended").body()
+        // Blockstream Esplora: GET /fee-estimates
+        // Returns {"1": 10.0, "3": 7.0, "6": 5.0, ...} — key = confirmation target in blocks
+        val fees: Map<String, Double> = client.get("$baseUrl/fee-estimates").body()
+        fun pick(target: Int): Int {
+            val exact = fees[target.toString()]
+            if (exact != null) return exact.toInt().coerceAtLeast(1)
+            // nearest available target that is <= requested
+            return fees.entries
+                .mapNotNull { (k, v) -> k.toIntOrNull()?.let { it to v } }
+                .filter { (k, _) -> k <= target }
+                .maxByOrNull { (k, _) -> k }
+                ?.second?.toInt()?.coerceAtLeast(1) ?: 1
+        }
+        return FeeEstimates(
+            fastestFee  = pick(1),
+            halfHourFee = pick(3),
+            hourFee     = pick(6),
+            economyFee  = pick(24),
+            minimumFee  = pick(144)
+        )
     }
 
     override suspend fun getTransaction(txid: String): MempoolTransaction {

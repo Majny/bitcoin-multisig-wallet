@@ -38,7 +38,7 @@ fun Route.psbtRoutes(
                 // 2. Získej UTXOs
                 val utxos = if (request.utxos != null) {
                     // Manuální výběr (coin control)
-                    selectSpecificUtxos(request.utxos, request.walletId, blockchainClient, registryClient)
+                    selectSpecificUtxos(request.utxos, request.walletId, wallet.network, blockchainClient, registryClient)
                 } else {
                     // Automatický výběr — posíláme celý wallet pro správný výpočet fee (singlesig vs multisig)
                     val totalNeeded = request.outputs.sumOf { it.amountSats }
@@ -195,10 +195,11 @@ fun Route.psbtRoutes(
                 fingerprint = request.fingerprint
             )
             
-            val updated = repository.findById(uuid)!!
+            val updated = repository.findById(uuid)
+                ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
             appCall.respond(updated)
         }
-        
+
         /**
          * POST /psbt/{id}/combine
          * Kombinuje více částečně podepsaných PSBT.
@@ -241,10 +242,11 @@ fun Route.psbtRoutes(
                 status = newStatus
             )
             
-            val updated = repository.findById(uuid)!!
+            val updated = repository.findById(uuid)
+                ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
             appCall.respond(updated)
         }
-        
+
         /**
          * POST /psbt/{id}/finalize
          * Finalizuje PSBT a připraví raw transakci k broadcastu.
@@ -337,8 +339,9 @@ fun Route.psbtRoutes(
                 return@post
             }
             
-            // Broadcast
-            val broadcastResult = blockchainClient.broadcastTransaction(finalResult.txHex)
+            // Broadcast — síť se odvozuje z walletId (wallet-fp-testnet-WPKH-0)
+            val broadcastNetwork = if (existing.walletId.contains("testnet")) "testnet" else "mainnet"
+            val broadcastResult = blockchainClient.broadcastTransaction(finalResult.txHex, broadcastNetwork)
             
             if (broadcastResult.error != null) {
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to broadcastResult.error))
@@ -448,6 +451,7 @@ fun Route.psbtRoutes(
 private suspend fun selectSpecificUtxos(
     selections: List<UtxoSelection>,
     walletId: String,
+    network: String,
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient
 ): List<SelectedUtxo> {
@@ -457,7 +461,7 @@ private suspend fun selectSpecificUtxos(
 
     val result = mutableListOf<SelectedUtxo>()
     for (addrDto in allAddresses) {
-        val utxos = blockchainClient.getUtxos(addrDto.address)
+        val utxos = blockchainClient.getUtxos(addrDto.address, network)
         for (utxo in utxos) {
             val key = "${utxo.txid}:${utxo.vout}"
             if (key in selectionSet) {
@@ -494,7 +498,7 @@ private suspend fun autoSelectUtxos(
     data class RichUtxo(val utxo: UtxoDto, val addrDto: AddressDto)
     val allUtxos = mutableListOf<RichUtxo>()
     for (addrDto in allAddresses) {
-        val utxos = blockchainClient.getUtxos(addrDto.address)
+        val utxos = blockchainClient.getUtxos(addrDto.address, wallet.network)
         for (utxo in utxos) {
             allUtxos.add(RichUtxo(utxo, addrDto))
         }

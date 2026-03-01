@@ -43,9 +43,14 @@ class TrezorDeeplinkLauncher(
         }
     }
 
-    fun openGetPublicKey(context: Context, derivationPath: String = "m/84'/0'/0'"): Boolean {
+    fun openGetPublicKey(
+        context: Context,
+        derivationPath: String = "m/84'/1'/0'",
+        network: String = "testnet"
+    ): Boolean {
+        val coin = if (network == "testnet") "tbtc" else "btc"
         val paramsJson = JSONObject().apply {
-            put("coin", "btc")
+            put("coin", coin)
             put("path", derivationPath)
             put("showOnTrezor", false)
             put("suppressBackupWarning", true)
@@ -79,9 +84,10 @@ class TrezorDeeplinkLauncher(
      *
      * Uses Trezor Connect deeplink method "signTransaction" with PSBT payload.
      */
-    fun openSignTransaction(context: Context, psbtBase64: String): Boolean {
+    fun openSignTransaction(context: Context, psbtBase64: String, network: String = "testnet"): Boolean {
+        val coin = if (network == "testnet") "tbtc" else "btc"
         val paramsJson = JSONObject().apply {
-            put("coin", "btc")
+            put("coin", coin)
             put("psbt", psbtBase64)
         }.toString()
 
@@ -109,9 +115,10 @@ class TrezorDeeplinkLauncher(
      * Opens Trezor Suite to display an address on the Trezor device screen.
      * This lets the user verify the receive address on the hardware device.
      */
-    fun openGetAddress(context: Context, derivationPath: String = "m/84'/0'/0'/0/0"): Boolean {
+    fun openGetAddress(context: Context, derivationPath: String = "m/84'/1'/0'/0/0", network: String = "testnet"): Boolean {
+        val coin = if (network == "testnet") "tbtc" else "btc"
         val paramsJson = JSONObject().apply {
-            put("coin", "btc")
+            put("coin", coin)
             put("path", derivationPath)
             put("showOnTrezor", true)
         }.toString()

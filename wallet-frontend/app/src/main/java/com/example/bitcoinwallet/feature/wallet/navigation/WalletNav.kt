@@ -89,6 +89,10 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val uiState by viewModel.uiState.collectAsState()
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             val scope = rememberCoroutineScope()
+            val walletNetwork = remember {
+                SessionStore.session?.user?.wallets
+                    ?.find { it.id == SessionStore.activeWalletId }?.network ?: "mainnet"
+            }
 
             ModalNavigationDrawer(
                 drawerState = drawerState,
@@ -110,6 +114,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     transactions = uiState.transactions,
                     isLoading = uiState.isLoading,
                     error = uiState.error,
+                    network = walletNetwork,
                     onMenuClick = {
                         scope.launch { drawerState.open() }
                     },
@@ -131,6 +136,10 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val state by viewModel.uiState.collectAsState()
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
+            val walletNetwork = remember {
+                SessionStore.session?.user?.wallets
+                    ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
+            }
 
             // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný PSBT,
             // včetně případu kdy activity přežila přes onNewIntent (FLAG_SINGLE_TOP).
@@ -164,7 +173,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onCreateTransaction = {
                     viewModel.createTransaction { psbtBase64 ->
                         // Open Trezor Suite to sign the PSBT
-                        trezorLauncher.openSignTransaction(context, psbtBase64)
+                        trezorLauncher.openSignTransaction(context, psbtBase64, walletNetwork)
                     }
                 }
             )
@@ -229,13 +238,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val state by viewModel.uiState.collectAsState()
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
+            val walletNetwork = remember {
+                SessionStore.session?.user?.wallets
+                    ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
+            }
 
             ReceiveBtcScreen(
                 state = state,
                 onClose = { navController.popBackStack() },
                 onCopied = { viewModel.onCopied() },
                 onShowOnTrezor = {
-                    trezorLauncher.openGetAddress(context, state.derivationPath.ifBlank { "m/84'/0'/0'/0/0" })
+                    trezorLauncher.openGetAddress(
+                        context,
+                        state.derivationPath.ifBlank { "m/84'/1'/0'/0/0" },
+                        walletNetwork
+                    )
                 }
             )
         }
@@ -427,6 +444,10 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val detailState by viewModel.uiState.collectAsState()
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
+            val walletNetwork = remember {
+                SessionStore.session?.user?.wallets
+                    ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
+            }
 
             LaunchedEffect(psbtId) {
                 viewModel.loadPsbt(psbtId)
@@ -445,7 +466,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 state = detailState,
                 onClose = { navController.popBackStack() },
                 onSignPsbt = {
-                    trezorLauncher.openSignTransaction(context, detailState.psbtBase64)
+                    trezorLauncher.openSignTransaction(context, detailState.psbtBase64, walletNetwork)
                 },
                 onExportPsbt = {
                     // TODO: share/export PSBT base64

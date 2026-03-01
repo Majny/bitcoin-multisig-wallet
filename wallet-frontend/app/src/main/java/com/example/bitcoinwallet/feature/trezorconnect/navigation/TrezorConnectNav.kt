@@ -33,7 +33,10 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
             val launcher = TrezorDeeplinkLauncher()
 
             TrezorConnectScreen(
-                onConnect = { launcher.openGetPublicKey(context) }
+                onConnect = { network ->
+                    val coinType = if (network == "testnet") 1 else 0
+                    launcher.openGetPublicKey(context, "m/84'/$coinType'/0'", network)
+                }
             )
         }
 
@@ -79,7 +82,14 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
         }
 
         composable(TrezorRoutes.SelectAccount) {
-            val wallets = SessionStore.session?.user?.wallets.orEmpty()
+            // Zobraz jen wallety sítě, se kterou se právě přihlásilo.
+            // pendingIdentity.derivationPath: "m/84'/1'/0'" = testnet, "m/84'/0'/0'" = mainnet
+            val connectedNetwork = SessionStore.pendingIdentity?.derivationPath
+                ?.let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
+                ?: "mainnet"
+            val wallets = SessionStore.session?.user?.wallets
+                .orEmpty()
+                .filter { it.network == connectedNetwork }
 
             SelectAccountScreen(
                 wallets = wallets,

@@ -125,7 +125,8 @@ services:
       - "8086:8086"
     environment:
       PORT: "8086"
-      MEMPOOL_BASE_URL: ${MEMPOOL_BASE_URL:-https://mempool.space/api}
+      MAINNET_MEMPOOL_URL: ${MAINNET_MEMPOOL_URL:-https://blockstream.info/api}
+      TESTNET_MEMPOOL_URL: ${TESTNET_MEMPOOL_URL:-https://blockstream.info/testnet/api}
     restart: unless-stopped
 
   price-service:

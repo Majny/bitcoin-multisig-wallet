@@ -13,12 +13,12 @@ import com.example.bitcoinwallet.feature.wallet.navigation.walletGraph
 @Composable
 fun AppNavHost(
     navController: NavHostController,
-    startConnected: Boolean
+    connectTrigger: Int
 ) {
     // Determine start destination based on session state
     val hasActiveSession = SessionStore.session != null && SessionStore.hasWalletSelected()
     val startDestination = if (hasActiveSession) WalletRoutes.Graph else TrezorRoutes.Graph
-    
+
     NavHost(
         navController = navController,
         startDestination = startDestination
@@ -27,8 +27,9 @@ fun AppNavHost(
         walletGraph(navController)
     }
 
-    LaunchedEffect(startConnected) {
-        if (startConnected) {
+    // Každý nový Trezor callback inkrementuje connectTrigger → efekt se vždy provede.
+    LaunchedEffect(connectTrigger) {
+        if (connectTrigger > 0) {
             navController.navigate(TrezorRoutes.Resolve) {
                 popUpTo(TrezorRoutes.Graph) { inclusive = false }
                 launchSingleTop = true

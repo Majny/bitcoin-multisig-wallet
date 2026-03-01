@@ -15,14 +15,13 @@ import com.example.bitcoinwallet.ui.theme.BitcoinWalletTheme
 
 class MainActivity : ComponentActivity() {
 
-    private var startConnected by mutableStateOf(false)
+    private var connectTrigger by mutableStateOf(0)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // TODO: is it better?
         enableEdgeToEdge()
 
-        startConnected = intent.getBooleanExtra("trezor_connected", false)
+        if (intent.getBooleanExtra("trezor_connected", false)) connectTrigger++
 
         setContent {
             BitcoinWalletTheme {
@@ -30,7 +29,7 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     AppNavHost(
                         navController = navController,
-                        startConnected = startConnected
+                        connectTrigger = connectTrigger
                     )
                 }
             }
@@ -40,6 +39,6 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        startConnected = intent.getBooleanExtra("trezor_connected", false)
+        if (intent.getBooleanExtra("trezor_connected", false)) connectTrigger++
     }
 }

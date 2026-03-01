@@ -25,33 +25,38 @@ class BlockchainClient(private val baseUrl: String) {
     /**
      * Získá UTXOs pro adresu.
      */
-    suspend fun getUtxos(address: String): List<UtxoDto> {
-        return client.get("$baseUrl/api/v1/blockchain/address/$address/utxos").body()
+    suspend fun getUtxos(address: String, network: String = "mainnet"): List<UtxoDto> {
+        return client.get("$baseUrl/api/v1/blockchain/address/$address/utxos") {
+            parameter("network", network)
+        }.body()
     }
-    
+
     /**
      * Získá raw transakci podle txid.
      */
     suspend fun getRawTransaction(txid: String): RawTxResponse {
         return client.get("$baseUrl/api/v1/blockchain/tx/$txid/hex").body()
     }
-    
+
     /**
      * Broadcast raw transakce.
      */
-    suspend fun broadcastTransaction(txHex: String): BroadcastResult {
+    suspend fun broadcastTransaction(txHex: String, network: String = "mainnet"): BroadcastResult {
         val response = client.post("$baseUrl/api/v1/blockchain/tx/broadcast") {
+            parameter("network", network)
             contentType(ContentType.Application.Json)
             setBody(BroadcastRequest(hex = txHex))
         }
         return response.body()
     }
-    
+
     /**
      * Získá doporučené fee rates.
      */
-    suspend fun getFeeEstimates(): FeeEstimates {
-        return client.get("$baseUrl/api/v1/blockchain/fees").body()
+    suspend fun getFeeEstimates(network: String = "mainnet"): FeeEstimates {
+        return client.get("$baseUrl/api/v1/blockchain/fees") {
+            parameter("network", network)
+        }.body()
     }
 }
 

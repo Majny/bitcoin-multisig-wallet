@@ -141,7 +141,9 @@ class TrezorCallbackActivity : ComponentActivity() {
             TrezorDeviceIdentity(
                 fingerprint = payload.optString("fingerprint", ""),
                 xpub = xpub,
-                derivationPath = payload.optString("path", "m/84'/0'/0'"),
+                derivationPath = payload.optString("serializedPath", "").ifBlank {
+                    payload.optString("path", "m/84'/1'/0'")
+                },
                 deviceModel = payload.optString("device_model", null),
                 deviceLabel = payload.optString("device_label", null)
             )

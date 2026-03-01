@@ -64,7 +64,7 @@ class ReceiveBtcViewModel : ViewModel() {
                     else -> 84  // P2WPKH default
                 }
                 val coinType = if (wallet?.network == "testnet") 1 else 0
-                val derivationPath = "m/$purpose'/0'/0'/0/${dto.index}"
+                val derivationPath = "m/$purpose'/$coinType'/0'/0/${dto.index}"
 
                 val qr = generateQrBitmap("bitcoin:${dto.address}", size = 512)
 

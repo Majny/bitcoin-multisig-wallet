@@ -1,5 +1,6 @@
 package com.example.bitcoinwallet.feature.trezorconnect.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -9,6 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontWeight
 import com.example.bitcoinwallet.core.signer.WalletSummary
 import com.example.bitcoinwallet.ui.theme.*
 
@@ -80,13 +83,32 @@ fun SelectAccountScreen(
                                 color = TextPrimary,
                                 style = MaterialTheme.typography.titleMedium
                             )
-                            Spacer(Modifier.height(2.dp))
+                            Spacer(Modifier.height(4.dp))
 
-                            Text(
-                                text = "${w.network} · ${w.scriptType}",
-                                color = TextSecondary,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                val netColor = if (w.network == "mainnet") BitcoinOrange else TestnetAmber
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(netColor.copy(alpha = 0.18f))
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = w.network.uppercase(),
+                                        color = netColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Text(
+                                    text = w.scriptType,
+                                    color = TextSecondary,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
 
                             if (w.type == com.example.bitcoinwallet.core.signer.WalletType.MULTI_SIG && w.m != null && w.n != null) {
                                 Spacer(Modifier.height(2.dp))

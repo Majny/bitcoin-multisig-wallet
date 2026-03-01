@@ -2,7 +2,8 @@ package cz.majny.wallet.blockchain.config
 
 data class AppConfig(
     val port: Int,
-    val mempoolBaseUrl: String,
+    val mainnetMempoolUrl: String,
+    val testnetMempoolUrl: String,
 ) {
     companion object {
         fun fromEnv(): AppConfig {
@@ -10,7 +11,8 @@ data class AppConfig(
 
             return AppConfig(
                 port = env("PORT", "8086").toInt(),
-                mempoolBaseUrl = env("MEMPOOL_BASE_URL", "https://mempool.space/api"),
+                mainnetMempoolUrl = env("MAINNET_MEMPOOL_URL", "https://blockstream.info/api"),
+                testnetMempoolUrl = env("TESTNET_MEMPOOL_URL", "https://blockstream.info/testnet/api"),
             )
         }
     }

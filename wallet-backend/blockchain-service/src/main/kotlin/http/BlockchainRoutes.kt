@@ -11,99 +11,100 @@ import kotlinx.serialization.Serializable
 /**
  * Routes for blockchain data via Mempool.space API.
  */
-fun Route.blockchainRoutes(mempool: MempoolClient) {
+fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
+    fun clientFor(network: String?) = if (network == "testnet") testnet else mainnet
+
     route("/api/v1/blockchain") {
-        
+
         /**
-         * GET /api/v1/blockchain/address/{address}
+         * GET /api/v1/blockchain/address/{address}?network=mainnet|testnet
          * Get address info including balance and tx count.
          */
         get("/address/{address}") {
-            val address = call.parameters["address"] 
+            val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
-            
+            val mempool = clientFor(call.request.queryParameters["network"])
+
             val info = mempool.getAddressInfo(address)
             call.respond(AddressInfoResponse(
                 address = info.address,
                 txCount = info.txCount,
-                balance = info.balance
+                balance = info.balance,
+                confirmedBalance = info.chain_stats.funded_txo_sum - info.chain_stats.spent_txo_sum,
+                unconfirmedBalance = info.mempool_stats.funded_txo_sum - info.mempool_stats.spent_txo_sum,
+                utxoCount = info.chain_stats.funded_txo_count - info.chain_stats.spent_txo_count +
+                        info.mempool_stats.funded_txo_count - info.mempool_stats.spent_txo_count
             ))
         }
         
         /**
-         * GET /api/v1/blockchain/address/{address}/utxos
-         * Get UTXOs for coin control.
+         * GET /api/v1/blockchain/address/{address}/utxos?network=mainnet|testnet
          */
         get("/address/{address}/utxos") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
-            
+            val mempool = clientFor(call.request.queryParameters["network"])
             val utxos = mempool.getAddressUtxos(address)
             call.respond(utxos)
         }
-        
+
         /**
-         * GET /api/v1/blockchain/address/{address}/txs
-         * Get transaction history for address.
+         * GET /api/v1/blockchain/address/{address}/txs?network=mainnet|testnet
          */
         get("/address/{address}/txs") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
-            
+            val mempool = clientFor(call.request.queryParameters["network"])
             val txs = mempool.getAddressTransactions(address)
             call.respond(txs)
         }
-        
+
         /**
-         * GET /api/v1/blockchain/address/{address}/has-activity
-         * Check if address has any transaction activity (for account discovery).
+         * GET /api/v1/blockchain/address/{address}/has-activity?network=mainnet|testnet
          */
         get("/address/{address}/has-activity") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
-            
+            val mempool = clientFor(call.request.queryParameters["network"])
             val hasActivity = mempool.hasActivity(address)
             call.respond(HasActivityResponse(address = address, hasActivity = hasActivity))
         }
-        
+
         /**
-         * GET /api/v1/blockchain/fees
-         * Get recommended fee rates.
+         * GET /api/v1/blockchain/fees?network=mainnet|testnet
          */
         get("/fees") {
+            val mempool = clientFor(call.request.queryParameters["network"])
             val fees = mempool.getFeeEstimates()
             call.respond(fees)
         }
 
         /**
-         * GET /api/v1/blockchain/tip/height
-         * Vrátí výšku aktuálního nejlepšího bloku.
-         * Používá se pro výpočet počtu konfirmací v explorer-service.
+         * GET /api/v1/blockchain/tip/height?network=mainnet|testnet
          */
         get("/tip/height") {
+            val mempool = clientFor(call.request.queryParameters["network"])
             val height = mempool.getTipHeight()
             call.respond(TipHeightResponse(height))
         }
-        
+
         /**
-         * GET /api/v1/blockchain/tx/{txid}
-         * Get transaction details.
+         * GET /api/v1/blockchain/tx/{txid}?network=mainnet|testnet
          */
         get("/tx/{txid}") {
             val txid = call.parameters["txid"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing txid")
-            
+            val mempool = clientFor(call.request.queryParameters["network"])
             val tx = mempool.getTransaction(txid)
             call.respond(tx)
         }
-        
+
         /**
-         * POST /api/v1/blockchain/tx/broadcast
-         * Broadcast a raw transaction.
+         * POST /api/v1/blockchain/tx/broadcast?network=mainnet|testnet
          */
         post("/tx/broadcast") {
             val request = call.receive<BroadcastRequest>()
-            
+            val mempool = clientFor(call.request.queryParameters["network"])
             try {
                 val txid = mempool.broadcastTransaction(request.hex)
                 call.respond(BroadcastResponse(success = true, txid = txid))
@@ -123,7 +124,10 @@ fun Route.blockchainRoutes(mempool: MempoolClient) {
 data class AddressInfoResponse(
     val address: String,
     val txCount: Int,
-    val balance: Long
+    val balance: Long,
+    val confirmedBalance: Long,
+    val unconfirmedBalance: Long,
+    val utxoCount: Int
 )
 
 @Serializable
