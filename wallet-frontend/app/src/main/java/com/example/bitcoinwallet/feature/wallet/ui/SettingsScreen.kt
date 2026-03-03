@@ -29,7 +29,7 @@ private val currencies = listOf("CZK", "USD", "EUR")
 @Composable
 fun SettingsScreen(
     onClose: () -> Unit,
-    onDisconnect: () -> Unit,
+    onSwitchAccount: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var selectedCurrency by remember {
@@ -73,8 +73,8 @@ fun SettingsScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        /* ── Trezor Device section ── */
-        SectionLabel("Trezor Device")
+        /* ── Account section ── */
+        SectionLabel("Account")
 
         Column(
             modifier = Modifier
@@ -89,7 +89,7 @@ fun SettingsScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(text = "Status", color = TextMuted, fontSize = 14.sp)
+                Text(text = "Trezor", color = TextMuted, fontSize = 14.sp)
                 Text(
                     text = "Connected",
                     color = ReceiveGreen,
@@ -101,17 +101,17 @@ fun SettingsScreen(
             Spacer(modifier = Modifier.height(16.dp))
 
             Button(
-                onClick = onDisconnect,
+                onClick = onSwitchAccount,
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = ErrorRed.copy(alpha = 0.15f),
-                    contentColor = ErrorRed
+                    containerColor = AccentTeal.copy(alpha = 0.15f),
+                    contentColor = AccentTeal
                 ),
                 shape = RoundedCornerShape(24.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)
             ) {
-                Text(text = "Disconnect", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                Text(text = "Switch Account", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
             }
         }
 
@@ -212,5 +212,5 @@ private fun SettingsRow(label: String, value: String) {
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable
 private fun SettingsPreview() {
-    SettingsScreen(onClose = {}, onDisconnect = {})
+    SettingsScreen(onClose = {}, onSwitchAccount = {})
 }

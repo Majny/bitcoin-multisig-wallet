@@ -1,6 +1,6 @@
 package com.example.bitcoinwallet.feature.wallet.model
 
-import java.time.LocalDate
+import java.time.LocalDateTime
 
 /**
  * Represents a single transaction in history.
@@ -10,7 +10,7 @@ data class Transaction(
     val txid: String,
     val type: TransactionType,
     val amount: Long, // in satoshis
-    val date: LocalDate,
+    val dateTime: LocalDateTime,
     val confirmed: Boolean = true,
     val confirmations: Int = 6
 )

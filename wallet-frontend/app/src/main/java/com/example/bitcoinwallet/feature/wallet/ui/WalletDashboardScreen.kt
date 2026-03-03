@@ -24,7 +24,7 @@ import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.components.SecondaryButton
 import com.example.bitcoinwallet.ui.components.WalletTopBar
 import com.example.bitcoinwallet.ui.theme.*
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
 /**
@@ -185,11 +185,12 @@ private fun TransactionHistorySection(
                 }
             }
             else -> {
+                val sorted = transactions.sortedByDescending { it.dateTime }
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(vertical = 8.dp)
                 ) {
-                    items(transactions) { transaction ->
+                    items(sorted) { transaction ->
                         TransactionItem(
                             transaction = transaction,
                             onClick = { onTransactionClick(transaction) }
@@ -208,11 +209,12 @@ private fun TransactionItem(
     modifier: Modifier = Modifier
 ) {
     val dateFormatter = DateTimeFormatter.ofPattern("MMM dd")
+    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     val typeText = if (transaction.type == TransactionType.RECEIVED) "Received" else "Sent"
     val amountBtc = transaction.amount / 100_000_000.0
     val amountText = String.format("%.8f BTC", amountBtc)
     val typeColor = if (transaction.type == TransactionType.RECEIVED) ReceiveGreen else TextSecondary
-    
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -220,14 +222,20 @@ private fun TransactionItem(
             .padding(horizontal = 20.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Date
-        Text(
-            text = transaction.date.format(dateFormatter),
-            color = TextMuted,
-            fontSize = 14.sp,
-            modifier = Modifier.width(56.dp)
-        )
-        
+        // Date + Time
+        Column(modifier = Modifier.width(56.dp)) {
+            Text(
+                text = transaction.dateTime.format(dateFormatter),
+                color = TextMuted,
+                fontSize = 14.sp
+            )
+            Text(
+                text = transaction.dateTime.format(timeFormatter),
+                color = TextMuted,
+                fontSize = 11.sp
+            )
+        }
+
         // Type + Amount
         Text(
             text = "$typeText $amountText",
@@ -249,12 +257,12 @@ private fun WalletDashboardPreview() {
     )
     
     val sampleTransactions = listOf(
-        Transaction("1", "tx1", TransactionType.RECEIVED, 1500000, LocalDate.of(2024, 4, 25)),
-        Transaction("2", "tx2", TransactionType.SENT, 250000, LocalDate.of(2024, 4, 24)),
-        Transaction("3", "tx3", TransactionType.RECEIVED, 10000000, LocalDate.of(2024, 4, 23)),
-        Transaction("4", "tx4", TransactionType.SENT, 500000, LocalDate.of(2024, 4, 22)),
-        Transaction("5", "tx5", TransactionType.RECEIVED, 2000000, LocalDate.of(2024, 4, 21)),
-        Transaction("6", "tx6", TransactionType.SENT, 120000, LocalDate.of(2024, 4, 20)),
+        Transaction("1", "tx1", TransactionType.RECEIVED, 1500000, LocalDateTime.of(2024, 4, 25, 14, 32)),
+        Transaction("2", "tx2", TransactionType.SENT, 250000, LocalDateTime.of(2024, 4, 24, 9, 15)),
+        Transaction("3", "tx3", TransactionType.RECEIVED, 10000000, LocalDateTime.of(2024, 4, 23, 18, 45)),
+        Transaction("4", "tx4", TransactionType.SENT, 500000, LocalDateTime.of(2024, 4, 22, 11, 0)),
+        Transaction("5", "tx5", TransactionType.RECEIVED, 2000000, LocalDateTime.of(2024, 4, 21, 20, 10)),
+        Transaction("6", "tx6", TransactionType.SENT, 120000, LocalDateTime.of(2024, 4, 20, 7, 55)),
     )
     
     BitcoinWalletTheme {

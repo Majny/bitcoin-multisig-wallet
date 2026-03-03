@@ -5,7 +5,7 @@ import com.example.bitcoinwallet.feature.wallet.model.Transaction
 import com.example.bitcoinwallet.feature.wallet.model.TransactionType
 import com.example.bitcoinwallet.feature.wallet.model.WalletBalance
 import java.time.Instant
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.ZoneId
 
 /**
@@ -71,18 +71,18 @@ class WalletRepository(
                 else   -> TransactionType.RECEIVED
             }
             
-            val date = tx.blockTime?.let { timestamp ->
+            val dateTime = tx.blockTime?.let { timestamp ->
                 Instant.ofEpochSecond(timestamp)
                     .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-            } ?: LocalDate.now()
-            
+                    .toLocalDateTime()
+            } ?: LocalDateTime.now()
+
             Transaction(
                 id = tx.txid,
                 txid = tx.txid,
                 type = type,
                 amount = tx.amountSats,
-                date = date,
+                dateTime = dateTime,
                 confirmed = tx.confirmed,
                 confirmations = tx.confirmations
             )
