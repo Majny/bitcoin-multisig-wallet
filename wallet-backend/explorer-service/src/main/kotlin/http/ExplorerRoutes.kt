@@ -125,8 +125,10 @@ fun Route.explorerRoutes(
             val txid = call.parameters["txid"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing txid"))
 
+            val network = call.request.queryParameters["network"] ?: "mainnet"
+
             try {
-                val tx = blockchainClient.getTransaction(txid)
+                val tx = blockchainClient.getTransaction(txid, network)
 
                 val detail = TransactionDetailResponse(
                     txid = tx.txid,
@@ -172,8 +174,15 @@ fun Route.explorerRoutes(
                 ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing txid"))
             val walletId = call.request.queryParameters["walletId"]
 
+            // Detect network from walletId (e.g. "wallet-123-testnet-WPKH-0")
+            // or from explicit query parameter, fallback to mainnet
+            val network = when {
+                walletId?.contains("testnet") == true -> "testnet"
+                else -> call.request.queryParameters["network"] ?: "mainnet"
+            }
+
             try {
-                val tx = blockchainClient.getTransaction(txid)
+                val tx = blockchainClient.getTransaction(txid, network)
 
                 // Pokud je walletId, načti adresy pro "isMine" labeling
                 val myAddresses = if (walletId != null) {

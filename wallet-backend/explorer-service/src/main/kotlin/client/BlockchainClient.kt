@@ -101,9 +101,13 @@ class BlockchainClient(
      * Vrátí detail jedné transakce.
      */
     suspend fun getTransaction(txid: String, network: String = "mainnet"): RawTransaction {
-        return client.get("$baseUrl/api/v1/blockchain/tx/$txid") {
+        val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/tx/$txid") {
             parameter("network", network)
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw Exception("blockchain-service error ${response.status.value} for tx/$txid")
+        }
+        return response.body()
     }
 
     /**
