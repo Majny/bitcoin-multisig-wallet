@@ -16,6 +16,8 @@ import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import android.util.Log
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
@@ -88,7 +90,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         startDestination = WalletRoutes.Dashboard,
         route = WalletRoutes.Graph
     ) {
-        composable(WalletRoutes.Dashboard) {
+        composable(WalletRoutes.Dashboard) { backStackEntry ->
             val viewModel: WalletDashboardViewModel = viewModel()
             val uiState by viewModel.uiState.collectAsState()
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
@@ -96,6 +98,19 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val walletNetwork = remember {
                 SessionStore.session?.user?.wallets
                     ?.find { it.id == SessionStore.activeWalletId }?.network ?: "mainnet"
+            }
+
+            // Refresh data when returning to this screen (e.g. after sending a transaction)
+            DisposableEffect(backStackEntry) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        viewModel.refresh()
+                    }
+                }
+                backStackEntry.lifecycle.addObserver(observer)
+                onDispose {
+                    backStackEntry.lifecycle.removeObserver(observer)
+                }
             }
 
             ModalNavigationDrawer(

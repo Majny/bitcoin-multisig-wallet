@@ -57,6 +57,7 @@ data class SendTransactionUiState(
     // Computed summary
     val amountSats: Long = 0L,
     val feeSats: Long = 0L,
+    val feeRateSatVb: Double = 0.0,   // effective fee rate (sat/vB) for summary display
     val totalSats: Long = 0L,
     val remainingSats: Long = 0L,
 
@@ -431,6 +432,7 @@ class SendTransactionViewModel : ViewModel() {
         _uiState.value = state.copy(
             amountSats = amountSats,
             feeSats = feeSats,
+            feeRateSatVb = feeRate,
             totalSats = totalSats,
             remainingSats = maxOf(remainingSats, 0L)
         )
