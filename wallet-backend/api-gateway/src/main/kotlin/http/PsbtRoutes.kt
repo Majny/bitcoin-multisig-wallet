@@ -80,6 +80,14 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
+            // POST /psbt/{id}/broadcast-raw - broadcastuje raw signed tx (z Trezor Connect)
+            post("/{id}/broadcast-raw") {
+                val id = call.parameters["id"] ?: error("id missing")
+                val req = call.receive<BroadcastRawTxRequest>()
+                val resp = call.application.deps.psbt.broadcastRaw(id, req)
+                call.respond(resp)
+            }
+
             // GET /psbt/{id}/signers - stav podpisů (kdo podepsal, kdo chybí)
             get("/{id}/signers") {
                 val id = call.parameters["id"] ?: error("id missing")

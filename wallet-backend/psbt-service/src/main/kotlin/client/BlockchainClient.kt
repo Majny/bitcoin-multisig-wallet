@@ -32,10 +32,13 @@ class BlockchainClient(private val baseUrl: String) {
     }
 
     /**
-     * Získá raw transakci podle txid.
+     * Získá raw hex transakce — potřebné pro PSBT_IN_NON_WITNESS_UTXO.
+     * Trezor firmware 2.4+ vyžaduje celou předchozí transakci pro všechny vstupy.
      */
-    suspend fun getRawTransaction(txid: String): RawTxResponse {
-        return client.get("$baseUrl/api/v1/blockchain/tx/$txid/hex").body()
+    suspend fun getRawTransaction(txid: String, network: String = "mainnet"): RawTxResponse {
+        return client.get("$baseUrl/api/v1/blockchain/tx/$txid/hex") {
+            parameter("network", network)
+        }.body()
     }
 
     /**

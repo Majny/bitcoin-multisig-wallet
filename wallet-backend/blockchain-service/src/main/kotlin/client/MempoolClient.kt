@@ -14,7 +14,7 @@ import kotlinx.serialization.Serializable
  * Client for Mempool.space public API.
  * 
  * Mainnet: https://mempool.space/api/
- * Testnet: https://mempool.space/testnet/api/
+ * Testnet4: https://mempool.space/testnet4/api/
  */
 interface MempoolClient {
     
@@ -59,6 +59,13 @@ interface MempoolClient {
      * Používá se pro výpočet počtu konfirmací.
      */
     suspend fun getTipHeight(): Int
+
+    /**
+     * Vrátí raw hex celé transakce (witness serialization).
+     * Potřebné pro PSBT_IN_NON_WITNESS_UTXO — Trezor firmware 2.4+ vyžaduje
+     * celou předchozí transakci pro všechny vstupy (i native segwit).
+     */
+    suspend fun getRawTransaction(txid: String): String
 }
 
 // ============ DTOs ============
@@ -177,14 +184,18 @@ class MempoolClientImpl(
     private val rateLimiter = Semaphore(5)
 
     /**
-     * Executes a GET request with one retry on 429 Too Many Requests.
+     * Executes a GET request with one retry on 429 Too Many Requests or request timeout.
      * The delay is outside withPermit so other queued requests can proceed during the wait.
      * Only 1 retry: if the IP is in a penalty box, retrying many times just
      * keeps the queue backed up for 20+ seconds — better to fail fast.
      */
     private suspend fun getChecked(url: String): HttpResponse {
-        val first = rateLimiter.withPermit { client.get(url) }
-        if (first.status != HttpStatusCode.TooManyRequests) return first
+        val first = try {
+            rateLimiter.withPermit { client.get(url) }
+        } catch (e: io.ktor.client.plugins.HttpRequestTimeoutException) {
+            null  // timeout on first attempt — retry below
+        }
+        if (first != null && first.status != HttpStatusCode.TooManyRequests) return first
         delay(1000L)
         return rateLimiter.withPermit { client.get(url) }
     }
@@ -249,6 +260,12 @@ class MempoolClientImpl(
         // Mempool.space vrací číslo jako plain text, ne JSON
         val response: HttpResponse = client.get("$baseUrl/blocks/tip/height")
         return response.bodyAsText().trim().toInt()
+    }
+
+    override suspend fun getRawTransaction(txid: String): String {
+        // Mempool.space vrací raw hex transakce jako plain text
+        val response: HttpResponse = getChecked("$baseUrl/tx/$txid/hex")
+        return response.bodyAsText().trim()
     }
 }
 

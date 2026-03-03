@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
+enum class SignResultType { SIGNED_PSBT, SERIALIZED_TX }
+
 object SessionStore {
     @Volatile var pendingIdentity: TrezorDeviceIdentity? = null
     @Volatile var session: UserSession? = null
@@ -24,6 +26,13 @@ object SessionStore {
         _pendingSignedPsbt.value = value
     }
 
+    private val _pendingSignType = MutableStateFlow<SignResultType?>(null)
+    val pendingSignType: StateFlow<SignResultType?> = _pendingSignType.asStateFlow()
+
+    fun setPendingSignType(value: SignResultType?) {
+        _pendingSignType.value = value
+    }
+
     /** Preferred fiat currency for balance display (czk, usd, eur). */
     private val _preferredCurrency = MutableStateFlow("czk")
     val preferredCurrency: StateFlow<String> = _preferredCurrency.asStateFlow()
@@ -38,6 +47,7 @@ object SessionStore {
         activeWalletId = null
         walletsFetchedAtMs = null
         _pendingSignedPsbt.value = null
+        _pendingSignType.value = null
         _preferredCurrency.value = "czk"
     }
 

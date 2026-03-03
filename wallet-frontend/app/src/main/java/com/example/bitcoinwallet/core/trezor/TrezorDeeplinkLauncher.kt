@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
+import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.random.Random
 
@@ -48,7 +50,7 @@ class TrezorDeeplinkLauncher(
         derivationPath: String = "m/84'/1'/0'",
         network: String = "testnet"
     ): Boolean {
-        val coin = if (network == "testnet") "tbtc" else "btc"
+        val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val paramsJson = JSONObject().apply {
             put("coin", coin)
             put("path", derivationPath)
@@ -85,7 +87,7 @@ class TrezorDeeplinkLauncher(
      * Uses Trezor Connect deeplink method "signTransaction" with PSBT payload.
      */
     fun openSignTransaction(context: Context, psbtBase64: String, network: String = "testnet"): Boolean {
-        val coin = if (network == "testnet") "tbtc" else "btc"
+        val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val paramsJson = JSONObject().apply {
             put("coin", coin)
             put("psbt", psbtBase64)
@@ -99,6 +101,85 @@ class TrezorDeeplinkLauncher(
             .appendQueryParameter("params", paramsJson)
             .appendQueryParameter("callback", callbackUrl)
             .build()
+
+        Log.d("TrezorDeeplink", "openSignTransaction: network=$network coin=$coin")
+        Log.d("TrezorDeeplink", "PSBT base64 (${psbtBase64.length} chars): $psbtBase64")
+        Log.d("TrezorDeeplink", "paramsJson: $paramsJson")
+        Log.d("TrezorDeeplink", "deeplink URI: $uri")
+
+        val intent = Intent(Intent.ACTION_VIEW, uri)
+
+        return try {
+            context.startActivity(intent)
+            true
+        } catch (e: ActivityNotFoundException) {
+            Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            false
+        }
+    }
+
+    /**
+     * Opens Trezor Suite to sign a transaction using structured Trezor Connect params.
+     * This is the correct format for Trezor Connect's signTransaction deeplink.
+     * Used for singlesig wallets where backend provides pre-built inputs/outputs.
+     */
+    fun openSignTransactionStructured(
+        context: Context,
+        params: TrezorConnectParamsDto
+    ): Boolean {
+        val paramsJson = JSONObject().apply {
+            put("coin", params.coin)
+            put("version", params.version)
+            put("locktime", params.locktime)
+            put("push", false)
+
+            val inputsArray = JSONArray()
+            for (input in params.inputs) {
+                inputsArray.put(JSONObject().apply {
+                    put("address_n", JSONArray(input.address_n))
+                    put("prev_hash", input.prev_hash)
+                    put("prev_index", input.prev_index)
+                    put("amount", input.amount)
+                    put("script_type", input.script_type)
+                    put("sequence", input.sequence)
+                })
+            }
+            put("inputs", inputsArray)
+
+            val outputsArray = JSONArray()
+            for (output in params.outputs) {
+                outputsArray.put(JSONObject().apply {
+                    if (output.address != null) {
+                        put("address", output.address)
+                    }
+                    if (output.address_n != null) {
+                        put("address_n", JSONArray(output.address_n))
+                    }
+                    put("amount", output.amount)
+                    put("script_type", output.script_type)
+                })
+            }
+            put("outputs", outputsArray)
+
+            // NOTE: refTxs are NOT sent via deeplink — Trezor Suite Mobile fetches
+            // reference transactions internally via its own blockbook backend.
+        }.toString()
+
+        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&action=sign"
+
+        val uri = Uri.parse(connectBaseUrl).buildUpon()
+            .appendQueryParameter("method", "signTransaction")
+            .appendQueryParameter("params", paramsJson)
+            .appendQueryParameter("callback", callbackUrl)
+            .build()
+
+        Log.d("TrezorDeeplink", "openSignTransactionStructured: coin=${params.coin} inputs=${params.inputs.size} outputs=${params.outputs.size}")
+        Log.d("TrezorDeeplink", "paramsJson (${paramsJson.length} chars): $paramsJson")
+        Log.d("TrezorDeeplink", "deeplink URI (${uri.toString().length} chars): $uri")
+        if (uri.toString().length > 2000) {
+            Log.w("TrezorDeeplink", "WARNING: URI is very long (${uri.toString().length} chars), may exceed Android intent limits")
+        }
 
         val intent = Intent(Intent.ACTION_VIEW, uri)
 
@@ -116,7 +197,7 @@ class TrezorDeeplinkLauncher(
      * This lets the user verify the receive address on the hardware device.
      */
     fun openGetAddress(context: Context, derivationPath: String = "m/84'/1'/0'/0/0", network: String = "testnet"): Boolean {
-        val coin = if (network == "testnet") "tbtc" else "btc"
+        val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val paramsJson = JSONObject().apply {
             put("coin", coin)
             put("path", derivationPath)
@@ -156,7 +237,7 @@ class TrezorDeeplinkLauncher(
 
         val path = derivationPaths[currentIndex]
         val paramsJson = JSONObject().apply {
-            put("coin", "btc")
+            put("coin", "Bitcoin")
             put("path", path)
         }.toString()
 

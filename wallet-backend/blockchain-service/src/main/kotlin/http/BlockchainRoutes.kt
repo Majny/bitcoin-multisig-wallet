@@ -100,6 +100,18 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
         }
 
         /**
+         * GET /api/v1/blockchain/tx/{txid}/hex?network=mainnet|testnet
+         * Vrátí raw hex transakce — potřebné pro PSBT_IN_NON_WITNESS_UTXO.
+         */
+        get("/tx/{txid}/hex") {
+            val txid = call.parameters["txid"]
+                ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing txid")
+            val mempool = clientFor(call.request.queryParameters["network"])
+            val hex = mempool.getRawTransaction(txid)
+            call.respond(mapOf("hex" to hex))
+        }
+
+        /**
          * POST /api/v1/blockchain/tx/broadcast?network=mainnet|testnet
          */
         post("/tx/broadcast") {

@@ -21,6 +21,7 @@ interface PsbtClient {
     suspend fun finalize(id: String): FinalizeResponse
     suspend fun broadcast(id: String): BroadcastResponse
     suspend fun getSigners(id: String): SignerStatusResponse
+    suspend fun broadcastRaw(id: String, req: BroadcastRawTxRequest): BroadcastResponse
     suspend fun delete(id: String)
 }
 
@@ -127,6 +128,17 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
         return resp.body()
     }
     
+    override suspend fun broadcastRaw(id: String, req: BroadcastRawTxRequest): BroadcastResponse {
+        requireAttached(this::client.isInitialized, "psbt")
+        val resp = upstreamRequest("psbt") {
+            client.post("${cfg.psbtBaseUrl}/psbt/$id/broadcast-raw") {
+                contentType(ContentType.Application.Json)
+                setBody(req)
+            }
+        }.ensureSuccess("psbt")
+        return resp.body()
+    }
+
     override suspend fun delete(id: String) {
         requireAttached(this::client.isInitialized, "psbt")
         upstreamRequest("psbt") {

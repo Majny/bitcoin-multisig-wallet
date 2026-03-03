@@ -56,11 +56,51 @@ data class CreatePsbtRequest(
 )
 
 @Serializable
+data class TrezorConnectInput(
+    val address_n: List<Long>,
+    val prev_hash: String,
+    val prev_index: Int,
+    val amount: String,
+    val script_type: String = "SPENDWITNESS",
+    val sequence: Long = 0xFFFFFFFDL
+)
+
+@Serializable
+data class TrezorConnectOutput(
+    val address: String? = null,
+    val address_n: List<Long>? = null,
+    val amount: String,
+    val script_type: String
+)
+
+@Serializable
+data class TrezorConnectRefTx(
+    val hash: String,
+    val tx_hex: String
+)
+
+@Serializable
+data class TrezorConnectParams(
+    val coin: String,
+    val inputs: List<TrezorConnectInput>,
+    val outputs: List<TrezorConnectOutput>,
+    val refTxs: List<TrezorConnectRefTx>? = null,
+    val version: Int = 2,
+    val locktime: Int = 0
+)
+
+@Serializable
+data class BroadcastRawTxRequest(
+    val txHex: String
+)
+
+@Serializable
 data class CreatePsbtResponse(
     val id: String,
     val psbtBase64: String,
     val estimatedFee: Long,
-    val estimatedVsize: Int
+    val estimatedVsize: Int,
+    val trezorConnectParams: TrezorConnectParams? = null
 )
 
 @Serializable

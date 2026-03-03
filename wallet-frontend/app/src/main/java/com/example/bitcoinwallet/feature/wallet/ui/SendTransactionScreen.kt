@@ -353,7 +353,7 @@ private fun SummarySection(state: SendTransactionUiState) {
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         SummaryRow("Transaction Amount", formatBtc(state.amountSats))
-        SummaryRow("Network Fee", formatBtc(state.feeSats))
+        SummaryRow("Network Fee", formatSats(state.feeSats))
         HorizontalDivider(color = DarkCard, thickness = 1.dp)
         SummaryRow("Total", formatBtc(state.totalSats), bold = true)
         SummaryRow("Remaining Balance", formatBtc(state.remainingSats))
@@ -388,6 +388,10 @@ private fun SummaryRow(
 private fun formatBtc(sats: Long): String {
     val btc = sats / 100_000_000.0
     return String.format("%.8f BTC", btc)
+}
+
+private fun formatSats(sats: Long): String {
+    return "$sats sats"
 }
 
 @Composable

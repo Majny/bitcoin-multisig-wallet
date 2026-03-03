@@ -83,7 +83,8 @@ data class CreatePsbtResponse(
     val id: String,
     val psbtBase64: String,
     val estimatedFee: Long,
-    val estimatedVsize: Int
+    val estimatedVsize: Int,
+    val trezorConnectParams: TrezorConnectParams? = null
 )
 
 @Serializable
@@ -119,6 +120,63 @@ data class SignerDetail(
     val signed: Boolean,
     val deviceId: String? = null,
     val signedAt: String? = null
+)
+
+// ========== Trezor Connect DTOs ==========
+
+/**
+ * Trezor Connect signTransaction input.
+ * address_n = full BIP-32 derivation path jako uint32 array (hardened = index | 0x80000000).
+ */
+@Serializable
+data class TrezorConnectInput(
+    val address_n: List<Long>,
+    val prev_hash: String,
+    val prev_index: Int,
+    val amount: String,
+    val script_type: String = "SPENDWITNESS",
+    val sequence: Long = 0xFFFFFFFDL  // RBF signaling (BIP125)
+)
+
+/**
+ * Trezor Connect signTransaction output.
+ * External output: address + amount + script_type="PAYTOADDRESS"
+ * Change output:   address_n + amount + script_type="PAYTOWITNESS"
+ */
+@Serializable
+data class TrezorConnectOutput(
+    val address: String? = null,
+    val address_n: List<Long>? = null,
+    val amount: String,
+    val script_type: String
+)
+
+/**
+ * Reference transaction — Trezor firmware potřebuje celé předchozí transakce
+ * pro ověření částek vstupů. Stačí poskytnout raw hex přes tx_hex pole.
+ */
+@Serializable
+data class TrezorConnectRefTx(
+    val hash: String,
+    val tx_hex: String
+)
+
+@Serializable
+data class TrezorConnectParams(
+    val coin: String,
+    val inputs: List<TrezorConnectInput>,
+    val outputs: List<TrezorConnectOutput>,
+    val refTxs: List<TrezorConnectRefTx>? = null,
+    val version: Int = 2,       // tx version (2 = SegWit/RBF)
+    val locktime: Int = 0
+)
+
+/**
+ * Request pro broadcast raw signed transaction (z Trezor Connect serializedTx).
+ */
+@Serializable
+data class BroadcastRawTxRequest(
+    val txHex: String
 )
 
 // ========== Internal DTOs (pro komunikaci s jinými službami) ==========

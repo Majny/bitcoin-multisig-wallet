@@ -30,6 +30,7 @@ object PsbtBuilder {
         utxos: List<SelectedUtxo>,
         outputs: List<TxOutput>,
         changeAddress: String,
+        changeIndex: Int = 0,
         feeRate: Double,
         rbf: Boolean = true
     ): PsbtBuildResult {
@@ -44,7 +45,7 @@ object PsbtBuilder {
         val estimatedVsize = estimateVsize(
             inputCount = utxos.size,
             outputCount = outputs.size + 1, // +1 pro change
-            isMultisig = wallet.type == "multisig",
+            isMultisig = wallet.type == "MULTI_SIG",
             m = wallet.m ?: 1,
             n = wallet.n ?: 1
         )
@@ -79,6 +80,7 @@ object PsbtBuilder {
             outputs = outputs,
             changeAddress = if (finalChange > 0) changeAddress else null,
             changeAmount = finalChange,
+            changeIndex = if (finalChange > 0) changeIndex else null,
             rbf = rbf
         )
         
@@ -253,6 +255,126 @@ object PsbtBuilder {
      */
     fun addressToScriptHex(address: String): String = bytesToHex(addressToScript(address))
 
+    /**
+     * Sestaví Trezor Connect signTransaction parametry ze stejných dat jako PSBT.
+     * Pouze pro singlesig P2WPKH. Vrací null pro multisig.
+     */
+    fun buildTrezorConnectParams(
+        wallet: WalletDetailDto,
+        utxos: List<SelectedUtxo>,
+        outputs: List<TxOutput>,
+        changeAddress: String?,
+        changeAmount: Long,
+        changeIndex: Int?
+    ): TrezorConnectParams? {
+        if (wallet.type == "MULTI_SIG") return null
+
+        // Trezor Connect coin names: "Bitcoin" pro mainnet, "Testnet" pro testnet
+        // (NE "btc"/"tbtc" — ty nejsou v Trezor Connect coins.json)
+        val coin = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin")) "Bitcoin" else "Testnet"
+
+        // Singlesig peněženky nemají cosignery v DB — fingerprint a origin path
+        // jsou uloženy v descriptoru: wpkh([fingerprint/84h/1h/0h]xpub...)
+        val originPath: List<Long> = if (wallet.cosigners.isNotEmpty()) {
+            parseOriginPathToUint32(wallet.cosigners.first().originPath)
+        } else {
+            val parsed = parseDescriptorOrigin(wallet.receiveDescriptor)
+            if (parsed == null) {
+                log.warn("Cannot parse origin path from descriptor: {}", wallet.receiveDescriptor)
+                return null
+            }
+            parsed
+        }
+
+        val trezorInputs = utxos.map { utxo ->
+            val chain = if (utxo.addressType == "change") 1L else 0L
+            val idx = (utxo.addressIndex ?: 0).toLong()
+            TrezorConnectInput(
+                address_n = originPath + listOf(chain, idx),
+                prev_hash = utxo.txid,
+                prev_index = utxo.vout,
+                amount = utxo.value.toString(),
+                script_type = "SPENDWITNESS"
+            )
+        }
+
+        val trezorOutputs = mutableListOf<TrezorConnectOutput>()
+
+        for (output in outputs) {
+            trezorOutputs.add(TrezorConnectOutput(
+                address = output.address,
+                amount = output.amountSats.toString(),
+                script_type = "PAYTOADDRESS"
+            ))
+        }
+
+        if (changeAddress != null && changeAmount > 0 && changeIndex != null) {
+            trezorOutputs.add(TrezorConnectOutput(
+                address_n = originPath + listOf(1L, changeIndex.toLong()),
+                amount = changeAmount.toString(),
+                script_type = "PAYTOWITNESS"
+            ))
+        }
+
+        // RefTxs — Trezor firmware potřebuje celé předchozí transakce pro ověření částek
+        val refTxs = utxos.mapNotNull { utxo ->
+            val hex = utxo.rawTxHex ?: return@mapNotNull null
+            TrezorConnectRefTx(hash = utxo.txid, tx_hex = hex)
+        }.distinctBy { it.hash }.ifEmpty { null }
+
+        if (refTxs == null) {
+            log.warn("No raw tx hex available for refTxs — Trezor may fail to verify inputs")
+        } else {
+            log.info("Built {} refTxs for Trezor Connect", refTxs.size)
+        }
+
+        return TrezorConnectParams(
+            coin = coin,
+            inputs = trezorInputs,
+            outputs = trezorOutputs,
+            refTxs = refTxs
+        )
+    }
+
+    /**
+     * Parsuje origin path "84h/1h/0h" nebo "84'/1'/0'" na List<Long> (uint32).
+     * Hardened indexy mají bit 0x80000000.
+     */
+    private fun parseOriginPathToUint32(originPath: String): List<Long> {
+        return originPath.split("/").filter { it.isNotBlank() }.map { part ->
+            val cleaned = part.replace("'", "h")
+            val hardened = cleaned.endsWith("h")
+            val num = cleaned.trimEnd('h').toLong()
+            if (hardened) (num or 0x80000000L) else num
+        }
+    }
+
+    /**
+     * Parsuje origin path z Bitcoin output descriptoru.
+     * Formát: wpkh([fingerprint/84h/1h/0h]xpub...) → [0x80000054, 0x80000001, 0x80000000]
+     * Vrací null pokud descriptor neobsahuje origin info.
+     */
+    private fun parseDescriptorOrigin(descriptor: String): List<Long>? {
+        // Najdi obsah hranatých závorek: [fingerprint/path]
+        val bracketStart = descriptor.indexOf('[')
+        val bracketEnd = descriptor.indexOf(']')
+        if (bracketStart < 0 || bracketEnd < 0 || bracketEnd <= bracketStart) return null
+
+        val inside = descriptor.substring(bracketStart + 1, bracketEnd)
+        // inside = "aabbccdd/84h/1h/0h" nebo "aabbccdd/84'/1'/0'"
+        val parts = inside.split("/")
+        if (parts.size < 2) return null
+
+        // Přeskočit fingerprint (první element), parsovat zbytek jako path
+        val pathParts = parts.drop(1) // ["84h", "1h", "0h"]
+        return pathParts.map { part ->
+            val cleaned = part.replace("'", "h")
+            val hardened = cleaned.endsWith("h")
+            val num = cleaned.trimEnd('h').toLong()
+            if (hardened) (num or 0x80000000L) else num
+        }
+    }
+
     // ========== Helpers ==========
 
     private fun estimateVsize(
@@ -278,10 +400,28 @@ object PsbtBuilder {
         outputs: List<TxOutput>,
         changeAddress: String?,
         changeAmount: Long,
+        changeIndex: Int? = null,
         rbf: Boolean
     ): String {
+        log.debug("=== PSBT BUILD START ===")
+        log.debug("wallet.type={} wallet.network={} wallet.m={} wallet.n={}", wallet.type, wallet.network, wallet.m, wallet.n)
+        log.debug("cosigners ({}):", wallet.cosigners.size)
+        for (cos in wallet.cosigners) {
+            log.debug("  cosigner idx={} fingerprint={} originPath={} xpubRoot={}...",
+                cos.idx, cos.fingerprint, cos.originPath, cos.xpubRoot.take(24))
+        }
+        log.debug("utxos ({}):", utxos.size)
+        for (u in utxos) {
+            val rawInfo = if (u.rawTxHex != null) "${u.rawTxHex.length / 2} bytes" else "MISSING!"
+            log.debug("  utxo {}:{} value={} scriptPubKey={} type={} idx={} addr={} rawTx={}",
+                u.txid.take(16), u.vout, u.value, u.scriptPubKey, u.addressType, u.addressIndex, u.address, rawInfo)
+        }
+        log.debug("outputs ({}):", outputs.size)
+        for (o in outputs) { log.debug("  output addr={} amount={}", o.address, o.amountSats) }
+        log.debug("changeAddress={} changeAmount={} changeIndex={}", changeAddress, changeAmount, changeIndex)
+
         val psbt = mutableListOf<Byte>()
-        
+
         // Magic: "psbt" + 0xff
         psbt.addAll(byteArrayOf(0x70, 0x73, 0x62, 0x74, 0xff.toByte()).toList())
         
@@ -293,11 +433,13 @@ object PsbtBuilder {
         psbt.addAll(unsignedTx.toList())
         psbt.add(0x00)
         
-        val isMultisig = wallet.type == "multisig" && wallet.cosigners.isNotEmpty()
+        val isMultisig = wallet.type == "MULTI_SIG" && wallet.cosigners.isNotEmpty()
 
-        // Pre-derive cosigner chain keys once (for all inputs)
+        // Pre-derive cosigner chain keys once (for all inputs) — both singlesig and multisig.
+        // PSBT_IN_BIP32_DERIVATION is required so Trezor can identify the signing key
+        // without querying any blockchain backend.
         val cosignerChainKeys: Map<Int, List<Pair<CosignerDto, DeterministicKey>>>? =
-            if (isMultisig) {
+            if (wallet.cosigners.isNotEmpty()) {
                 val btcNetwork = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin"))
                     BitcoinNetwork.MAINNET else BitcoinNetwork.TESTNET
                 // Group by chain: 0=receive, 1=change
@@ -315,6 +457,13 @@ object PsbtBuilder {
 
         // Input sections
         for (utxo in utxos) {
+            // PSBT_IN_NON_WITNESS_UTXO (key 0x00) — celá předchozí transakce.
+            // Trezor firmware 2.4+ vyžaduje předchozí tx pro VŠECHNY vstupy (i P2WPKH),
+            // aby mohl ověřit správnost hodnoty výstupu a zobrazit správný poplatek.
+            if (utxo.rawTxHex != null) {
+                writeKv(psbt, PSBT_IN_NON_WITNESS_UTXO, ByteArray(0), hexToBytes(utxo.rawTxHex))
+            }
+
             // PSBT_IN_WITNESS_UTXO (key 0x01)
             val witnessUtxo = buildWitnessUtxo(utxo.value, utxo.scriptPubKey)
             psbt.add(0x01)
@@ -322,7 +471,7 @@ object PsbtBuilder {
             psbt.addAll(writeVarInt(witnessUtxo.size.toLong()))
             psbt.addAll(witnessUtxo.toList())
 
-            if (isMultisig && cosignerChainKeys != null
+            if (cosignerChainKeys != null
                 && utxo.addressIndex != null && utxo.addressType != null) {
 
                 val chain = if (utxo.addressType == "change") 1 else 0
@@ -336,22 +485,27 @@ object PsbtBuilder {
                     Triple(cos, childKey.pubKey, childKey) // (cosignerDto, compressedPubkey, key)
                 }
 
-                // BIP-67: sort pubkeys lexicographically for sortedmulti
-                val sorted = if (wallet.receiveDescriptor.contains("sortedmulti(")) {
-                    cosignerPubkeys.sortedWith(compareBy<Triple<CosignerDto, ByteArray, DeterministicKey>> {
-                        it.second.size
-                    }.thenBy { bytesToHex(it.second) })
-                } else {
-                    cosignerPubkeys
+                if (isMultisig) {
+                    // BIP-67: sort pubkeys lexicographically for sortedmulti
+                    val sorted = if (wallet.receiveDescriptor.contains("sortedmulti(")) {
+                        cosignerPubkeys.sortedWith(compareBy<Triple<CosignerDto, ByteArray, DeterministicKey>> {
+                            it.second.size
+                        }.thenBy { bytesToHex(it.second) })
+                    } else {
+                        cosignerPubkeys
+                    }
+
+                    // PSBT_IN_WITNESS_SCRIPT (key 0x05) — only for P2WSH multisig
+                    val witnessScript = buildMultisigWitnessScript(m, sorted.map { it.second })
+                    writeKv(psbt, PSBT_IN_WITNESS_SCRIPT, ByteArray(0), witnessScript)
                 }
 
-                // PSBT_IN_WITNESS_SCRIPT (key 0x05)
-                val witnessScript = buildMultisigWitnessScript(m, sorted.map { it.second })
-                writeKv(psbt, PSBT_IN_WITNESS_SCRIPT, ByteArray(0), witnessScript)
-
-                // PSBT_IN_BIP32_DERIVATION (key 0x06) for each cosigner
+                // PSBT_IN_BIP32_DERIVATION (key 0x06) for each cosigner — singlesig and multisig
                 for ((cos, pubkey, _) in cosignerPubkeys) {
                     val bip32Value = encodeBip32Derivation(cos.fingerprint, cos.originPath, chain, idx)
+                    log.debug("  BIP32 deriv: fp={} path={} chain={} idx={} pubkey={} value={}",
+                        cos.fingerprint, cos.originPath, chain, idx,
+                        bytesToHex(pubkey), bytesToHex(bip32Value))
                     writeKv(psbt, PSBT_IN_BIP32_DERIVATION, pubkey, bip32Value)
                 }
             }
@@ -361,11 +515,48 @@ object PsbtBuilder {
         
         // Output sections
         val totalOutputs = outputs.size + (if (changeAddress != null) 1 else 0)
-        repeat(totalOutputs) { psbt.add(0x00) }
+        for (i in 0 until totalOutputs) {
+            // Add PSBT_OUT_BIP32_DERIVATION for the change output so Trezor can
+            // identify it as belonging to the wallet (otherwise it shows full
+            // amount as going to external recipients).
+            val isChangeOutput = changeAddress != null && i == outputs.size
+            if (isChangeOutput && cosignerChainKeys != null && changeIndex != null) {
+                val chainEntries = cosignerChainKeys[1] ?: emptyList()
+                val changePubkeys = chainEntries.map { (cos, chainKey) ->
+                    val childKey = HDKeyDerivation.deriveChildKey(chainKey, changeIndex)
+                    Triple(cos, childKey.pubKey, childKey)
+                }
+                for ((cos, pubkey, _) in changePubkeys) {
+                    val bip32Value = encodeBip32Derivation(cos.fingerprint, cos.originPath, 1, changeIndex)
+                    writeKv(psbt, PSBT_OUT_BIP32_DERIVATION, pubkey, bip32Value)
+                }
+            }
+            psbt.add(0x00)
+        }
         
-        return Base64.getEncoder().encodeToString(psbt.toByteArray())
+        val result = Base64.getEncoder().encodeToString(psbt.toByteArray())
+        log.debug("=== PSBT BUILD END ({} bytes raw, {} chars base64) ===", psbt.size, result.length)
+        log.info("PSBT base64: {}", result)
+
+        // Self-check: try to parse the generated PSBT to catch structural issues early
+        try {
+            val parsed = parsePsbt(Base64.getDecoder().decode(result))
+            log.debug("PSBT self-check OK: {} inputs, {} outputs",
+                parsed.inputKvs.size, parsed.outputKvs.size)
+            for ((i, inputKvs) in parsed.inputKvs.withIndex()) {
+                val hasNonWit = inputKvs.any { it.keyType == PSBT_IN_NON_WITNESS_UTXO }
+                val hasWitUtxo = inputKvs.any { it.keyType == PSBT_IN_WITNESS_UTXO }
+                val hasBip32 = inputKvs.any { it.keyType == PSBT_IN_BIP32_DERIVATION }
+                log.debug("  input[{}]: NON_WIT={} WIT_UTXO={} BIP32_DERIV={}",
+                    i, hasNonWit, hasWitUtxo, hasBip32)
+            }
+        } catch (e: Exception) {
+            log.error("PSBT self-check FAILED: {}", e.message)
+        }
+
+        return result
     }
-    
+
     private fun buildUnsignedTx(
         utxos: List<SelectedUtxo>,
         outputs: List<TxOutput>,
@@ -491,10 +682,12 @@ object PsbtBuilder {
     
     // ========== PSBT Parsing & Serialization (BIP-174) ==========
     
+    private const val PSBT_IN_NON_WITNESS_UTXO = 0x00  // celá předchozí transakce
     private const val PSBT_IN_WITNESS_UTXO = 0x01
     private const val PSBT_IN_PARTIAL_SIG = 0x02
     private const val PSBT_IN_WITNESS_SCRIPT = 0x05
     private const val PSBT_IN_BIP32_DERIVATION = 0x06
+    private const val PSBT_OUT_BIP32_DERIVATION = 0x02
     private const val PSBT_GLOBAL_UNSIGNED_TX = 0x00
 
     // ========== Multisig PSBT helpers ==========
@@ -894,7 +1087,8 @@ data class SelectedUtxo(
     val derivationPath: String? = null,
     val addressIndex: Int? = null,      // BIP-32 child index within chain
     val addressType: String? = null,    // "receive" (chain 0) or "change" (chain 1)
-    val address: String? = null         // the address owning this UTXO
+    val address: String? = null,        // the address owning this UTXO
+    val rawTxHex: String? = null        // raw previous tx hex pro PSBT_IN_NON_WITNESS_UTXO
 )
 
 data class PsbtBuildResult(

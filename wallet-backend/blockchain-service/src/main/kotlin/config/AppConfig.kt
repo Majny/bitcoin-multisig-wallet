@@ -12,7 +12,7 @@ data class AppConfig(
             return AppConfig(
                 port = env("PORT", "8086").toInt(),
                 mainnetMempoolUrl = env("MAINNET_MEMPOOL_URL", "https://blockstream.info/api"),
-                testnetMempoolUrl = env("TESTNET_MEMPOOL_URL", "https://blockstream.info/testnet/api"),
+                testnetMempoolUrl = env("TESTNET_MEMPOOL_URL", "https://mempool.space/testnet4/api"),
             )
         }
     }

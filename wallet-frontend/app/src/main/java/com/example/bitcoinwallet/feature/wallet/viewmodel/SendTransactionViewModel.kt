@@ -4,9 +4,11 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitcoinwallet.core.api.FeeEstimatesDto
+import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
 import com.example.bitcoinwallet.core.api.UtxoSelectionDto
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
+import com.example.bitcoinwallet.core.session.SignResultType
 import com.example.bitcoinwallet.core.signer.WalletType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -64,6 +66,7 @@ data class SendTransactionUiState(
     val error: String? = null,
     val txCreatedId: String? = null,
     val psbtBase64: String? = null,      // PSBT to be signed by Trezor
+    val trezorConnectParams: TrezorConnectParamsDto? = null, // structured params for Trezor Connect
     val awaitingTrezor: Boolean = false,  // waiting for Trezor callback
     val isSubmitting: Boolean = false,    // submitting signed PSBT to backend
     val broadcastSuccess: Boolean = false,
@@ -190,9 +193,10 @@ class SendTransactionViewModel : ViewModel() {
      * Create the PSBT transaction on the backend.
      * After creation, signals the caller to open Trezor for signing.
      *
-     * @param onPsbtReady Called with psbtBase64 when PSBT is ready for Trezor signing.
+     * @param onPsbtReady Called with psbtBase64 and optional Trezor Connect params.
+     *        For singlesig, trezorParams != null and should be used for Trezor deeplink.
      */
-    fun createTransaction(onPsbtReady: (psbtBase64: String) -> Unit) {
+    fun createTransaction(onPsbtReady: (psbtBase64: String, trezorParams: TrezorConnectParamsDto?) -> Unit) {
         val state = _uiState.value
 
         // Validate
@@ -231,18 +235,35 @@ class SendTransactionViewModel : ViewModel() {
                     utxos = utxoSelection
                 )
 
-                Log.d(TAG, "PSBT created: id=${response.id}, fee=${response.estimatedFee}")
+                Log.d(TAG, "PSBT created: id=${response.id}, fee=${response.estimatedFee} sats, vsize=${response.estimatedVsize}, trezorConnect=${response.trezorConnectParams != null}")
+
+                // Detailní log TrezorConnectParams pro debugging
+                response.trezorConnectParams?.let { tcp ->
+                    Log.d(TAG, "=== TrezorConnectParams ===")
+                    Log.d(TAG, "  coin=${tcp.coin}, version=${tcp.version}, locktime=${tcp.locktime}")
+                    Log.d(TAG, "  inputs (${tcp.inputs.size}):")
+                    tcp.inputs.forEachIndexed { i, inp ->
+                        Log.d(TAG, "    [$i] address_n=${inp.address_n}, prev_hash=${inp.prev_hash}, prev_index=${inp.prev_index}, amount=${inp.amount}, script_type=${inp.script_type}, sequence=${inp.sequence}")
+                    }
+                    Log.d(TAG, "  outputs (${tcp.outputs.size}):")
+                    tcp.outputs.forEachIndexed { i, out ->
+                        Log.d(TAG, "    [$i] address=${out.address}, address_n=${out.address_n}, amount=${out.amount}, script_type=${out.script_type}")
+                    }
+                    Log.d(TAG, "  refTxs=${tcp.refTxs?.size ?: "null"}")
+                    Log.d(TAG, "=== End TrezorConnectParams ===")
+                }
 
                 _uiState.value = _uiState.value.copy(
                     isSending = false,
                     txCreatedId = response.id,
                     psbtBase64 = response.psbtBase64,
+                    trezorConnectParams = response.trezorConnectParams,
                     feeSats = response.estimatedFee,
                     awaitingTrezor = true
                 )
 
                 // Signal caller to open Trezor deeplink
-                onPsbtReady(response.psbtBase64)
+                onPsbtReady(response.psbtBase64, response.trezorConnectParams)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create PSBT", e)
                 _uiState.value = _uiState.value.copy(
@@ -254,7 +275,71 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     /**
-     * Called when Trezor returns a signed PSBT.
+     * Dispatch na správný handler podle typu Trezor odpovědi.
+     */
+    fun onTrezorResult(
+        signedData: String,
+        signType: SignResultType,
+        onBroadcastSuccess: () -> Unit
+    ) {
+        when (signType) {
+            SignResultType.SERIALIZED_TX -> onTrezorSerializedTx(signedData, onBroadcastSuccess)
+            SignResultType.SIGNED_PSBT -> onTrezorSigned(signedData, onBroadcastSuccess)
+        }
+    }
+
+    /**
+     * Handle raw serialized tx from Trezor Connect.
+     * Skip addSignature/finalize — broadcast directly.
+     */
+    private fun onTrezorSerializedTx(serializedTxHex: String, onBroadcastSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                awaitingTrezor = false,
+                isSubmitting = true,
+                error = null
+            )
+
+            val accessToken = SessionStore.session?.accessToken
+            val psbtId = _uiState.value.txCreatedId
+
+            if (accessToken == null || psbtId == null) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = "No active session or PSBT"
+                )
+                return@launch
+            }
+
+            try {
+                Log.d(TAG, "Broadcasting raw serialized tx from Trezor (${serializedTxHex.length} chars hex)...")
+                val broadcastResp = WalletApi.client.broadcastRawTx(
+                    psbtId = psbtId,
+                    accessToken = accessToken,
+                    txHex = serializedTxHex
+                )
+
+                Log.d(TAG, "Transaction broadcast! txid=${broadcastResp.txid}")
+
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    broadcastSuccess = true,
+                    broadcastTxid = broadcastResp.txid
+                )
+
+                onBroadcastSuccess()
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to broadcast raw tx", e)
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = e.message ?: "Failed to broadcast transaction"
+                )
+            }
+        }
+    }
+
+    /**
+     * Called when Trezor returns a signed PSBT (legacy/multisig flow).
      * Submits the signature to backend, then finalizes and broadcasts.
      *
      * @param signedPsbtBase64 The PSBT signed by Trezor.

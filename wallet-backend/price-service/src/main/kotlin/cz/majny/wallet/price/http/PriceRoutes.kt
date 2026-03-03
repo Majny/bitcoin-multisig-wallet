@@ -11,7 +11,11 @@ import kotlinx.serialization.Serializable
  * REST endpoints for Bitcoin price data.
  */
 fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
-    
+
+    get("/health") {
+        call.respond(mapOf("status" to "ok", "service" to "price-service"))
+    }
+
     route("/price") {
         
         /**

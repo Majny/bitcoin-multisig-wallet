@@ -15,6 +15,7 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
+import android.util.Log
 import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
@@ -156,14 +157,17 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 }
             }
 
-            // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný PSBT,
+            // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný výsledek,
             // včetně případu kdy activity přežila přes onNewIntent (FLAG_SINGLE_TOP).
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
+            val pendingSignType by SessionStore.pendingSignType.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
-                val signedPsbt = pendingSignedPsbt
-                if (signedPsbt != null && state.awaitingTrezor) {
+                val signedData = pendingSignedPsbt
+                val signType = pendingSignType
+                if (signedData != null && signType != null && state.awaitingTrezor) {
                     SessionStore.setPendingSignedPsbt(null)
-                    viewModel.onTrezorSigned(signedPsbt) {
+                    SessionStore.setPendingSignType(null)
+                    viewModel.onTrezorResult(signedData, signType) {
                         val s = viewModel.uiState.value
                         navController.navigate(
                             WalletRoutes.transactionSent(s.totalSats, s.feeSats)
@@ -187,9 +191,16 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
                 onCreateTransaction = {
-                    viewModel.createTransaction { psbtBase64 ->
-                        // Open Trezor Suite to sign the PSBT
-                        trezorLauncher.openSignTransaction(context, psbtBase64, walletNetwork)
+                    viewModel.createTransaction { psbtBase64, trezorParams ->
+                        if (trezorParams != null) {
+                            // Singlesig: use structured Trezor Connect params
+                            Log.d("WalletNav", "Opening Trezor with STRUCTURED params: coin=${trezorParams.coin}, inputs=${trezorParams.inputs.size}, outputs=${trezorParams.outputs.size}, version=${trezorParams.version}, locktime=${trezorParams.locktime}")
+                            trezorLauncher.openSignTransactionStructured(context, trezorParams)
+                        } else {
+                            // Fallback: raw PSBT (multisig or no params)
+                            Log.d("WalletNav", "Opening Trezor with raw PSBT fallback, network=$walletNetwork, psbt length=${psbtBase64.length}")
+                            trezorLauncher.openSignTransaction(context, psbtBase64, walletNetwork)
+                        }
                     }
                 }
             )
@@ -458,7 +469,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
                 onCreateTransaction = {
-                    viewModel.createTransaction { _ ->
+                    viewModel.createTransaction { _, _ ->
                         // PSBT je uložen v DB — všichni cosigneři ho uvidí
                         navController.popBackStack()
                     }

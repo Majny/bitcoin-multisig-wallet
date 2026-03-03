@@ -1,5 +1,6 @@
 package com.example.bitcoinwallet.core.api
 
+import android.util.Log
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
@@ -9,8 +10,10 @@ import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -212,6 +215,42 @@ class WalletApiClient(
         return client.post("$baseUrl/psbt/$psbtId/broadcast") {
             header("Authorization", "Bearer $accessToken")
         }.body()
+    }
+
+    /**
+     * POST /api/v1/psbt/{id}/broadcast-raw
+     * Broadcast a raw signed transaction hex (from Trezor Connect serializedTx).
+     * Skips the addSignature/finalize flow.
+     */
+    suspend fun broadcastRawTx(
+        psbtId: String,
+        accessToken: String,
+        txHex: String
+    ): BroadcastResponseDto {
+        val response = client.post("$baseUrl/psbt/$psbtId/broadcast-raw") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(BroadcastRawTxRequestDto(txHex = txHex))
+        }
+
+        val rawBody = response.bodyAsText()
+        Log.d("WalletApiClient", "broadcastRawTx response: status=${response.status.value}, body=$rawBody")
+
+        if (!response.status.isSuccess()) {
+            throw Exception("Broadcast failed (${response.status.value}): $rawBody")
+        }
+
+        return try {
+            Json { ignoreUnknownKeys = true }.decodeFromString<BroadcastResponseDto>(rawBody)
+        } catch (e: Exception) {
+            Log.e("WalletApiClient", "Failed to parse broadcast response, raw: $rawBody", e)
+            // Broadcast likely succeeded on the backend — construct response from known data
+            BroadcastResponseDto(
+                psbtId = psbtId,
+                txid = rawBody.trim(),  // mempool.space sometimes returns just the txid as plain text
+                success = true
+            )
+        }
     }
 
     /**
@@ -421,11 +460,51 @@ data class CreatePsbtRequestDto(
 )
 
 @Serializable
+data class TrezorConnectInputDto(
+    val address_n: List<Long>,
+    val prev_hash: String,
+    val prev_index: Int,
+    val amount: String,
+    val script_type: String = "SPENDWITNESS",
+    val sequence: Long = 0xFFFFFFFDL
+)
+
+@Serializable
+data class TrezorConnectOutputDto(
+    val address: String? = null,
+    val address_n: List<Long>? = null,
+    val amount: String,
+    val script_type: String
+)
+
+@Serializable
+data class TrezorConnectRefTxDto(
+    val hash: String,
+    val tx_hex: String
+)
+
+@Serializable
+data class TrezorConnectParamsDto(
+    val coin: String,
+    val inputs: List<TrezorConnectInputDto>,
+    val outputs: List<TrezorConnectOutputDto>,
+    val refTxs: List<TrezorConnectRefTxDto>? = null,
+    val version: Int = 2,
+    val locktime: Int = 0
+)
+
+@Serializable
+data class BroadcastRawTxRequestDto(
+    val txHex: String
+)
+
+@Serializable
 data class CreatePsbtResponseDto(
     val id: String,
     val psbtBase64: String,
     val estimatedFee: Long,
-    val estimatedVsize: Int
+    val estimatedVsize: Int,
+    val trezorConnectParams: TrezorConnectParamsDto? = null
 )
 
 @Serializable

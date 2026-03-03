@@ -21,7 +21,7 @@
         tools:targetApi="28">
 
         <activity
-            android:name=".trezor.TrezorCallbackActivity"
+            android:name=".core.trezor.TrezorCallbackActivity"
             android:exported="true">
 
             <intent-filter>

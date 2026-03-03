@@ -37,7 +37,13 @@ fun Route.psbtRoutes(
             try {
                 // 1. Získej detail peněženky z registry
                 val wallet = registryClient.getWallet(request.walletId)
-                
+                log.info("Wallet: id={} type={} network={} m={} n={} cosigners={}",
+                    wallet.walletId, wallet.type, wallet.network, wallet.m, wallet.n, wallet.cosigners.size)
+                for (cos in wallet.cosigners) {
+                    log.info("  cosigner idx={} fingerprint={} originPath={}",
+                        cos.idx, cos.fingerprint, cos.originPath)
+                }
+
                 // 2. Získej UTXOs
                 val utxos = if (request.utxos != null) {
                     // Manuální výběr (coin control)
@@ -52,22 +58,47 @@ fun Route.psbtRoutes(
                     appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "No UTXOs available"))
                     return@post
                 }
-                
+
+                // 2b. Stáhni raw hex předchozích transakcí pro PSBT_IN_NON_WITNESS_UTXO.
+                // Trezor firmware 2.4+ to vyžaduje i pro native segwit vstupy.
+                val rawTxMap: Map<String, String?> = coroutineScope {
+                    utxos.map { it.txid }.distinct().map { txid ->
+                        async {
+                            txid to try {
+                                val hex = blockchainClient.getRawTransaction(txid, wallet.network).hex
+                                val segwit = hex.length >= 12 && hex.substring(8, 12) == "0001"
+                                log.info("Raw tx fetched: txid={}... {} bytes, segwit={}, start={}",
+                                    txid.take(16), hex.length / 2, segwit, hex.take(16))
+                                hex
+                            } catch (e: Exception) {
+                                log.warn("Failed to fetch raw tx {}: {}", txid, e.message)
+                                null
+                            }
+                        }
+                    }.awaitAll().toMap()
+                }
+                val utxosWithPrevTx = utxos.map { it.copy(rawTxHex = rawTxMap[it.txid]) }
+                log.info("UTXOs with prevTx: {}/{} have rawTxHex",
+                    utxosWithPrevTx.count { it.rawTxHex != null }, utxosWithPrevTx.size)
+
                 // 3. Získej change adresu
                 val changeAddress = registryClient.getChangeAddress(request.walletId)
+                log.info("Change address: addr={} index={} type={}",
+                    changeAddress.address, changeAddress.index, changeAddress.type)
                 
                 // 4. Vytvoř PSBT
                 val result = PsbtBuilder.createPsbt(
                     wallet = wallet,
-                    utxos = utxos,
+                    utxos = utxosWithPrevTx,
                     outputs = request.outputs,
                     changeAddress = changeAddress.address,
+                    changeIndex = changeAddress.index,
                     feeRate = request.feeRate,
                     rbf = request.rbf
                 )
-                
+
                 // 5. Ulož do DB
-                val requiredSigs = if (wallet.type == "multisig") wallet.m ?: 1 else 1
+                val requiredSigs = if (wallet.type == "MULTI_SIG") wallet.m ?: 1 else 1
                 val totalOutputSats = request.outputs.sumOf { it.amountSats }
                 val id = repository.create(
                     walletId = request.walletId,
@@ -78,11 +109,25 @@ fun Route.psbtRoutes(
                     estimatedFeeSats = result.estimatedFee
                 )
                 
+                // Sestav Trezor Connect params pro singlesig
+                val trezorParams = PsbtBuilder.buildTrezorConnectParams(
+                    wallet = wallet,
+                    utxos = utxosWithPrevTx,
+                    outputs = request.outputs,
+                    changeAddress = if (result.changeAmount > 0) changeAddress.address else null,
+                    changeAmount = result.changeAmount,
+                    changeIndex = if (result.changeAmount > 0) changeAddress.index else null
+                )
+
+                log.info("PSBT created id={} fee={} vsize={} base64Len={} trezorConnect={}",
+                    id, result.estimatedFee, result.estimatedVsize, result.psbtBase64.length,
+                    if (trezorParams != null) "${trezorParams.inputs.size}in/${trezorParams.outputs.size}out" else "null")
                 appCall.respond(CreatePsbtResponse(
                     id = id.toString(),
                     psbtBase64 = result.psbtBase64,
                     estimatedFee = result.estimatedFee,
-                    estimatedVsize = result.estimatedVsize
+                    estimatedVsize = result.estimatedVsize,
+                    trezorConnectParams = trezorParams
                 ))
                 
             } catch (e: Exception) {
@@ -385,6 +430,59 @@ fun Route.psbtRoutes(
         }
 
         /**
+         * POST /psbt/{id}/broadcast-raw
+         * Broadcastuje raw signed transaction (z Trezor Connect serializedTx).
+         * Přeskočí sign/finalize — Trezor vrací kompletně podepsanou transakci.
+         */
+        post("/{id}/broadcast-raw") {
+            val appCall = call
+            val id = appCall.parameters["id"]
+            if (id == null) {
+                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
+                return@post
+            }
+
+            val uuid = try {
+                UUID.fromString(id)
+            } catch (e: Exception) {
+                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
+                return@post
+            }
+
+            val request = appCall.receive<BroadcastRawTxRequest>()
+
+            val existing = repository.findById(uuid)
+            if (existing == null) {
+                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
+                return@post
+            }
+
+            try {
+                val broadcastNetwork = if (existing.walletId.contains("testnet")) "testnet" else "mainnet"
+                val broadcastResult = blockchainClient.broadcastTransaction(request.txHex, broadcastNetwork)
+
+                if (broadcastResult.error != null) {
+                    appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to broadcastResult.error))
+                    return@post
+                }
+
+                val txid = broadcastResult.txid ?: ""
+                repository.markBroadcast(uuid, txid)
+
+                log.info("Raw tx broadcast: psbtId={} txid={}", id, txid)
+                appCall.respond(BroadcastResponse(
+                    psbtId = id,
+                    txid = txid,
+                    success = true
+                ))
+            } catch (e: Exception) {
+                log.error("Failed to broadcast raw tx for PSBT {}", id, e)
+                appCall.respond(HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Failed to broadcast")))
+            }
+        }
+
+        /**
          * GET /psbt/{id}/signers
          * Vrátí stav podpisů — kteří cosigneři podepsali a kteří chybí.
          */
@@ -514,7 +612,7 @@ private suspend fun autoSelectUtxos(
 
     // Velikost jednoho vstupu: singlesig P2WPKH = 68 vB,
     // multisig P2WSH = 57 + 73*M + 34*N vB (viz PsbtBuilder.estimateVsize)
-    val isMultisig = wallet.type == "multisig"
+    val isMultisig = wallet.type == "MULTI_SIG"
     val m = wallet.m ?: 1
     val n = wallet.n ?: 1
     val perInputVsize = if (isMultisig) (57 + 73 * m + 34 * n) else 68
