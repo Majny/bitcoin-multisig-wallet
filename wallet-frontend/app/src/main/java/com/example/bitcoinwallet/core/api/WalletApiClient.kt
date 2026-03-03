@@ -4,6 +4,7 @@ import android.util.Log
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
+import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
@@ -300,6 +301,17 @@ class WalletApiClient(
                             explicitNulls = false
                         }
                     )
+                }
+                // Throw on non-2xx responses so ViewModels get a proper Exception
+                // instead of crashing on serialization of error bodies
+                HttpResponseValidator {
+                    validateResponse { response ->
+                        if (!response.status.isSuccess()) {
+                            val body = response.bodyAsText()
+                            Log.e("WalletApiClient", "HTTP ${response.status.value}: $body")
+                            throw Exception("Server error (${response.status.value}): $body")
+                        }
+                    }
                 }
             }
     }
