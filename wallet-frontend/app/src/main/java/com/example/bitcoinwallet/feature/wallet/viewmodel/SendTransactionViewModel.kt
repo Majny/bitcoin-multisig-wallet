@@ -427,7 +427,14 @@ class SendTransactionViewModel : ViewModel() {
         val feeSats = (estimatedVsize * feeRate).toLong()
 
         val totalSats = amountSats + feeSats
-        val remainingSats = state.balanceSats - totalSats
+
+        // In manual UTXO mode, show remaining from selected UTXOs (= change output)
+        val availableSats = if (!state.autoSelect && state.selectedUtxos.isNotEmpty()) {
+            state.selectedUtxos.sumOf { it.valueSats }
+        } else {
+            state.balanceSats
+        }
+        val remainingSats = availableSats - totalSats
 
         _uiState.value = state.copy(
             amountSats = amountSats,
@@ -472,11 +479,22 @@ class SendTransactionViewModel : ViewModel() {
         if (state.amountSats <= 0) {
             _uiState.value = _uiState.value.copy(amountError = "Enter a valid amount")
             hasError = true
-        } else if (state.totalSats > state.balanceSats) {
-            _uiState.value = _uiState.value.copy(amountError = "Insufficient balance")
-            hasError = true
         } else if (state.amountSats < 546) {
             _uiState.value = _uiState.value.copy(amountError = "Amount below dust limit (546 sats)")
+            hasError = true
+        } else if (!state.autoSelect && state.selectedUtxos.isNotEmpty()) {
+            // Manual UTXO mode: check selected UTXOs cover amount + fee
+            val selectedTotal = state.selectedUtxos.sumOf { it.valueSats }
+            if (selectedTotal < state.totalSats) {
+                val shortfall = state.totalSats - selectedTotal
+                val shortfallBtc = String.format("%.8f", shortfall / 100_000_000.0)
+                _uiState.value = _uiState.value.copy(
+                    amountError = "Selected UTXOs insufficient (short $shortfallBtc BTC)"
+                )
+                hasError = true
+            }
+        } else if (state.totalSats > state.balanceSats) {
+            _uiState.value = _uiState.value.copy(amountError = "Insufficient balance")
             hasError = true
         }
 

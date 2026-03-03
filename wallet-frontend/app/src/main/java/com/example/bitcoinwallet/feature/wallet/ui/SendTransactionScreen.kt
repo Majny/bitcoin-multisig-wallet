@@ -185,6 +185,40 @@ fun SendTransactionScreen(
             }
         }
 
+        // Show selected UTXO info when in manual mode
+        if (!state.autoSelect && state.selectedUtxoCount > 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            val selectedTotalSats = state.selectedUtxos.sumOf { it.valueSats }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(DarkSurface)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "${state.selectedUtxoCount} UTXO${if (state.selectedUtxoCount > 1) "s" else ""} selected",
+                    color = AccentTeal,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = formatBtc(selectedTotalSats),
+                    color = TextPrimary,
+                    fontSize = 13.sp
+                )
+            }
+        } else if (!state.autoSelect && state.selectedUtxoCount == 0) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "No UTXOs selected — tap Edit Selection",
+                color = TextMuted,
+                fontSize = 12.sp
+            )
+        }
+
         Spacer(modifier = Modifier.height(20.dp))
 
         // ===== Fee section — presets (auto) or custom input (manual) =====
@@ -197,7 +231,8 @@ fun SendTransactionScreen(
         } else {
             CustomFeeInput(
                 value = state.customFeeRate,
-                onValueChange = onCustomFeeRateChanged
+                onValueChange = onCustomFeeRateChanged,
+                suggestedRate = state.feeEstimates?.halfHourFee
             )
         }
 
@@ -307,38 +342,53 @@ private fun FeePrioritySelector(
 @Composable
 private fun CustomFeeInput(
     value: String,
-    onValueChange: (String) -> Unit
+    onValueChange: (String) -> Unit,
+    suggestedRate: Int? = null
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = "Fee",
-            color = TextPrimary,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(end = 16.dp)
-        )
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            placeholder = {
-                Text("Enter Custom Fee", color = TextMuted, fontSize = 13.sp)
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-            trailingIcon = {
-                Text(
-                    text = "sat/vB",
-                    color = TextMuted,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(end = 8.dp)
-                )
-            },
-            modifier = Modifier.weight(1f),
-            shape = RoundedCornerShape(8.dp),
-            colors = outlinedFieldColors()
-        )
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Fee",
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(end = 16.dp)
+            )
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                placeholder = {
+                    Text(
+                        text = suggestedRate?.let { "$it (recommended)" } ?: "e.g. 5",
+                        color = TextMuted,
+                        fontSize = 13.sp
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                trailingIcon = {
+                    Text(
+                        text = "sat/vB",
+                        color = TextMuted,
+                        fontSize = 12.sp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+                },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(8.dp),
+                colors = outlinedFieldColors()
+            )
+        }
+        if (value.isBlank() && suggestedRate != null) {
+            Text(
+                text = "Leave empty to use medium priority ($suggestedRate sat/vB)",
+                color = TextMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(start = 52.dp, top = 4.dp)
+            )
+        }
     }
 }
 
