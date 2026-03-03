@@ -26,6 +26,8 @@ interface RegistryClient {
     suspend fun getWalletAddresses(walletId: String, type: String? = null): WalletAddressesResponse
 
     suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse
+
+    suspend fun deriveAddresses(descriptor: String, network: String, count: Int = 5): List<String>
 }
 
 class RegistryClientImpl(
@@ -95,5 +97,13 @@ class RegistryClientImpl(
             contentType(ContentType.Application.Json)
             setBody(req)
         }.body()
+    }
+
+    override suspend fun deriveAddresses(descriptor: String, network: String, count: Int): List<String> {
+        val resp: DeriveAddressesResponse = client().post("$baseUrl/registry/derive-addresses") {
+            contentType(ContentType.Application.Json)
+            setBody(DeriveAddressesRequest(descriptor = descriptor, network = network, count = count))
+        }.body()
+        return resp.addresses
     }
 }

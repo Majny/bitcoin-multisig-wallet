@@ -35,7 +35,13 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
             TrezorConnectScreen(
                 onConnect = { network ->
                     val coinType = if (network == "testnet") 1 else 0
-                    launcher.openGetPublicKey(context, "m/84'/$coinType'/0'", network)
+                    val paths = listOf(
+                        "m/84'/$coinType'/0'",
+                        "m/84'/$coinType'/1'"
+                    )
+                    SessionStore.pendingBatchPaths = paths
+                    SessionStore.pendingBatchXpubs = mutableListOf()
+                    launcher.openGetPublicKeyBatch(context, paths, 0, network)
                 }
             )
         }
@@ -52,30 +58,36 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                     }
                 },
                 runResolve = {
-                    val identity = SessionStore.pendingIdentity
-                        ?: run {
-                            navController.navigate(TrezorRoutes.Connect) {
-                                popUpTo(TrezorRoutes.Graph) { inclusive = false }
-                                launchSingleTop = true
+                    // Use batch xpubs if available, otherwise fall back to single identity
+                    val identities = SessionStore.pendingBatchXpubs.toList().ifEmpty {
+                        val single = SessionStore.pendingIdentity
+                            ?: run {
+                                navController.navigate(TrezorRoutes.Connect) {
+                                    popUpTo(TrezorRoutes.Graph) { inclusive = false }
+                                    launchSingleTop = true
+                                }
+                                return@ResolveWalletScreen
                             }
-                            return@ResolveWalletScreen
-                        }
+                        listOf(single)
+                    }
 
-                    // pass trezor identity
-                    val session = signer.loginWithTrezor(identity)
+                    // Login with all collected xpubs — backend scans and creates wallets for active accounts
+                    val session = signer.loginWithTrezor(identities)
                     SessionStore.session = session
                     SessionStore.walletsFetchedAtMs = System.currentTimeMillis()
 
-                    if (SessionStore.hasWalletSelected()) {
-                        // Navigate to wallet dashboard
-                        navController.navigate(WalletRoutes.Graph) {
-                            popUpTo(TrezorRoutes.Graph) { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    } else {
-                        navController.navigate(TrezorRoutes.SelectAccount) {
-                            launchSingleTop = true
-                        }
+                    // Check if any wallets were found for the connected network
+                    val connectedNetwork = identities.first().derivationPath
+                        .let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
+                    val networkWallets = session.user.wallets.filter { it.network == connectedNetwork }
+
+                    if (networkWallets.isEmpty()) {
+                        throw Exception("No accounts with activity found on $connectedNetwork")
+                    }
+
+                    // Show wallet selection
+                    navController.navigate(TrezorRoutes.SelectAccount) {
+                        launchSingleTop = true
                     }
                 }
             )

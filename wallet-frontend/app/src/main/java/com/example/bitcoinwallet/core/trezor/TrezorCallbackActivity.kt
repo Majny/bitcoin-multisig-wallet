@@ -50,14 +50,48 @@ class TrezorCallbackActivity : ComponentActivity() {
 
     /**
      * Handle getPublicKey callback — used for login/account discovery.
+     * Supports batch mode: accumulates xpubs across multiple Trezor round-trips.
      */
     private fun handleAuthCallback(responseJson: String) {
+        val data: Uri = intent?.data ?: run { finish(); return }
         val identity = parseIdentityFromResponse(responseJson)
         if (identity == null) {
             finish()
             return
         }
-        SessionStore.pendingIdentity = identity
+
+        val batchIndex = data.getQueryParameter("batchIndex")?.toIntOrNull()
+        val batchTotal = data.getQueryParameter("batchTotal")?.toIntOrNull()
+
+        if (batchIndex != null && batchTotal != null) {
+            // Batch mode: accumulate this xpub
+            SessionStore.pendingBatchXpubs.add(identity)
+            Log.d("TrezorCallback", "Batch ${batchIndex + 1}/$batchTotal collected: ${identity.derivationPath}")
+
+            if (batchIndex + 1 < batchTotal) {
+                // More xpubs to collect — open Trezor Suite for the next one
+                val network = if (identity.derivationPath.contains("'/1'/")) "testnet" else "mainnet"
+                val launched = TrezorDeeplinkLauncher().openGetPublicKeyBatch(
+                    this,
+                    SessionStore.pendingBatchPaths,
+                    batchIndex + 1,
+                    network
+                )
+                if (launched == null) {
+                    Log.e("TrezorCallback", "Failed to launch next batch request")
+                }
+                finish()
+                return
+            }
+
+            // Batch complete — use first xpub as primary identity (for login)
+            Log.d("TrezorCallback", "Batch complete, ${SessionStore.pendingBatchXpubs.size} xpubs collected")
+            SessionStore.pendingIdentity = SessionStore.pendingBatchXpubs.firstOrNull()
+        } else {
+            // Single mode (backwards compat)
+            SessionStore.pendingIdentity = identity
+            SessionStore.pendingBatchXpubs = mutableListOf(identity)
+        }
 
         startActivity(
             Intent(this@TrezorCallbackActivity, MainActivity::class.java)

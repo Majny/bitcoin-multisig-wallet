@@ -12,13 +12,13 @@ import kotlinx.serialization.Serializable
  * Proxies requests to the dedicated blockchain service.
  */
 interface BlockchainClient {
-    suspend fun getAddressInfo(address: String): AddressInfoResponse
-    suspend fun getAddressUtxos(address: String): List<UtxoResponse>
-    suspend fun getAddressTransactions(address: String): List<TransactionResponse>
-    suspend fun hasActivity(address: String): HasActivityResponse
-    suspend fun getFeeEstimates(): FeeEstimatesResponse
-    suspend fun getTransaction(txid: String): TransactionResponse
-    suspend fun broadcastTransaction(hex: String): BroadcastResponse
+    suspend fun getAddressInfo(address: String, network: String = "mainnet"): AddressInfoResponse
+    suspend fun getAddressUtxos(address: String, network: String = "mainnet"): List<UtxoResponse>
+    suspend fun getAddressTransactions(address: String, network: String = "mainnet"): List<TransactionResponse>
+    suspend fun hasActivity(address: String, network: String = "mainnet"): HasActivityResponse
+    suspend fun getFeeEstimates(network: String = "mainnet"): FeeEstimatesResponse
+    suspend fun getTransaction(txid: String, network: String = "mainnet"): TransactionResponse
+    suspend fun broadcastTransaction(hex: String, network: String = "mainnet"): BroadcastResponse
 }
 
 // ============ Response DTOs ============
@@ -111,33 +111,46 @@ class BlockchainClientImpl(
         return client
     }
 
-    override suspend fun getAddressInfo(address: String): AddressInfoResponse {
-        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address").body()
+    override suspend fun getAddressInfo(address: String, network: String): AddressInfoResponse {
+        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address") {
+            parameter("network", network)
+        }.body()
     }
 
-    override suspend fun getAddressUtxos(address: String): List<UtxoResponse> {
-        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/utxos").body()
+    override suspend fun getAddressUtxos(address: String, network: String): List<UtxoResponse> {
+        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/utxos") {
+            parameter("network", network)
+        }.body()
     }
 
-    override suspend fun getAddressTransactions(address: String): List<TransactionResponse> {
-        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/txs").body()
+    override suspend fun getAddressTransactions(address: String, network: String): List<TransactionResponse> {
+        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/txs") {
+            parameter("network", network)
+        }.body()
     }
 
-    override suspend fun hasActivity(address: String): HasActivityResponse {
-        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/has-activity").body()
+    override suspend fun hasActivity(address: String, network: String): HasActivityResponse {
+        return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/has-activity") {
+            parameter("network", network)
+        }.body()
     }
 
-    override suspend fun getFeeEstimates(): FeeEstimatesResponse {
-        return requireClient().get("$baseUrl/api/v1/blockchain/fees").body()
+    override suspend fun getFeeEstimates(network: String): FeeEstimatesResponse {
+        return requireClient().get("$baseUrl/api/v1/blockchain/fees") {
+            parameter("network", network)
+        }.body()
     }
 
-    override suspend fun getTransaction(txid: String): TransactionResponse {
-        return requireClient().get("$baseUrl/api/v1/blockchain/tx/$txid").body()
+    override suspend fun getTransaction(txid: String, network: String): TransactionResponse {
+        return requireClient().get("$baseUrl/api/v1/blockchain/tx/$txid") {
+            parameter("network", network)
+        }.body()
     }
 
-    override suspend fun broadcastTransaction(hex: String): BroadcastResponse {
+    override suspend fun broadcastTransaction(hex: String, network: String): BroadcastResponse {
         return requireClient().post("$baseUrl/api/v1/blockchain/tx/broadcast") {
             contentType(ContentType.Application.Json)
+            parameter("network", network)
             setBody(BroadcastRequest(hex))
         }.body()
     }

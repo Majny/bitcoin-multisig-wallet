@@ -26,17 +26,23 @@ class MobileSigner(
     private val client: HttpClient = defaultClient()
 ) {
 
-    suspend fun loginWithTrezor(identity: TrezorDeviceIdentity): UserSession {
+    /**
+     * Login with one or more Trezor account xpubs.
+     * Backend scans each account for blockchain activity and creates wallets for active ones.
+     */
+    suspend fun loginWithTrezor(identities: List<TrezorDeviceIdentity>): UserSession {
+        val primary = identities.first()
         val loginResp: TrezorLoginResponse =
             client.post("$backendBaseUrl/auth/trezor/login") {
                 contentType(ContentType.Application.Json)
                 setBody(
                     TrezorLoginRequest(
-                        fingerprint = identity.fingerprint,
-                        xpub = identity.xpub,
-                        derivationPath = identity.derivationPath,
-                        deviceModel = identity.deviceModel,
-                        deviceLabel = identity.deviceLabel
+                        fingerprint = primary.fingerprint,
+                        xpub = primary.xpub,
+                        derivationPath = primary.derivationPath,
+                        deviceModel = primary.deviceModel,
+                        deviceLabel = primary.deviceLabel,
+                        accounts = identities.map { AccountToScan(it.xpub, it.derivationPath) }
                     )
                 )
             }.body()
@@ -260,10 +266,11 @@ data class SubmitSignedPsbtResult(
 @Serializable
 data class TrezorLoginRequest(
     val fingerprint: String,
-    val xpub: String,
-    val derivationPath: String,
-    val deviceModel: String?,
-    val deviceLabel: String?
+    val xpub: String = "",
+    val derivationPath: String = "",
+    val deviceModel: String? = null,
+    val deviceLabel: String? = null,
+    val accounts: List<AccountToScan>? = null
 )
 
 

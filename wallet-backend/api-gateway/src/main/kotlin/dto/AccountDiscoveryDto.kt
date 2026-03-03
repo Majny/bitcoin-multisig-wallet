@@ -40,11 +40,13 @@ data class ScannedAccount(
 
 /**
  * Request to derive addresses from a descriptor.
+ * Sent to wallet-registry POST /registry/derive-addresses.
  */
 @Serializable
 data class DeriveAddressesRequest(
     val descriptor: String,
-    val range: List<Int> = listOf(0, 19)  // first 20 addresses by default
+    val network: String,
+    val count: Int = 5
 )
 
 @Serializable

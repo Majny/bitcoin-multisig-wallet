@@ -5,10 +5,12 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class TrezorLoginRequest(
     val fingerprint: String,
-    val xpub: String,
-    val derivationPath: String,
+    val xpub: String = "",
+    val derivationPath: String = "",
     val deviceModel: String? = null,
-    val deviceLabel: String? = null
+    val deviceLabel: String? = null,
+    /** Multi-account discovery: list of accounts to scan. If null, falls back to single xpub/derivationPath. */
+    val accounts: List<AccountToScan>? = null
 )
 
 @Serializable

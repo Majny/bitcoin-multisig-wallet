@@ -17,6 +17,28 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
 
         route("/registry") {
 
+            /**
+             * POST /registry/derive-addresses
+             *
+             * Derives addresses from a descriptor without creating a wallet.
+             * Used by api-gateway for account discovery (checking blockchain activity).
+             */
+            post("/derive-addresses") {
+                try {
+                    val req = call.receive<DeriveAddressesRequest>()
+                    val derived = AddressDerivation.deriveAddresses(
+                        descriptor = req.descriptor,
+                        network = req.network,
+                        chain = 0,
+                        fromIndex = 0,
+                        count = req.count
+                    )
+                    call.respond(DeriveAddressesResponse(addresses = derived.map { it.address }))
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "derivation failed"))
+                }
+            }
+
             post("/devices") {
                 val req = call.receive<UpsertDeviceRequest>()
                 val out = repo.upsertDevice(req)

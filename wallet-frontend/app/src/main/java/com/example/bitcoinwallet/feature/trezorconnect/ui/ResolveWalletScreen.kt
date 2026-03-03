@@ -44,7 +44,7 @@ fun ResolveWalletScreen(
             CircularProgressIndicator()
             Spacer(Modifier.height(16.dp))
             Text(
-                text = "Signing you in and fetching your wallets.",
+                text = "Scanning accounts for blockchain activity...",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary
             )

@@ -96,3 +96,15 @@ data class WalletAddressesResponse(
     val walletId: String,
     val addresses: List<WalletAddressResponse>
 )
+
+@Serializable
+data class DeriveAddressesRequest(
+    val descriptor: String,
+    val network: String,
+    val count: Int = 5
+)
+
+@Serializable
+data class DeriveAddressesResponse(
+    val addresses: List<String>
+)

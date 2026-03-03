@@ -5,6 +5,9 @@ import cz.majny.wallet.gateway.dto.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger("AuthRoutes")
 
 fun Route.authRoutes() {
 
@@ -25,24 +28,58 @@ fun Route.authRoutes() {
             )
         )
 
-        val walletCreate = buildSingleSigWalletCreate(
-            deviceId = deviceId,
-            fingerprint = req.fingerprint,
-            xpub = req.xpub,
-            derivationPath = req.derivationPath,
-            deviceLabel = req.deviceLabel
-        )
+        // Build list of accounts to scan (backwards compat: fallback to single xpub)
+        val accountsToScan: List<AccountToScan> = if (!req.accounts.isNullOrEmpty()) {
+            req.accounts
+        } else if (req.xpub.isNotBlank()) {
+            listOf(AccountToScan(xpub = req.xpub, derivationPath = req.derivationPath))
+        } else {
+            emptyList()
+        }
 
-        // create wallet
-        call.application.deps.registry.createWallet(walletCreate)
+        // 2) For each account: scan activity, create wallet if active
+        for (account in accountsToScan) {
+            try {
+                val walletCreate = buildSingleSigWalletCreate(
+                    deviceId = deviceId,
+                    fingerprint = req.fingerprint,
+                    xpub = account.xpub,
+                    derivationPath = account.derivationPath,
+                    deviceLabel = req.deviceLabel
+                )
 
-        // attach membership
-        call.application.deps.registry.attachMember(
-            walletId = walletCreate.walletId,
-            req = MemberAttach(deviceId = deviceId)
-        )
+                // Derive first 5 receive addresses and check blockchain activity
+                val hasActivity = checkAccountActivity(
+                    registry = call.application.deps.registry,
+                    blockchain = call.application.deps.blockchain,
+                    descriptor = walletCreate.receiveDescriptor,
+                    network = walletCreate.network
+                )
 
-        // source-of-truth wallets
+                if (hasActivity) {
+                    log.info("Account {} has activity, creating wallet {}", account.derivationPath, walletCreate.walletId)
+                    try {
+                        call.application.deps.registry.createWallet(walletCreate)
+                    } catch (_: Exception) {
+                        // wallet already exists from previous login — OK
+                    }
+                    try {
+                        call.application.deps.registry.attachMember(
+                            walletId = walletCreate.walletId,
+                            req = MemberAttach(deviceId = deviceId)
+                        )
+                    } catch (_: Exception) {
+                        // member already attached — OK
+                    }
+                } else {
+                    log.info("Account {} has no activity, skipping", account.derivationPath)
+                }
+            } catch (e: Exception) {
+                log.error("Failed to scan account {}: {}", account.derivationPath, e.message)
+            }
+        }
+
+        // 3) source-of-truth wallets
         val wallets = call.application.deps.registry.listWallets(deviceId)
 
         call.respond(
@@ -68,10 +105,26 @@ fun Route.authRoutes() {
     }
 }
 
-// TODO: more wallets
 /**
- * DEV version single-sig of import: creates wallets + descriptors.
- * derivationPath "m/84'/0'/0'" apod.
+ * Derive first N receive addresses and check if any have blockchain activity.
+ * Stops early on first active address found.
+ */
+private suspend fun checkAccountActivity(
+    registry: cz.majny.wallet.gateway.clients.RegistryClient,
+    blockchain: cz.majny.wallet.gateway.clients.BlockchainClient,
+    descriptor: String,
+    network: String
+): Boolean {
+    val addresses = registry.deriveAddresses(descriptor, network, count = 5)
+    for (addr in addresses) {
+        val resp = blockchain.hasActivity(addr, network)
+        if (resp.hasActivity) return true
+    }
+    return false
+}
+
+/**
+ * Builds a CreateWalletRequest for a single-sig wallet from xpub + derivationPath.
  */
 private fun buildSingleSigWalletCreate(
     deviceId: String,

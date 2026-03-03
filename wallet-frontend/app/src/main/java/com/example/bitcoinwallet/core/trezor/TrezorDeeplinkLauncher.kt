@@ -231,14 +231,18 @@ class TrezorDeeplinkLauncher(
     fun openGetPublicKeyBatch(
         context: Context,
         derivationPaths: List<String>,
-        currentIndex: Int = 0
+        currentIndex: Int = 0,
+        network: String = "mainnet"
     ): String? {
         if (currentIndex >= derivationPaths.size) return null
 
         val path = derivationPaths[currentIndex]
+        val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val paramsJson = JSONObject().apply {
-            put("coin", "Bitcoin")
+            put("coin", coin)
             put("path", path)
+            put("showOnTrezor", false)
+            put("suppressBackupWarning", true)
         }.toString()
 
         val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()

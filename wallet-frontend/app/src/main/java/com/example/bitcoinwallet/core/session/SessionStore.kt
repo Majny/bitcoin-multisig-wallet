@@ -15,6 +15,12 @@ object SessionStore {
     @Volatile var activeWalletId: String? = null
     @Volatile var walletsFetchedAtMs: Long? = null
 
+    /** Batch account discovery: paths to request from Trezor. */
+    @Volatile var pendingBatchPaths: List<String> = emptyList()
+
+    /** Batch account discovery: collected xpubs from Trezor callbacks. */
+    @Volatile var pendingBatchXpubs: MutableList<TrezorDeviceIdentity> = mutableListOf()
+
     /**
      * Signed PSBT base64 returned from Trezor after signing.
      * StateFlow so that composables automatically re-observe when Trezor returns.
@@ -46,6 +52,8 @@ object SessionStore {
         session = null
         activeWalletId = null
         walletsFetchedAtMs = null
+        pendingBatchPaths = emptyList()
+        pendingBatchXpubs = mutableListOf()
         _pendingSignedPsbt.value = null
         _pendingSignType.value = null
         _preferredCurrency.value = "czk"
