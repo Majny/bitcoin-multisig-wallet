@@ -99,6 +99,7 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
             val wallets = SessionStore.session?.user?.wallets
                 .orEmpty()
                 .filter { it.network == connectedNetwork }
+                .filter { it.type != com.example.bitcoinwallet.core.signer.WalletType.MULTI_SIG }
 
             SelectAccountScreen(
                 wallets = wallets,
