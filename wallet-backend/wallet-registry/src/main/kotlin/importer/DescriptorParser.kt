@@ -63,7 +63,15 @@ object DescriptorParser {
         val (receiveRaw, changeRaw) = when (lines.size) {
             1 -> {
                 val d = stripChecksum(lines[0])
-                Pair(d, deriveCounterpart(d))
+                // BIP-389 multipath: <0;1> contains both receive and change
+                if (d.contains("<0;1>")) {
+                    Pair(
+                        d.replace("<0;1>", "0"),
+                        d.replace("<0;1>", "1")
+                    )
+                } else {
+                    Pair(d, deriveCounterpart(d))
+                }
             }
             2 -> Pair(stripChecksum(lines[0]), stripChecksum(lines[1]))
             else -> throw DescriptorParseException("Expected 1 or 2 descriptor lines, got ${lines.size}")

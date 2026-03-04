@@ -314,11 +314,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
 
-        composable(WalletRoutes.MultisigWallets) {
+        composable(WalletRoutes.MultisigWallets) { backStackEntry ->
             val viewModel: MultisigWalletsViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
             val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
             val scope = rememberCoroutineScope()
+
+            val walletImported by backStackEntry.savedStateHandle
+                .getStateFlow("wallet_imported", false)
+                .collectAsState()
+            LaunchedEffect(walletImported) {
+                if (walletImported) {
+                    viewModel.loadWallets()
+                    backStackEntry.savedStateHandle.remove<Boolean>("wallet_imported")
+                }
+            }
 
             ModalNavigationDrawer(
                 drawerState = drawerState,
@@ -404,10 +414,11 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onDescriptorChanged = viewModel::onDescriptorChanged,
                 onWalletNameChanged = viewModel::onWalletNameChanged,
                 onFileContent = viewModel::onDescriptorScanned,
-                onScanQr = { /* TODO: launch QR scanner */ },
                 onImport = {
                     viewModel.importWallet {
-                        // On success, go back to multisig list
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set("wallet_imported", true)
                         navController.popBackStack()
                     }
                 }

@@ -9,6 +9,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 
 interface RegistryClient {
     suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse
@@ -93,10 +94,20 @@ class RegistryClientImpl(
     }
 
     override suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse {
-        return client().post("$baseUrl/registry/wallets/import") {
-            contentType(ContentType.Application.Json)
-            setBody(req)
-        }.body()
+        return try {
+            val resp = client().post("$baseUrl/registry/wallets/import") {
+                contentType(ContentType.Application.Json)
+                setBody(req)
+            }
+            if (resp.status.isSuccess()) {
+                resp.body()
+            } else {
+                val errorBody = resp.bodyAsText()
+                ImportWalletGatewayResponse(success = false, error = errorBody)
+            }
+        } catch (e: Exception) {
+            ImportWalletGatewayResponse(success = false, error = e.message ?: "import failed")
+        }
     }
 
     override suspend fun deriveAddresses(descriptor: String, network: String, count: Int): List<String> {
