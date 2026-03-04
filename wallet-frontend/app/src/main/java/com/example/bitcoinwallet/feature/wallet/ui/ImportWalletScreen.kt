@@ -5,16 +5,16 @@ import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -22,7 +22,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bitcoinwallet.feature.wallet.viewmodel.ImportWalletUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
-import com.example.bitcoinwallet.ui.components.SecondaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
 /**
@@ -94,6 +93,33 @@ fun ImportWalletScreen(
             placeholder = {
                 Text("Descriptor", color = TextMuted, fontSize = 14.sp)
             },
+            trailingIcon = {
+                Column(
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    IconButton(onClick = onScanQr) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Scan QR",
+                            tint = TextSecondary
+                        )
+                    }
+                    IconButton(onClick = {
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                        }
+                        filePickerLauncher.launch(intent)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.FileOpen,
+                            contentDescription = "Import from file",
+                            tint = TextSecondary
+                        )
+                    }
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(120.dp),
@@ -109,31 +135,6 @@ fun ImportWalletScreen(
             shape = RoundedCornerShape(8.dp),
             textStyle = LocalTextStyle.current.copy(fontSize = 13.sp)
         )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        /* ── Import from file / Scan QR buttons ── */
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SecondaryButton(
-                text = "Import from file",
-                onClick = {
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
-                    }
-                    filePickerLauncher.launch(intent)
-                },
-                modifier = Modifier.weight(1f)
-            )
-            SecondaryButton(
-                text = "Scan QR",
-                onClick = onScanQr,
-                modifier = Modifier.weight(1f)
-            )
-        }
 
         Spacer(modifier = Modifier.height(16.dp))
 

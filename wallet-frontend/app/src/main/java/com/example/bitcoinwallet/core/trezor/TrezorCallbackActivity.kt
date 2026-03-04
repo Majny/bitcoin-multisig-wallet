@@ -50,45 +50,29 @@ class TrezorCallbackActivity : ComponentActivity() {
 
     /**
      * Handle getPublicKey callback — used for login/account discovery.
-     * Supports batch mode: accumulates xpubs across multiple Trezor round-trips.
+     * Supports bundle mode: Trezor returns all xpubs in a single callback.
      */
     private fun handleAuthCallback(responseJson: String) {
         val data: Uri = intent?.data ?: run { finish(); return }
-        val identity = parseIdentityFromResponse(responseJson)
-        if (identity == null) {
-            finish()
-            return
-        }
+        val isBundle = data.getQueryParameter("bundle") == "true"
 
-        val batchIndex = data.getQueryParameter("batchIndex")?.toIntOrNull()
-        val batchTotal = data.getQueryParameter("batchTotal")?.toIntOrNull()
-
-        if (batchIndex != null && batchTotal != null) {
-            // Batch mode: accumulate this xpub
-            SessionStore.pendingBatchXpubs.add(identity)
-            Log.d("TrezorCallback", "Batch ${batchIndex + 1}/$batchTotal collected: ${identity.derivationPath}")
-
-            if (batchIndex + 1 < batchTotal) {
-                // More xpubs to collect — open Trezor Suite for the next one
-                val network = if (identity.derivationPath.contains("'/1'/")) "testnet" else "mainnet"
-                val launched = TrezorDeeplinkLauncher().openGetPublicKeyBatch(
-                    this,
-                    SessionStore.pendingBatchPaths,
-                    batchIndex + 1,
-                    network
-                )
-                if (launched == null) {
-                    Log.e("TrezorCallback", "Failed to launch next batch request")
-                }
+        if (isBundle) {
+            val identities = parseBundleResponse(responseJson)
+            if (identities.isEmpty()) {
+                Log.e("TrezorCallback", "Bundle response contained no valid xpubs")
                 finish()
                 return
             }
-
-            // Batch complete — use first xpub as primary identity (for login)
-            Log.d("TrezorCallback", "Batch complete, ${SessionStore.pendingBatchXpubs.size} xpubs collected")
-            SessionStore.pendingIdentity = SessionStore.pendingBatchXpubs.firstOrNull()
+            Log.d("TrezorCallback", "Bundle complete, ${identities.size} xpubs collected")
+            SessionStore.pendingBatchXpubs = identities.toMutableList()
+            SessionStore.pendingIdentity = identities.first()
         } else {
             // Single mode (backwards compat)
+            val identity = parseIdentityFromResponse(responseJson)
+            if (identity == null) {
+                finish()
+                return
+            }
             SessionStore.pendingIdentity = identity
             SessionStore.pendingBatchXpubs = mutableListOf(identity)
         }
@@ -170,6 +154,51 @@ class TrezorCallbackActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e("TrezorCallback", "Error parsing sign response", e)
             null
+        }
+    }
+
+    /**
+     * Parses a bundle response where payload is a JSON array of xpub results.
+     */
+    private fun parseBundleResponse(responseJson: String): List<TrezorDeviceIdentity> {
+        return try {
+            val root = JSONObject(responseJson)
+            if (!root.optBoolean("success", false)) {
+                val msg = root.optJSONObject("payload")?.optString("error")
+                    ?: root.optString("error")
+                Log.e("TrezorCallback", "Trezor bundle error: $msg")
+                return emptyList()
+            }
+
+            val payload = root.optJSONArray("payload") ?: run {
+                // Fallback: single result wrapped in object (not array)
+                val single = parseIdentityFromResponse(responseJson)
+                return if (single != null) listOf(single) else emptyList()
+            }
+
+            val identities = mutableListOf<TrezorDeviceIdentity>()
+            for (i in 0 until payload.length()) {
+                val item = payload.getJSONObject(i)
+                val xpub = item.optString("xpub", "")
+                if (xpub.isBlank()) continue
+
+                identities.add(
+                    TrezorDeviceIdentity(
+                        fingerprint = item.optString("fingerprint", ""),
+                        xpub = xpub,
+                        derivationPath = item.optString("serializedPath", "").ifBlank {
+                            item.optString("path", "")
+                        },
+                        deviceModel = item.optString("device_model", null),
+                        deviceLabel = item.optString("device_label", null)
+                    )
+                )
+            }
+            Log.d("TrezorCallback", "Parsed ${identities.size} identities from bundle")
+            identities
+        } catch (e: Exception) {
+            Log.e("TrezorCallback", "Error parsing bundle response", e)
+            emptyList()
         }
     }
 

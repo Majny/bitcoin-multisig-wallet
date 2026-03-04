@@ -35,13 +35,10 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
             TrezorConnectScreen(
                 onConnect = { network ->
                     val coinType = if (network == "testnet") 1 else 0
-                    val paths = listOf(
-                        "m/84'/$coinType'/0'",
-                        "m/84'/$coinType'/1'"
-                    )
-                    SessionStore.pendingBatchPaths = paths
+                    // BIP-44 account discovery: request accounts 0–9 in a single bundle call
+                    val paths = (0..9).map { "m/84'/$coinType'/$it'" }
                     SessionStore.pendingBatchXpubs = mutableListOf()
-                    launcher.openGetPublicKeyBatch(context, paths, 0, network)
+                    launcher.openGetPublicKeyBundle(context, paths, network)
                 }
             )
         }

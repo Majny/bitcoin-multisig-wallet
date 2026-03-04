@@ -225,35 +225,41 @@ class TrezorDeeplinkLauncher(
     }
 
     /**
-     * Opens Trezor Suite to get public keys for multiple derivation paths.
+     * Opens Trezor Suite to get public keys for multiple derivation paths
+     * in a single deeplink call using the Trezor Connect `bundle` parameter.
      * Returns the request ID for tracking the callback.
      */
-    fun openGetPublicKeyBatch(
+    fun openGetPublicKeyBundle(
         context: Context,
         derivationPaths: List<String>,
-        currentIndex: Int = 0,
         network: String = "mainnet"
     ): String? {
-        if (currentIndex >= derivationPaths.size) return null
+        if (derivationPaths.isEmpty()) return null
 
-        val path = derivationPaths[currentIndex]
         val coin = if (network == "testnet") "Testnet" else "Bitcoin"
+        val bundle = JSONArray()
+        for (path in derivationPaths) {
+            bundle.put(JSONObject().apply {
+                put("path", path)
+                put("coin", coin)
+                put("showOnTrezor", false)
+                put("suppressBackupWarning", true)
+            })
+        }
         val paramsJson = JSONObject().apply {
-            put("coin", coin)
-            put("path", path)
-            put("showOnTrezor", false)
-            put("suppressBackupWarning", true)
+            put("bundle", bundle)
         }.toString()
 
         val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
-        // Encode remaining paths and current index in callback
-        val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&batchIndex=$currentIndex&batchTotal=${derivationPaths.size}"
+        val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&bundle=true"
 
         val uri = Uri.parse(connectBaseUrl).buildUpon()
             .appendQueryParameter("method", "getPublicKey")
             .appendQueryParameter("params", paramsJson)
             .appendQueryParameter("callback", callbackUrl)
             .build()
+
+        Log.d("TrezorDeeplink", "openGetPublicKeyBundle: ${derivationPaths.size} paths, network=$network")
 
         val intent = Intent(Intent.ACTION_VIEW, uri)
 

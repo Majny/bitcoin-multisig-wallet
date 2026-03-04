@@ -15,10 +15,7 @@ object SessionStore {
     @Volatile var activeWalletId: String? = null
     @Volatile var walletsFetchedAtMs: Long? = null
 
-    /** Batch account discovery: paths to request from Trezor. */
-    @Volatile var pendingBatchPaths: List<String> = emptyList()
-
-    /** Batch account discovery: collected xpubs from Trezor callbacks. */
+    /** Account discovery: collected xpubs from Trezor bundle callback. */
     @Volatile var pendingBatchXpubs: MutableList<TrezorDeviceIdentity> = mutableListOf()
 
     /**
@@ -52,7 +49,6 @@ object SessionStore {
         session = null
         activeWalletId = null
         walletsFetchedAtMs = null
-        pendingBatchPaths = emptyList()
         pendingBatchXpubs = mutableListOf()
         _pendingSignedPsbt.value = null
         _pendingSignType.value = null

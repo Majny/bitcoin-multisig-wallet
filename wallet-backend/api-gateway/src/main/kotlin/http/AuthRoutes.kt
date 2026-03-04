@@ -37,7 +37,7 @@ fun Route.authRoutes() {
             emptyList()
         }
 
-        // 2) For each account: scan activity, create wallet if active
+        // 2) BIP-44 account discovery: scan accounts sequentially, stop at first gap
         for (account in accountsToScan) {
             try {
                 val walletCreate = buildSingleSigWalletCreate(
@@ -72,7 +72,8 @@ fun Route.authRoutes() {
                         // member already attached — OK
                     }
                 } else {
-                    log.info("Account {} has no activity, skipping", account.derivationPath)
+                    log.info("Account {} has no activity — BIP-44 gap limit reached, stopping discovery", account.derivationPath)
+                    break
                 }
             } catch (e: Exception) {
                 log.error("Failed to scan account {}: {}", account.derivationPath, e.message)
