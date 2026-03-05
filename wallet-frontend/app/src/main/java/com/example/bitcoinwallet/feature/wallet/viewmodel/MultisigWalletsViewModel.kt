@@ -19,7 +19,7 @@ data class MultisigWalletItem(
     val mOfN: String get() = "$m of $n"
     val balanceBtc: String get() {
         val btc = balanceSats / 100_000_000.0
-        return "%.2f BTC".format(btc)
+        return "%.8f BTC".format(btc)
     }
 }
 
