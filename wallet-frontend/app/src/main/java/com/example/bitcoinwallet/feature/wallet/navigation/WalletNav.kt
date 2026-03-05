@@ -182,13 +182,19 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 if (signedData != null && signType != null && state.awaitingTrezor) {
                     SessionStore.setPendingSignedPsbt(null)
                     SessionStore.setPendingSignType(null)
-                    viewModel.onTrezorResult(signedData, signType) {
-                        val s = viewModel.uiState.value
-                        navController.navigate(
-                            WalletRoutes.transactionSent(s.totalSats, s.feeSats)
-                        ) {
-                            popUpTo(WalletRoutes.Dashboard) { inclusive = false }
-                        }
+                    viewModel.onTrezorResult(signedData, signType) {}
+                }
+            }
+
+            // Navigate to success screen when broadcast completes.
+            // Separate LaunchedEffect avoids lifecycle issues from navigating inside
+            // a viewModelScope callback that may fire before the composable is RESUMED.
+            LaunchedEffect(state.broadcastSuccess) {
+                if (state.broadcastSuccess) {
+                    navController.navigate(
+                        WalletRoutes.transactionSent(state.totalSats, state.feeSats)
+                    ) {
+                        popUpTo(WalletRoutes.Dashboard) { inclusive = false }
                     }
                 }
             }
