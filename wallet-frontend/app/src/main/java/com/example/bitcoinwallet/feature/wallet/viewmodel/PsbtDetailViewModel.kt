@@ -24,6 +24,8 @@ enum class SignerStatus { SIGNED, PENDING, MISSING }
 data class CosignerUiInfo(
     val fingerprint: String,
     val cosignerIndex: Int,
+    val originPath: String? = null,
+    val xpub: String? = null,
     val status: SignerStatus,
     val deviceId: String? = null
 )
@@ -203,6 +205,8 @@ class PsbtDetailViewModel : ViewModel() {
                     CosignerUiInfo(
                         fingerprint = signer.fingerprint,
                         cosignerIndex = signer.cosignerIndex,
+                        originPath = signer.originPath,
+                        xpub = signer.xpub,
                         status = status,
                         deviceId = signer.deviceId
                     )

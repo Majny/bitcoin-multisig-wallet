@@ -16,6 +16,8 @@ fun Route.walletRoutes() {
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()
             val wallets = call.application.deps.registry.listWallets(deviceId)
+            call.application.log.info("GET /wallets for device={}: {} wallets, types={}",
+                deviceId, wallets.size, wallets.map { "${it.walletId}(${it.type})" })
             call.respond(wallets)
         }
 
@@ -34,7 +36,7 @@ fun Route.walletRoutes() {
 
             // Ensure the calling device is in the members list
             val membersWithDevice = if (req.members.none { it.deviceId == deviceId }) {
-                req.members + MemberAttach(deviceId = deviceId, cosignerIdx = null)
+                req.members + MemberAttach(deviceId = deviceId)
             } else {
                 req.members
             }
@@ -78,7 +80,8 @@ fun Route.walletRoutes() {
                 label = appReq.label,
                 birthHeight = appReq.birthHeight,
                 deviceId = deviceId,
-                deviceFingerprint = fingerprint
+                deviceFingerprint = fingerprint,
+                accountIndex = appReq.accountIndex
             )
 
             try {

@@ -105,7 +105,7 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 val id = call.parameters["id"]
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
                 val req = call.receive<MemberAttach>()
-                repo.attachMember(id, req.deviceId, req.cosignerIdx)
+                repo.attachMember(id, req.deviceId, req.accountIndex)
                 call.respondText("ok")
             }
 

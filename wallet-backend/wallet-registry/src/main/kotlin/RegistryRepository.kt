@@ -99,7 +99,7 @@ class RegistryRepository {
             WalletMembersTable.insertIgnore {
                 it[walletId] = req.walletId
                 it[deviceId] = mem.deviceId
-                it[cosignerIdx] = mem.cosignerIdx
+                it[accountIndex] = mem.accountIndex
                 it[createdAt] = OffsetDateTime.now()
             }
         }
@@ -111,17 +111,17 @@ class RegistryRepository {
         getWallet(req.walletId) ?: error("Wallet insert failed")
     }
 
-    fun attachMember(walletId: String, deviceId: String, cosignerIdx: Int?) = transaction {
+    fun attachMember(walletId: String, deviceId: String, accountIndex: Int = -1) = transaction {
         WalletMembersTable.insertIgnore {
             it[WalletMembersTable.walletId] = walletId
             it[WalletMembersTable.deviceId] = deviceId
-            it[WalletMembersTable.cosignerIdx] = cosignerIdx
+            it[WalletMembersTable.accountIndex] = accountIndex
             it[createdAt] = OffsetDateTime.now()
         }
     }
 
     fun listWalletsForDevice(deviceId: String): List<WalletSummary> = transaction {
-        (WalletsTable innerJoin WalletMembersTable)
+        val rows = (WalletsTable innerJoin WalletMembersTable)
             .select(
                 WalletsTable.walletId,
                 WalletsTable.network,
@@ -129,20 +129,38 @@ class RegistryRepository {
                 WalletsTable.scriptType,
                 WalletsTable.m,
                 WalletsTable.n,
-                WalletsTable.label
+                WalletsTable.label,
+                WalletsTable.accountIndex,
+                WalletMembersTable.accountIndex
             )
             .where { WalletMembersTable.deviceId eq deviceId }
-            .map { row ->
-                WalletSummary(
-                    walletId = row[WalletsTable.walletId],
-                    network = row[WalletsTable.network],
-                    type = row[WalletsTable.type],
-                    scriptType = row[WalletsTable.scriptType],
-                    m = row[WalletsTable.m],
-                    n = row[WalletsTable.n],
-                    label = row[WalletsTable.label]
-                )
+
+        val result = rows.map { row ->
+            val memberAccountIndex = row[WalletMembersTable.accountIndex]
+
+            // For multisig: use the member's account_index directly.
+            // -1 means unknown → null (show on all accounts as fallback).
+            // For singlesig: use the wallet's own account_index.
+            val resolvedAccountIndex = if (row[WalletsTable.type] == "MULTI_SIG") {
+                if (memberAccountIndex >= 0) memberAccountIndex else null
+            } else {
+                row[WalletsTable.accountIndex]
             }
+
+            WalletSummary(
+                walletId = row[WalletsTable.walletId],
+                network = row[WalletsTable.network],
+                type = row[WalletsTable.type],
+                scriptType = row[WalletsTable.scriptType],
+                m = row[WalletsTable.m],
+                n = row[WalletsTable.n],
+                label = row[WalletsTable.label],
+                accountIndex = resolvedAccountIndex
+            )
+        }
+        log.info("listWalletsForDevice({}): returning {} wallets: {}",
+            deviceId, result.size, result.map { "${it.walletId}(${it.type},ai=${it.accountIndex})" })
+        result
     }
 
     fun getWallet(walletId: String): WalletDetail? = transaction {
@@ -172,12 +190,12 @@ class RegistryRepository {
             .sortedBy { it.idx }
 
         val members = WalletMembersTable
-            .select(WalletMembersTable.deviceId, WalletMembersTable.cosignerIdx)
+            .select(WalletMembersTable.deviceId, WalletMembersTable.accountIndex)
             .where { WalletMembersTable.walletId eq walletId }
             .map { row ->
                 MemberAttach(
                     deviceId = row[WalletMembersTable.deviceId],
-                    cosignerIdx = row[WalletMembersTable.cosignerIdx]
+                    accountIndex = row[WalletMembersTable.accountIndex]
                 )
             }
 

@@ -379,6 +379,7 @@ private fun SignersDialog(
                 .clip(RoundedCornerShape(16.dp))
                 .background(DarkBackground)
                 .padding(20.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             // Header: title + X button
             Box(modifier = Modifier.fillMaxWidth()) {
@@ -433,23 +434,65 @@ private fun SignersDialog(
                         SignerStatus.MISSING -> ErrorRed
                     }
 
-                    Row(
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .padding(vertical = 8.dp)
                     ) {
+                        // Header: fingerprint + status
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "Cosigner #${cosigner.cosignerIndex + 1}",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = statusText,
+                                color = statusColor,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+
+                        // Fingerprint
                         Text(
-                            text = cosigner.fingerprint,
-                            color = TextPrimary,
-                            fontSize = 14.sp
+                            text = "Fingerprint: ${cosigner.fingerprint}",
+                            color = TextSecondary,
+                            fontSize = 12.sp
                         )
-                        Text(
-                            text = statusText,
-                            color = statusColor,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.SemiBold
+
+                        // Origin path
+                        if (!cosigner.originPath.isNullOrBlank()) {
+                            Text(
+                                text = "Path: m/${cosigner.originPath}",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+
+                        // Xpub (full, wrapping)
+                        if (!cosigner.xpub.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = cosigner.xpub,
+                                color = TextMuted,
+                                fontSize = 10.sp,
+                                lineHeight = 14.sp
+                            )
+                        }
+                    }
+
+                    if (cosigner !== cosigners.last()) {
+                        HorizontalDivider(
+                            color = DarkCard,
+                            thickness = 1.dp
                         )
                     }
                 }

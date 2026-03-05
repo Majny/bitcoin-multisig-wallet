@@ -47,9 +47,22 @@ class MultisigWalletsViewModel : ViewModel() {
 
                 val dtos = WalletApi.client.listWallets(token)
 
-                // Filter only multisig wallets and enrich with balance
+                // Find the active singlesig wallet's account index
+                val activeId = SessionStore.activeWalletId
+                val activeAccountIndex = dtos
+                    .firstOrNull { (it.walletId.ifBlank { it.id }) == activeId }
+                    ?.accountIndex
+
+                // Filter multisig wallets that belong to the active account
                 val multisigItems = dtos
                     .filter { it.type.equals("MULTI_SIG", ignoreCase = true) }
+                    .filter { dto ->
+                        // Show only multisig wallets where the cosigner account index
+                        // matches the active singlesig wallet's account index.
+                        // null accountIndex = unknown cosigner, show as fallback.
+                        activeAccountIndex == null || dto.accountIndex == null || dto.accountIndex == activeAccountIndex
+                    }
+                    .distinctBy { it.walletId.ifBlank { it.id } }
                     .map { dto ->
                         val balance = try {
                             val walletId = dto.walletId.ifBlank { dto.id }

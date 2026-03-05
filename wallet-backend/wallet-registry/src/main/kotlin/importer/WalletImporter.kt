@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory
  *   3. Validate: M ≤ N, valid xpubs, valid derivation paths
  *   4. Check for existing wallet (dedup by descriptor)
  *   5. Create wallet + cosigners in wallet-registry DB
- *   6. Auto-attach calling device if its fingerprint matches a cosigner
+ *   6. Auto-attach calling device's active account as a member
  *   7. Derive addresses (receive + change)
  */
 class WalletImporter(
@@ -32,7 +32,8 @@ class WalletImporter(
      * @return [ImportResult] with the created/existing wallet details
      */
     fun importWallet(request: ImportWalletRequest): ImportResult {
-        log.info("Importing wallet: network={}, deviceId={}", request.network, request.deviceId)
+        log.info("Importing wallet: network={}, deviceId={}, accountIndex={}",
+            request.network, request.deviceId, request.accountIndex)
 
         // 1. Parse the descriptor
         val parsed = try {
@@ -48,14 +49,28 @@ class WalletImporter(
             )
         }
 
-        // 2. Check if wallet already exists
+        // 2. Validate: if this is a multisig and account index is provided,
+        //    verify the active account is actually a cosigner
+        if (parsed.type == "MULTI_SIG" && request.accountIndex != null) {
+            val hasCosignerForAccount = parsed.cosigners.any { cosigner ->
+                extractAccountIndexFromOrigin(cosigner.originPath) == request.accountIndex
+            }
+            if (!hasCosignerForAccount) {
+                return ImportResult(
+                    success = false,
+                    error = "Account #${request.accountIndex + 1} is not a cosigner in this multisig wallet"
+                )
+            }
+        }
+
+        // 3. Check if wallet already exists
         val existing = repo.getWallet(parsed.walletId)
         if (existing != null) {
             log.info("Wallet already exists: {}", parsed.walletId)
 
-            // Auto-attach device if not already a member
+            // Auto-attach device's active account as member
             if (request.deviceId != null) {
-                autoAttachDevice(parsed, request.deviceId, request.deviceFingerprint)
+                autoAttachDevice(parsed.walletId, request.deviceId, request.accountIndex)
             }
 
             return ImportResult(
@@ -66,7 +81,7 @@ class WalletImporter(
             )
         }
 
-        // 3. Build the CreateWalletRequest
+        // 4. Build the CreateWalletRequest
         val createReq = CreateWalletRequest(
             walletId = parsed.walletId,
             network = parsed.network,
@@ -88,10 +103,10 @@ class WalletImporter(
                     xpubRoot = c.xpub
                 )
             },
-            members = buildMemberList(parsed, request.deviceId, request.deviceFingerprint)
+            members = buildMemberList(request.deviceId, request.accountIndex)
         )
 
-        // 4. Create wallet (this also derives addresses)
+        // 5. Create wallet (this also derives addresses)
         val created = try {
             repo.createWallet(createReq)
         } catch (e: Exception) {
@@ -115,54 +130,45 @@ class WalletImporter(
 
     /**
      * Build the initial member list for the wallet.
-     * If the calling device's fingerprint matches a cosigner, attach it automatically.
+     * Uses the account index directly from the import request.
      */
     private fun buildMemberList(
-        parsed: ParsedDescriptor,
         deviceId: String?,
-        deviceFingerprint: String?
+        accountIndex: Int?
     ): List<MemberAttach> {
         if (deviceId == null) return emptyList()
-
-        val matchingCosigner = if (deviceFingerprint != null) {
-            parsed.cosigners.firstOrNull { it.fingerprint == deviceFingerprint.lowercase() }
-        } else {
-            null
-        }
-
         return listOf(
             MemberAttach(
                 deviceId = deviceId,
-                cosignerIdx = matchingCosigner?.idx
+                accountIndex = accountIndex ?: -1
             )
         )
     }
 
     /**
-     * Auto-attach a device to an existing wallet if its fingerprint matches a cosigner.
+     * Auto-attach a device's active account to an existing wallet.
      */
     private fun autoAttachDevice(
-        parsed: ParsedDescriptor,
+        walletId: String,
         deviceId: String,
-        deviceFingerprint: String?
+        accountIndex: Int?
     ) {
-        val matchingCosigner = if (deviceFingerprint != null) {
-            parsed.cosigners.firstOrNull { it.fingerprint == deviceFingerprint.lowercase() }
-        } else {
-            null
-        }
-
         try {
             repo.attachMember(
-                walletId = parsed.walletId,
+                walletId = walletId,
                 deviceId = deviceId,
-                cosignerIdx = matchingCosigner?.idx
+                accountIndex = accountIndex ?: -1
             )
-            log.info("Auto-attached device {} to wallet {} (cosigner idx={})",
-                deviceId, parsed.walletId, matchingCosigner?.idx)
+            log.info("Auto-attached device {} to wallet {} (accountIndex={})",
+                deviceId, walletId, accountIndex)
         } catch (e: Exception) {
             log.warn("Could not attach device {} to wallet {}: {}",
-                deviceId, parsed.walletId, e.message)
+                deviceId, walletId, e.message)
         }
+    }
+
+    private fun extractAccountIndexFromOrigin(originPath: String): Int? {
+        val segments = originPath.replace("'", "").replace("h", "").split("/")
+        return if (segments.size >= 3) segments[2].toIntOrNull() else null
     }
 }

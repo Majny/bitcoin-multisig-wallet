@@ -51,10 +51,18 @@ class ImportWalletViewModel : ViewModel() {
 
                 val derivationPath = SessionStore.pendingIdentity?.derivationPath ?: ""
                 val network = if (derivationPath.contains("'/1'/")) "testnet" else "mainnet"
+
+                // Extract account index from active wallet ID: "wallet-400209115-testnet-WPKH-0" → 0
+                val accountIndex = SessionStore.activeWalletId
+                    ?.split("-")
+                    ?.lastOrNull()
+                    ?.toIntOrNull()
+
                 val request = ImportWalletRequestDto(
                     descriptor = state.descriptor.trim(),
                     network = network,
-                    label = state.walletName.ifBlank { null }
+                    label = state.walletName.ifBlank { null },
+                    accountIndex = accountIndex
                 )
 
                 val response = WalletApi.client.importWallet(token, request)

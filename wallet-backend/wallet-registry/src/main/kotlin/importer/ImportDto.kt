@@ -31,7 +31,10 @@ data class ImportWalletRequest(
     val deviceId: String? = null,
 
     /** Fingerprint of the importing device's Trezor (for cosigner matching) */
-    val deviceFingerprint: String? = null
+    val deviceFingerprint: String? = null,
+
+    /** Account index of the active wallet (for disambiguating same-fingerprint cosigners) */
+    val accountIndex: Int? = null
 )
 
 /**

@@ -585,6 +585,8 @@ data class SignerStatusResponseDto(
 data class SignerDetailDto(
     val fingerprint: String,
     val cosignerIndex: Int,
+    val originPath: String? = null,
+    val xpub: String? = null,
     val signed: Boolean,
     val deviceId: String? = null,
     val signedAt: String? = null
@@ -602,7 +604,8 @@ data class MultisigWalletSummaryDto(
     val network: String = "mainnet",
     val scriptType: String = "",
     val m: Int? = null,
-    val n: Int? = null
+    val n: Int? = null,
+    val accountIndex: Int? = null
 )
 
 @Serializable
@@ -610,7 +613,8 @@ data class ImportWalletRequestDto(
     val descriptor: String,
     val network: String = "mainnet",
     val label: String? = null,
-    val birthHeight: Int? = null
+    val birthHeight: Int? = null,
+    val accountIndex: Int? = null
 )
 
 @Serializable

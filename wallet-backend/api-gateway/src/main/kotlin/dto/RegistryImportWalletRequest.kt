@@ -24,7 +24,8 @@ data class ImportWalletFromAppRequest(
     val descriptor: String,
     val network: String = "mainnet",
     val label: String? = null,
-    val birthHeight: Int? = null
+    val birthHeight: Int? = null,
+    val accountIndex: Int? = null
 )
 
 /**
@@ -37,7 +38,8 @@ data class ImportWalletGatewayRequest(
     val label: String? = null,
     val birthHeight: Int? = null,
     val deviceId: String? = null,
-    val deviceFingerprint: String? = null
+    val deviceFingerprint: String? = null,
+    val accountIndex: Int? = null
 )
 
 /**
@@ -60,7 +62,7 @@ data class ImportWalletGatewayResponse(
 @Serializable
 data class MemberAttach(
     val deviceId: String,
-    val cosignerIdx: Int? = null
+    val accountIndex: Int = -1
 )
 
 @Serializable
@@ -143,7 +145,8 @@ data class RegistryWalletSummary(
     val scriptType: String,
     val m: Int? = null,
     val n: Int? = null,
-    val label: String? = null
+    val label: String? = null,
+    val accountIndex: Int? = null
 )
 
 // ---- Address DTOs (mirrors wallet-registry API) ----

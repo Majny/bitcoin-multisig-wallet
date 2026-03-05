@@ -47,7 +47,7 @@ data class CosignerInWallet(
 @Serializable
 data class MemberAttach(
     val deviceId: String,
-    val cosignerIdx: Int? = null
+    val accountIndex: Int = -1
 )
 
 @Serializable
@@ -58,7 +58,8 @@ data class WalletSummary(
     val scriptType: String,
     val m: Int? = null,
     val n: Int? = null,
-    val label: String? = null
+    val label: String? = null,
+    val accountIndex: Int? = null
 )
 
 @Serializable

@@ -117,6 +117,8 @@ data class SignerStatusResponse(
 data class SignerDetail(
     val fingerprint: String,
     val cosignerIndex: Int,
+    val originPath: String? = null,
+    val xpub: String? = null,
     val signed: Boolean,
     val deviceId: String? = null,
     val signedAt: String? = null

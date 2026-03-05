@@ -519,6 +519,8 @@ fun Route.psbtRoutes(
                     SignerDetail(
                         fingerprint = cosigner.fingerprint,
                         cosignerIndex = cosigner.idx,
+                        originPath = cosigner.originPath,
+                        xpub = cosigner.xpubRoot,
                         signed = sig != null,
                         deviceId = sig?.deviceId,
                         signedAt = sig?.signedAt
