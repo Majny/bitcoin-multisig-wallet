@@ -14,7 +14,8 @@ data class CreatePsbtRequest(
     val feeRate: Double,                    // sats/vB
     val utxos: List<UtxoSelection>? = null, // pokud null, automatický výběr
     val rbf: Boolean = true,                // Replace-by-fee enabled
-    val label: String? = null
+    val label: String? = null,
+    val signerAccountIndex: Int? = null      // BIP-48 account index podepisujícího cosignera (pro multisig TrezorConnect params)
 )
 
 @Serializable
@@ -63,7 +64,8 @@ data class PsbtResponse(
     val label: String? = null,
     val txid: String? = null,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val trezorConnectParams: TrezorConnectParams? = null
 )
 
 @Serializable
@@ -127,8 +129,41 @@ data class SignerDetail(
 // ========== Trezor Connect DTOs ==========
 
 /**
+ * Multisig pubkey entry pro Trezor Connect.
+ * node = xpub string cosignera (account-level, e.g. "xpub6...")
+ * address_n = [chain, index] relativni k account xpub
+ */
+@Serializable
+data class HDNodeDto(
+    val depth: Int,
+    val fingerprint: Long,
+    val child_num: Long,
+    val chain_code: String,
+    val public_key: String
+)
+
+@Serializable
+data class TrezorConnectMultisigPubkey(
+    val node: HDNodeDto,
+    val address_n: List<Long>
+)
+
+/**
+ * Multisig metadata pro Trezor Connect.
+ * Kazdy input/output multisig transakce musi mit tento objekt.
+ * signatures = existujici podpisy (prazdny string = jeste nepodepsano).
+ */
+@Serializable
+data class TrezorConnectMultisig(
+    val pubkeys: List<TrezorConnectMultisigPubkey>,
+    val m: Int,
+    val signatures: List<String> = emptyList()
+)
+
+/**
  * Trezor Connect signTransaction input.
  * address_n = full BIP-32 derivation path jako uint32 array (hardened = index | 0x80000000).
+ * Pro multisig: multisig objekt s pubkeys a threshold.
  */
 @Serializable
 data class TrezorConnectInput(
@@ -137,20 +172,23 @@ data class TrezorConnectInput(
     val prev_index: Int,
     val amount: String,
     val script_type: String = "SPENDWITNESS",
-    val sequence: Long = 0xFFFFFFFDL  // RBF signaling (BIP125)
+    val sequence: Long = 0xFFFFFFFDL,  // RBF signaling (BIP125)
+    val multisig: TrezorConnectMultisig? = null
 )
 
 /**
  * Trezor Connect signTransaction output.
  * External output: address + amount + script_type="PAYTOADDRESS"
  * Change output:   address_n + amount + script_type="PAYTOWITNESS"
+ * Pro multisig change: multisig objekt s pubkeys.
  */
 @Serializable
 data class TrezorConnectOutput(
     val address: String? = null,
     val address_n: List<Long>? = null,
     val amount: String,
-    val script_type: String
+    val script_type: String,
+    val multisig: TrezorConnectMultisig? = null
 )
 
 /**
@@ -179,6 +217,19 @@ data class TrezorConnectParams(
 @Serializable
 data class BroadcastRawTxRequest(
     val txHex: String
+)
+
+/**
+ * Request pro pridani Trezor Connect podpisu k multisig PSBT.
+ * signatures = DER-encoded hex podpisy (jeden per input), z Trezor Connect response.
+ * cosignerIndex = index cosignera ktery podepsal.
+ */
+@Serializable
+data class AddTrezorSignaturesRequest(
+    val signatures: List<String>,
+    val cosignerIndex: Int,
+    val fingerprint: String,
+    val serializedTx: String? = null
 )
 
 // ========== Internal DTOs (pro komunikaci s jinými službami) ==========

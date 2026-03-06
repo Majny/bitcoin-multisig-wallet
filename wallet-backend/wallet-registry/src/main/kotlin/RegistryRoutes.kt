@@ -66,8 +66,12 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
              * Response: ImportResult { success, walletId, isNew, error?, wallet? }
              */
             post("/wallets/import") {
+                val log = application.log
+                log.info("POST /registry/wallets/import received")
                 try {
                     val req = call.receive<ImportWalletRequest>()
+                    log.info("Import request: network={}, deviceId={}, accountIndex={}, descriptor={}...",
+                        req.network, req.deviceId, req.accountIndex, req.descriptor.take(60))
 
                     if (req.descriptor.isBlank()) {
                         call.respond(HttpStatusCode.BadRequest, ErrorResponse("descriptor is required"))
@@ -75,6 +79,8 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                     }
 
                     val result = importer.importWallet(req)
+                    log.info("Import result: success={}, walletId={}, isNew={}, error={}",
+                        result.success, result.walletId, result.isNew, result.error)
 
                     if (result.success) {
                         val status = if (result.isNew) HttpStatusCode.Created else HttpStatusCode.OK
@@ -83,6 +89,7 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                         call.respond(HttpStatusCode.BadRequest, ErrorResponse(result.error ?: "import failed"))
                     }
                 } catch (e: Exception) {
+                    log.error("Import endpoint exception: {}", e.message, e)
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "invalid request"))
                 }
             }

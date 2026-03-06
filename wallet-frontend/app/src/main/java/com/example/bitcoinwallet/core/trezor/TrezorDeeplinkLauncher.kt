@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.util.Log
+import com.example.bitcoinwallet.core.api.TrezorConnectMultisigDto
 import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
 import org.json.JSONArray
 import org.json.JSONObject
@@ -142,6 +143,9 @@ class TrezorDeeplinkLauncher(
                     put("amount", input.amount)
                     put("script_type", input.script_type)
                     put("sequence", input.sequence)
+                    input.multisig?.let { ms ->
+                        put("multisig", buildMultisigJson(ms))
+                    }
                 })
             }
             put("inputs", inputsArray)
@@ -157,12 +161,24 @@ class TrezorDeeplinkLauncher(
                     }
                     put("amount", output.amount)
                     put("script_type", output.script_type)
+                    output.multisig?.let { ms ->
+                        put("multisig", buildMultisigJson(ms))
+                    }
                 })
             }
             put("outputs", outputsArray)
 
-            // NOTE: refTxs are NOT sent via deeplink — Trezor Suite Mobile fetches
-            // reference transactions internally via its own blockbook backend.
+            // Include refTxs — Trezor Suite Mobile may not have testnet4 blockbook backend
+            if (params.refTxs != null && params.refTxs.isNotEmpty()) {
+                val refTxsArray = JSONArray()
+                for (rtx in params.refTxs) {
+                    refTxsArray.put(JSONObject().apply {
+                        put("hash", rtx.hash)
+                        put("tx_hex", rtx.tx_hex)
+                    })
+                }
+                put("refTxs", refTxsArray)
+            }
         }.toString()
 
         val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
@@ -229,6 +245,36 @@ class TrezorDeeplinkLauncher(
      * in a single deeplink call using the Trezor Connect `bundle` parameter.
      * Returns the request ID for tracking the callback.
      */
+    /**
+     * Builds a JSONObject for the Trezor Connect `multisig` field.
+     * Backend provides pre-converted HDNodeType objects (depth, fingerprint, etc.)
+     * which firmware requires instead of raw xpub strings.
+     */
+    private fun buildMultisigJson(ms: TrezorConnectMultisigDto): JSONObject {
+        return JSONObject().apply {
+            val pubkeysArray = JSONArray()
+            for (pk in ms.pubkeys) {
+                pubkeysArray.put(JSONObject().apply {
+                    put("node", JSONObject().apply {
+                        put("depth", pk.node.depth)
+                        put("fingerprint", pk.node.fingerprint)
+                        put("child_num", pk.node.child_num)
+                        put("chain_code", pk.node.chain_code)
+                        put("public_key", pk.node.public_key)
+                    })
+                    put("address_n", JSONArray(pk.address_n))
+                })
+            }
+            put("pubkeys", pubkeysArray)
+            put("m", ms.m)
+            val sigsArray = JSONArray()
+            for (sig in ms.signatures) {
+                sigsArray.put(sig)
+            }
+            put("signatures", sigsArray)
+        }
+    }
+
     fun openGetPublicKeyBundle(
         context: Context,
         derivationPaths: List<String>,

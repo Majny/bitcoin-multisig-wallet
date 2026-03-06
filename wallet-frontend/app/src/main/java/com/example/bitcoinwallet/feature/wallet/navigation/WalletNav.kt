@@ -528,9 +528,11 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             // Sleduj StateFlow — funguje i při návratu přes onNewIntent (FLAG_SINGLE_TOP)
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
-                if (pendingSignedPsbt != null) {
+                val signedData = pendingSignedPsbt
+                if (signedData != null) {
                     SessionStore.setPendingSignedPsbt(null)
-                    viewModel.refresh()
+                    // Submit Trezor signatures to backend for multisig
+                    viewModel.onTrezorSigned(signedData)
                 }
             }
 
@@ -538,7 +540,14 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 state = detailState,
                 onClose = { navController.popBackStack() },
                 onSignPsbt = {
-                    trezorLauncher.openSignTransaction(context, detailState.psbtBase64, walletNetwork)
+                    val params = detailState.trezorConnectParams
+                    if (params != null) {
+                        Log.d("WalletNav", "PSBT detail: signing with structured params")
+                        trezorLauncher.openSignTransactionStructured(context, params)
+                    } else {
+                        Log.d("WalletNav", "PSBT detail: signing with raw PSBT fallback")
+                        trezorLauncher.openSignTransaction(context, detailState.psbtBase64, walletNetwork)
+                    }
                 },
                 onExportPsbt = {
                     // TODO: share/export PSBT base64

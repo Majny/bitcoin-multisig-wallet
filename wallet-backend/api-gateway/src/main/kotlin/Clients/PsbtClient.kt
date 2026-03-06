@@ -22,6 +22,7 @@ interface PsbtClient {
     suspend fun broadcast(id: String): BroadcastResponse
     suspend fun getSigners(id: String): SignerStatusResponse
     suspend fun broadcastRaw(id: String, req: BroadcastRawTxRequest): BroadcastResponse
+    suspend fun signTrezor(id: String, req: AddTrezorSignaturesRequest): PsbtDetailResponse
     suspend fun delete(id: String)
 }
 
@@ -132,6 +133,17 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
         requireAttached(this::client.isInitialized, "psbt")
         val resp = upstreamRequest("psbt") {
             client.post("${cfg.psbtBaseUrl}/psbt/$id/broadcast-raw") {
+                contentType(ContentType.Application.Json)
+                setBody(req)
+            }
+        }.ensureSuccess("psbt")
+        return resp.body()
+    }
+
+    override suspend fun signTrezor(id: String, req: AddTrezorSignaturesRequest): PsbtDetailResponse {
+        requireAttached(this::client.isInitialized, "psbt")
+        val resp = upstreamRequest("psbt") {
+            client.post("${cfg.psbtBaseUrl}/psbt/$id/sign-trezor") {
                 contentType(ContentType.Application.Json)
                 setBody(req)
             }

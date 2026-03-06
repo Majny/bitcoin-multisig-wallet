@@ -136,7 +136,8 @@ class WalletApiClient(
         feeRate: Double,
         utxos: List<UtxoSelectionDto>? = null,
         rbf: Boolean = true,
-        label: String? = null
+        label: String? = null,
+        signerAccountIndex: Int? = null
     ): CreatePsbtResponseDto {
         return client.post("$baseUrl/psbt") {
             header("Authorization", "Bearer $accessToken")
@@ -148,7 +149,8 @@ class WalletApiClient(
                     feeRate = feeRate,
                     utxos = utxos,
                     rbf = rbf,
-                    label = label
+                    label = label,
+                    signerAccountIndex = signerAccountIndex
                 )
             )
         }.body()
@@ -193,6 +195,32 @@ class WalletApiClient(
                     psbtBase64 = signedPsbtBase64,
                     deviceId = deviceId,
                     fingerprint = fingerprint
+                )
+            )
+        }.body()
+    }
+
+    /**
+     * POST /api/v1/psbt/{id}/sign-trezor
+     * Submit Trezor Connect signatures for multisig PSBT.
+     */
+    suspend fun signTrezor(
+        psbtId: String,
+        accessToken: String,
+        signatures: List<String>,
+        cosignerIndex: Int,
+        fingerprint: String,
+        serializedTx: String? = null
+    ): PsbtDetailDto {
+        return client.post("$baseUrl/psbt/$psbtId/sign-trezor") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(
+                AddTrezorSignaturesRequestDto(
+                    signatures = signatures,
+                    cosignerIndex = cosignerIndex,
+                    fingerprint = fingerprint,
+                    serializedTx = serializedTx
                 )
             )
         }.body()
@@ -468,7 +496,30 @@ data class CreatePsbtRequestDto(
     val feeRate: Double,
     val utxos: List<UtxoSelectionDto>? = null,
     val rbf: Boolean = true,
-    val label: String? = null
+    val label: String? = null,
+    val signerAccountIndex: Int? = null
+)
+
+@Serializable
+data class HDNodeDto(
+    val depth: Int,
+    val fingerprint: Long,
+    val child_num: Long,
+    val chain_code: String,
+    val public_key: String
+)
+
+@Serializable
+data class TrezorConnectMultisigPubkeyDto(
+    val node: HDNodeDto,
+    val address_n: List<Long>
+)
+
+@Serializable
+data class TrezorConnectMultisigDto(
+    val pubkeys: List<TrezorConnectMultisigPubkeyDto>,
+    val m: Int,
+    val signatures: List<String> = emptyList()
 )
 
 @Serializable
@@ -478,7 +529,8 @@ data class TrezorConnectInputDto(
     val prev_index: Int,
     val amount: String,
     val script_type: String = "SPENDWITNESS",
-    val sequence: Long = 0xFFFFFFFDL
+    val sequence: Long = 0xFFFFFFFDL,
+    val multisig: TrezorConnectMultisigDto? = null
 )
 
 @Serializable
@@ -486,7 +538,8 @@ data class TrezorConnectOutputDto(
     val address: String? = null,
     val address_n: List<Long>? = null,
     val amount: String,
-    val script_type: String
+    val script_type: String,
+    val multisig: TrezorConnectMultisigDto? = null
 )
 
 @Serializable
@@ -533,7 +586,8 @@ data class PsbtDetailDto(
     val label: String? = null,
     val txid: String? = null,
     val createdAt: String = "",
-    val updatedAt: String = ""
+    val updatedAt: String = "",
+    val trezorConnectParams: TrezorConnectParamsDto? = null
 )
 
 @Serializable
@@ -553,6 +607,14 @@ data class AddSignatureRequestDto(
     val psbtBase64: String,
     val deviceId: String,
     val fingerprint: String
+)
+
+@Serializable
+data class AddTrezorSignaturesRequestDto(
+    val signatures: List<String>,
+    val cosignerIndex: Int,
+    val fingerprint: String,
+    val serializedTx: String? = null
 )
 
 @Serializable

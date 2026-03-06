@@ -227,13 +227,26 @@ class SendTransactionViewModel : ViewModel() {
 
                 Log.d(TAG, "Creating PSBT: to=${state.recipientAddress}, amount=${state.amountSats} sats, feeRate=$feeRate sat/vB, utxos=${utxoSelection?.size ?: "auto"}")
 
+                // Extract account index for multisig cosigner matching.
+                // Multisig wallet IDs (w-{hash}) don't contain a numeric suffix,
+                // so for multisig we look up the singlesig wallet's account index instead.
+                val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
+                val signerAccount = if (wallet?.type == WalletType.MULTI_SIG) {
+                    SessionStore.session?.user?.wallets
+                        ?.firstOrNull { it.type == WalletType.SINGLE_SIG }
+                        ?.id?.split("-")?.lastOrNull()?.toIntOrNull() ?: 0
+                } else {
+                    walletId?.split("-")?.lastOrNull()?.toIntOrNull()
+                }
+
                 val response = WalletApi.client.createPsbt(
                     accessToken = accessToken,
                     walletId = walletId,
                     destinationAddress = state.recipientAddress,
                     amountSats = state.amountSats,
                     feeRate = feeRate,
-                    utxos = utxoSelection
+                    utxos = utxoSelection,
+                    signerAccountIndex = signerAccount
                 )
 
                 Log.d(TAG, "PSBT created: id=${response.id}, fee=${response.estimatedFee} sats, vsize=${response.estimatedVsize}, trezorConnect=${response.trezorConnectParams != null}")
@@ -251,6 +264,14 @@ class SendTransactionViewModel : ViewModel() {
                         Log.d(TAG, "    [$i] address=${out.address}, address_n=${out.address_n}, amount=${out.amount}, script_type=${out.script_type}")
                     }
                     Log.d(TAG, "  refTxs=${tcp.refTxs?.size ?: "null"}")
+                    tcp.inputs.forEach { inp ->
+                        inp.multisig?.let { ms ->
+                            Log.d(TAG, "  multisig: m=${ms.m} pubkeys=${ms.pubkeys.size} sigs=${ms.signatures}")
+                            ms.pubkeys.forEachIndexed { j, pk ->
+                                Log.d(TAG, "    pubkey[$j] node=HDNode(depth=${pk.node.depth}, pubkey=${pk.node.public_key.take(16)}...) address_n=${pk.address_n}")
+                            }
+                        }
+                    }
                     Log.d(TAG, "=== End TrezorConnectParams ===")
                 }
 
@@ -276,16 +297,114 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     /**
-     * Dispatch na správný handler podle typu Trezor odpovědi.
+     * Dispatch na správný handler podle typu Trezor odpovědi a typu peněženky.
      */
     fun onTrezorResult(
         signedData: String,
         signType: SignResultType,
         onBroadcastSuccess: () -> Unit
     ) {
-        when (signType) {
-            SignResultType.SERIALIZED_TX -> onTrezorSerializedTx(signedData, onBroadcastSuccess)
-            SignResultType.SIGNED_PSBT -> onTrezorSigned(signedData, onBroadcastSuccess)
+        val wallet = SessionStore.session?.user?.wallets?.find { it.id == SessionStore.activeWalletId }
+        val isMultisig = wallet?.type == WalletType.MULTI_SIG
+
+        when {
+            // Multisig: submit Trezor signatures to backend (don't broadcast directly)
+            isMultisig && signType == SignResultType.SERIALIZED_TX -> {
+                onTrezorMultisigSigned(signedData, onBroadcastSuccess)
+            }
+            // Singlesig: broadcast serialized tx directly
+            signType == SignResultType.SERIALIZED_TX -> {
+                onTrezorSerializedTx(signedData, onBroadcastSuccess)
+            }
+            // Fallback: signed PSBT flow
+            else -> onTrezorSigned(signedData, onBroadcastSuccess)
+        }
+    }
+
+    /**
+     * Handle Trezor Connect response for multisig wallet.
+     * Submits per-input signatures to backend via /sign-trezor endpoint.
+     * If enough signatures, broadcasts; otherwise shows status.
+     */
+    private fun onTrezorMultisigSigned(serializedTxHex: String, onBroadcastSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(
+                awaitingTrezor = false,
+                isSubmitting = true,
+                error = null
+            )
+
+            val accessToken = SessionStore.session?.accessToken
+            val psbtId = _uiState.value.txCreatedId
+            val fingerprint = SessionStore.session?.user?.trezorFingerprint ?: "unknown"
+            val trezorSigs = SessionStore.pendingTrezorSignatures.value
+
+            if (accessToken == null || psbtId == null) {
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = "No active session or PSBT"
+                )
+                return@launch
+            }
+
+            try {
+                if (trezorSigs != null && trezorSigs.isNotEmpty()) {
+                    // Submit per-input signatures via sign-trezor endpoint
+                    Log.d(TAG, "Submitting ${trezorSigs.size} Trezor signatures for multisig PSBT...")
+                    val result = WalletApi.client.signTrezor(
+                        psbtId = psbtId,
+                        accessToken = accessToken,
+                        signatures = trezorSigs,
+                        cosignerIndex = 0,  // TODO: let user pick cosigner
+                        fingerprint = fingerprint,
+                        serializedTx = serializedTxHex
+                    )
+                    SessionStore.setPendingTrezorSignatures(null)
+
+                    if (result.currentSigs >= result.requiredSigs) {
+                        // Enough signatures — try to broadcast serializedTx directly
+                        Log.d(TAG, "Multisig fully signed (${result.currentSigs}/${result.requiredSigs}), broadcasting...")
+                        val broadcastResp = WalletApi.client.broadcastRawTx(
+                            psbtId = psbtId,
+                            accessToken = accessToken,
+                            txHex = serializedTxHex
+                        )
+                        _uiState.value = _uiState.value.copy(
+                            isSubmitting = false,
+                            broadcastSuccess = true,
+                            broadcastTxid = broadcastResp.txid
+                        )
+                        onBroadcastSuccess()
+                    } else {
+                        // Need more signatures
+                        Log.d(TAG, "Multisig needs more signatures: ${result.currentSigs}/${result.requiredSigs}")
+                        _uiState.value = _uiState.value.copy(
+                            isSubmitting = false,
+                            error = "Podpis přidán (${result.currentSigs}/${result.requiredSigs}). Potřeba dalších podpisů."
+                        )
+                    }
+                } else {
+                    // No per-input signatures — try broadcast-raw as fallback
+                    Log.w(TAG, "No Trezor signatures array, attempting broadcast-raw...")
+                    val broadcastResp = WalletApi.client.broadcastRawTx(
+                        psbtId = psbtId,
+                        accessToken = accessToken,
+                        txHex = serializedTxHex
+                    )
+                    _uiState.value = _uiState.value.copy(
+                        isSubmitting = false,
+                        broadcastSuccess = true,
+                        broadcastTxid = broadcastResp.txid
+                    )
+                    onBroadcastSuccess()
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to process multisig signing", e)
+                _uiState.value = _uiState.value.copy(
+                    isSubmitting = false,
+                    error = e.message ?: "Failed to process multisig signing"
+                )
+            }
         }
     }
 

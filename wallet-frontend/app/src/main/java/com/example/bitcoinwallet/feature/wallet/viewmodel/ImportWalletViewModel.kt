@@ -49,8 +49,17 @@ class ImportWalletViewModel : ViewModel() {
                 val token = SessionStore.session?.accessToken
                     ?: throw IllegalStateException("Not authenticated")
 
-                val derivationPath = SessionStore.pendingIdentity?.derivationPath ?: ""
-                val network = if (derivationPath.contains("'/1'/")) "testnet" else "mainnet"
+                // Detect network from active wallet ID (e.g. "wallet-400209115-testnet-WPKH-0")
+                // Fallback to derivation path if available
+                val activeId = SessionStore.activeWalletId ?: ""
+                val network = when {
+                    activeId.contains("-testnet-") -> "testnet"
+                    activeId.contains("-mainnet-") -> "mainnet"
+                    else -> {
+                        val derivationPath = SessionStore.pendingIdentity?.derivationPath ?: ""
+                        if (derivationPath.contains("'/1'/")) "testnet" else "mainnet"
+                    }
+                }
 
                 // Extract account index from active wallet ID: "wallet-400209115-testnet-WPKH-0" → 0
                 val accountIndex = SessionStore.activeWalletId

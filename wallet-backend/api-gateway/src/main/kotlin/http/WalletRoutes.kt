@@ -62,11 +62,15 @@ fun Route.walletRoutes() {
          * The gateway enriches with deviceId and fingerprint from JWT.
          */
         post("/wallets/import") {
+            call.application.log.info("POST /wallets/import received")
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()
             val fingerprint = principal.payload.getClaim("fingerprint").asString()
+            call.application.log.info("Import: deviceId={}, fingerprint={}", deviceId, fingerprint)
 
             val appReq = call.receive<ImportWalletFromAppRequest>()
+            call.application.log.info("Import body: network={}, accountIndex={}, descriptor={}...",
+                appReq.network, appReq.accountIndex, appReq.descriptor.take(60))
 
             if (appReq.descriptor.isBlank()) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "descriptor is required"))

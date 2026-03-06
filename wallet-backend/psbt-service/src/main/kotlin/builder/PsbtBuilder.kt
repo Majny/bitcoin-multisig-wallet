@@ -257,7 +257,9 @@ object PsbtBuilder {
 
     /**
      * Sestaví Trezor Connect signTransaction parametry ze stejných dat jako PSBT.
-     * Pouze pro singlesig P2WPKH. Vrací null pro multisig.
+     * Podporuje singlesig P2WPKH i multisig P2WSH.
+     *
+     * @param signerCosignerIndex Pro multisig: index cosignera ktery bude podepisovat (default 0).
      */
     fun buildTrezorConnectParams(
         wallet: WalletDetailDto,
@@ -265,16 +267,29 @@ object PsbtBuilder {
         outputs: List<TxOutput>,
         changeAddress: String?,
         changeAmount: Long,
-        changeIndex: Int?
+        changeIndex: Int?,
+        signerCosignerIndex: Int = 0
     ): TrezorConnectParams? {
-        if (wallet.type == "MULTI_SIG") return null
-
-        // Trezor Connect coin names: "Bitcoin" pro mainnet, "Testnet" pro testnet
-        // (NE "btc"/"tbtc" — ty nejsou v Trezor Connect coins.json)
         val coin = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin")) "Bitcoin" else "Testnet"
 
-        // Singlesig peněženky nemají cosignery v DB — fingerprint a origin path
-        // jsou uloženy v descriptoru: wpkh([fingerprint/84h/1h/0h]xpub...)
+        val refTxs = utxos.mapNotNull { utxo ->
+            val hex = utxo.rawTxHex ?: return@mapNotNull null
+            TrezorConnectRefTx(hash = utxo.txid, tx_hex = hex)
+        }.distinctBy { it.hash }.ifEmpty { null }
+
+        if (refTxs == null) {
+            log.warn("No raw tx hex available for refTxs — Trezor may fail to verify inputs")
+        } else {
+            log.info("Built {} refTxs for Trezor Connect", refTxs.size)
+        }
+
+        if (wallet.type == "MULTI_SIG") {
+            return buildMultisigTrezorConnectParams(
+                wallet, utxos, outputs, changeAddress, changeAmount, changeIndex, coin, refTxs, signerCosignerIndex
+            )
+        }
+
+        // ---- Singlesig P2WPKH ----
         val originPath: List<Long> = if (wallet.cosigners.isNotEmpty()) {
             parseOriginPathToUint32(wallet.cosigners.first().originPath)
         } else {
@@ -299,7 +314,6 @@ object PsbtBuilder {
         }
 
         val trezorOutputs = mutableListOf<TrezorConnectOutput>()
-
         for (output in outputs) {
             trezorOutputs.add(TrezorConnectOutput(
                 address = output.address,
@@ -316,16 +330,119 @@ object PsbtBuilder {
             ))
         }
 
-        // RefTxs — Trezor firmware potřebuje celé předchozí transakce pro ověření částek
-        val refTxs = utxos.mapNotNull { utxo ->
-            val hex = utxo.rawTxHex ?: return@mapNotNull null
-            TrezorConnectRefTx(hash = utxo.txid, tx_hex = hex)
-        }.distinctBy { it.hash }.ifEmpty { null }
+        return TrezorConnectParams(
+            coin = coin,
+            inputs = trezorInputs,
+            outputs = trezorOutputs,
+            refTxs = refTxs
+        )
+    }
 
-        if (refTxs == null) {
-            log.warn("No raw tx hex available for refTxs — Trezor may fail to verify inputs")
-        } else {
-            log.info("Built {} refTxs for Trezor Connect", refTxs.size)
+    /**
+     * Sestaví Trezor Connect params pro multisig P2WSH transakci.
+     * Každý input/output obsahuje `multisig` objekt s pubkeys všech cosignerů.
+     * address_n = derivation path cosignera ktery podepisuje (signerCosignerIndex).
+     */
+    private fun buildMultisigTrezorConnectParams(
+        wallet: WalletDetailDto,
+        utxos: List<SelectedUtxo>,
+        outputs: List<TxOutput>,
+        changeAddress: String?,
+        changeAmount: Long,
+        changeIndex: Int?,
+        coin: String,
+        refTxs: List<TrezorConnectRefTx>?,
+        signerCosignerIndex: Int
+    ): TrezorConnectParams? {
+        if (wallet.cosigners.isEmpty()) {
+            log.warn("Multisig wallet has no cosigners, cannot build TrezorConnectParams")
+            return null
+        }
+
+        val m = wallet.m ?: 2
+        val sortedCosigners = wallet.cosigners.sortedBy { it.idx }
+        val signerCosigner = sortedCosigners.getOrNull(signerCosignerIndex) ?: run {
+            log.warn("Cosigner index {} out of range ({})", signerCosignerIndex, sortedCosigners.size)
+            return null
+        }
+        val signerOriginPath = parseOriginPathToUint32(signerCosigner.originPath)
+
+        log.info("Building multisig TrezorConnectParams: m={} n={} signer=cosigner[{}] fp={} path={}",
+            m, sortedCosigners.size, signerCosignerIndex, signerCosigner.fingerprint, signerCosigner.originPath)
+
+        val btcNetwork = if (coin == "Bitcoin") BitcoinNetwork.MAINNET else BitcoinNetwork.TESTNET
+
+        // Convert each cosigner's xpub to HDNodeDto once
+        val cosignerHdNodes = sortedCosigners.map { cos ->
+            xpubToHDNode(cos.xpubRoot, btcNetwork)
+        }
+
+        val isSortedMulti = wallet.receiveDescriptor.contains("sortedmulti(")
+
+        // BIP-67: sort cosigner HDNodes by derived child pubkey at a given chain/index.
+        // Trezor firmware does NOT sort pubkeys internally — the order we provide must
+        // exactly match the witness script order, otherwise Trezor computes a different
+        // P2WSH address and returns Failure_DataError.
+        fun sortedMultisigPubkeys(chain: Int, index: Int): List<TrezorConnectMultisigPubkey> {
+            if (!isSortedMulti) {
+                return cosignerHdNodes.map { hdNode ->
+                    TrezorConnectMultisigPubkey(node = hdNode, address_n = listOf(chain.toLong(), index.toLong()))
+                }
+            }
+            // Derive child pubkeys and sort by BIP-67 (lexicographic on compressed pubkey)
+            val withDerived = sortedCosigners.mapIndexed { i, cos ->
+                val accountKey = DeterministicKey.deserializeB58(cos.xpubRoot, btcNetwork)
+                val chainKey = HDKeyDerivation.deriveChildKey(accountKey, chain)
+                val childKey = HDKeyDerivation.deriveChildKey(chainKey, index)
+                Pair(cosignerHdNodes[i], childKey.pubKey)
+            }
+            val sorted = withDerived.sortedWith(
+                compareBy<Pair<HDNodeDto, ByteArray>> { it.second.size }
+                    .thenBy { it.second.joinToString("") { b -> "%02x".format(b) } }
+            )
+            return sorted.map { (hdNode, _) ->
+                TrezorConnectMultisigPubkey(node = hdNode, address_n = listOf(chain.toLong(), index.toLong()))
+            }
+        }
+
+        val trezorInputs = utxos.map { utxo ->
+            val chain = if (utxo.addressType == "change") 1 else 0
+            val idx = utxo.addressIndex ?: 0
+
+            TrezorConnectInput(
+                address_n = signerOriginPath + listOf(chain.toLong(), idx.toLong()),
+                prev_hash = utxo.txid,
+                prev_index = utxo.vout,
+                amount = utxo.value.toString(),
+                script_type = "SPENDWITNESS",
+                multisig = TrezorConnectMultisig(
+                    pubkeys = sortedMultisigPubkeys(chain, idx),
+                    m = m,
+                    signatures = sortedCosigners.map { "" }
+                )
+            )
+        }
+
+        val trezorOutputs = mutableListOf<TrezorConnectOutput>()
+        for (output in outputs) {
+            trezorOutputs.add(TrezorConnectOutput(
+                address = output.address,
+                amount = output.amountSats.toString(),
+                script_type = "PAYTOADDRESS"
+            ))
+        }
+
+        if (changeAddress != null && changeAmount > 0 && changeIndex != null) {
+            trezorOutputs.add(TrezorConnectOutput(
+                address_n = signerOriginPath + listOf(1L, changeIndex.toLong()),
+                amount = changeAmount.toString(),
+                script_type = "PAYTOWITNESS",
+                multisig = TrezorConnectMultisig(
+                    pubkeys = sortedMultisigPubkeys(1, changeIndex),
+                    m = m,
+                    signatures = sortedCosigners.map { "" }
+                )
+            ))
         }
 
         return TrezorConnectParams(
@@ -347,6 +464,21 @@ object PsbtBuilder {
             val num = cleaned.trimEnd('h').toLong()
             if (hardened) (num or 0x80000000L) else num
         }
+    }
+
+    /**
+     * Converts an xpub/tpub string to an HDNodeDto for Trezor Connect.
+     * Trezor firmware expects structured HDNodeType, not raw xpub strings.
+     */
+    private fun xpubToHDNode(xpubStr: String, network: BitcoinNetwork): HDNodeDto {
+        val key = DeterministicKey.deserializeB58(xpubStr, network)
+        return HDNodeDto(
+            depth = key.depth,
+            fingerprint = (key.parentFingerprint.toLong() and 0xFFFFFFFFL),
+            child_num = (key.childNumber.i.toLong() and 0xFFFFFFFFL),
+            chain_code = key.chainCode.joinToString("") { "%02x".format(it) },
+            public_key = key.pubKeyPoint.getEncoded(true).joinToString("") { "%02x".format(it) }
+        )
     }
 
     /**

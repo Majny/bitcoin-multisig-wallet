@@ -2,6 +2,8 @@ package cz.majny.wallet.psbt.db
 
 import cz.majny.wallet.psbt.api.PsbtResponse
 import cz.majny.wallet.psbt.api.SignatureInfo
+import cz.majny.wallet.psbt.api.TrezorConnectParams
+import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
@@ -10,7 +12,9 @@ import java.time.format.DateTimeFormatter
 import java.util.*
 
 class PsbtRepository {
-    
+
+    private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+
     /**
      * Vytvoří nový PSBT záznam.
      */
@@ -21,9 +25,12 @@ class PsbtRepository {
         label: String? = null,
         txType: String = "send",
         totalOutputSats: Long = 0,
-        estimatedFeeSats: Long = 0
+        estimatedFeeSats: Long = 0,
+        trezorConnectParams: TrezorConnectParams? = null
     ): UUID = transaction {
         val now = OffsetDateTime.now()
+        // Store params without refTxs (too large for DB)
+        val paramsToStore = trezorConnectParams?.copy(refTxs = null)
         PsbtsTable.insert {
             it[PsbtsTable.walletId] = walletId
             it[PsbtsTable.psbtBase64] = psbtBase64
@@ -32,6 +39,9 @@ class PsbtRepository {
             it[PsbtsTable.estimatedFeeSats] = estimatedFeeSats
             it[PsbtsTable.label] = label
             it[PsbtsTable.txType] = txType
+            it[PsbtsTable.trezorConnectParams] = paramsToStore?.let { p ->
+                json.encodeToString(TrezorConnectParams.serializer(), p)
+            }
             it[createdAt] = now
             it[updatedAt] = now
         }[PsbtsTable.id]
@@ -75,7 +85,8 @@ class PsbtRepository {
         id: UUID,
         psbtBase64: String,
         currentSigs: Int,
-        status: String? = null
+        status: String? = null,
+        trezorConnectParams: TrezorConnectParams? = null
     ) = transaction {
         PsbtsTable.update({ PsbtsTable.id eq id }) {
             it[PsbtsTable.psbtBase64] = psbtBase64
@@ -83,6 +94,11 @@ class PsbtRepository {
             it[updatedAt] = OffsetDateTime.now()
             if (status != null) {
                 it[PsbtsTable.status] = status
+            }
+            if (trezorConnectParams != null) {
+                it[PsbtsTable.trezorConnectParams] = json.encodeToString(
+                    TrezorConnectParams.serializer(), trezorConnectParams.copy(refTxs = null)
+                )
             }
         }
     }
@@ -146,19 +162,27 @@ class PsbtRepository {
                 )
             }
     
-    private fun rowToPsbtResponse(row: ResultRow, signatures: List<SignatureInfo>) = PsbtResponse(
-        id = row[PsbtsTable.id].toString(),
-        walletId = row[PsbtsTable.walletId],
-        psbtBase64 = row[PsbtsTable.psbtBase64],
-        status = row[PsbtsTable.status],
-        requiredSigs = row[PsbtsTable.requiredSigs],
-        currentSigs = row[PsbtsTable.currentSigs],
-        totalOutputSats = row[PsbtsTable.totalOutputSats],
-        estimatedFeeSats = row[PsbtsTable.estimatedFeeSats],
-        signatures = signatures,
-        label = row[PsbtsTable.label],
-        txid = row[PsbtsTable.txid],
-        createdAt = row[PsbtsTable.createdAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-        updatedAt = row[PsbtsTable.updatedAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-    )
+    private fun rowToPsbtResponse(row: ResultRow, signatures: List<SignatureInfo>): PsbtResponse {
+        val paramsJson = row[PsbtsTable.trezorConnectParams]
+        val trezorParams = paramsJson?.let {
+            try { json.decodeFromString(TrezorConnectParams.serializer(), it) }
+            catch (_: Exception) { null }
+        }
+        return PsbtResponse(
+            id = row[PsbtsTable.id].toString(),
+            walletId = row[PsbtsTable.walletId],
+            psbtBase64 = row[PsbtsTable.psbtBase64],
+            status = row[PsbtsTable.status],
+            requiredSigs = row[PsbtsTable.requiredSigs],
+            currentSigs = row[PsbtsTable.currentSigs],
+            totalOutputSats = row[PsbtsTable.totalOutputSats],
+            estimatedFeeSats = row[PsbtsTable.estimatedFeeSats],
+            signatures = signatures,
+            label = row[PsbtsTable.label],
+            txid = row[PsbtsTable.txid],
+            createdAt = row[PsbtsTable.createdAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            updatedAt = row[PsbtsTable.updatedAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
+            trezorConnectParams = trezorParams
+        )
+    }
 }

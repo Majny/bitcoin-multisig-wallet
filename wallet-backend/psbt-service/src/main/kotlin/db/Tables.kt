@@ -18,7 +18,8 @@ object PsbtsTable : Table("psbts") {
     val createdAt = timestampWithTimeZone("created_at")
     val updatedAt = timestampWithTimeZone("updated_at")
     val broadcastAt = timestampWithTimeZone("broadcast_at").nullable()
-    
+    val trezorConnectParams = text("trezor_connect_params").nullable()
+
     override val primaryKey = PrimaryKey(id)
 }
 

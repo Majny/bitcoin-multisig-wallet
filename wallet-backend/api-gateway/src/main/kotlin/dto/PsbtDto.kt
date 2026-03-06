@@ -52,7 +52,30 @@ data class CreatePsbtRequest(
     val feeRate: Double,
     val utxos: List<UtxoSelection>? = null,
     val rbf: Boolean = true,
-    val label: String? = null
+    val label: String? = null,
+    val signerAccountIndex: Int? = null
+)
+
+@Serializable
+data class HDNodeDto(
+    val depth: Int,
+    val fingerprint: Long,
+    val child_num: Long,
+    val chain_code: String,
+    val public_key: String
+)
+
+@Serializable
+data class TrezorConnectMultisigPubkey(
+    val node: HDNodeDto,
+    val address_n: List<Long>
+)
+
+@Serializable
+data class TrezorConnectMultisig(
+    val pubkeys: List<TrezorConnectMultisigPubkey>,
+    val m: Int,
+    val signatures: List<String> = emptyList()
 )
 
 @Serializable
@@ -62,7 +85,8 @@ data class TrezorConnectInput(
     val prev_index: Int,
     val amount: String,
     val script_type: String = "SPENDWITNESS",
-    val sequence: Long = 0xFFFFFFFDL
+    val sequence: Long = 0xFFFFFFFDL,
+    val multisig: TrezorConnectMultisig? = null
 )
 
 @Serializable
@@ -70,7 +94,8 @@ data class TrezorConnectOutput(
     val address: String? = null,
     val address_n: List<Long>? = null,
     val amount: String,
-    val script_type: String
+    val script_type: String,
+    val multisig: TrezorConnectMultisig? = null
 )
 
 @Serializable
@@ -92,6 +117,14 @@ data class TrezorConnectParams(
 @Serializable
 data class BroadcastRawTxRequest(
     val txHex: String
+)
+
+@Serializable
+data class AddTrezorSignaturesRequest(
+    val signatures: List<String>,
+    val cosignerIndex: Int,
+    val fingerprint: String,
+    val serializedTx: String? = null
 )
 
 @Serializable
@@ -124,7 +157,8 @@ data class PsbtDetailResponse(
     val label: String? = null,
     val txid: String? = null,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val trezorConnectParams: TrezorConnectParams? = null
 )
 
 @Serializable

@@ -88,6 +88,14 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
+            // POST /psbt/{id}/sign-trezor - přidá Trezor Connect podpisy (multisig)
+            post("/{id}/sign-trezor") {
+                val id = call.parameters["id"] ?: error("id missing")
+                val req = call.receive<AddTrezorSignaturesRequest>()
+                val resp = call.application.deps.psbt.signTrezor(id, req)
+                call.respond(resp)
+            }
+
             // GET /psbt/{id}/signers - stav podpisů (kdo podepsal, kdo chybí)
             get("/{id}/signers") {
                 val id = call.parameters["id"] ?: error("id missing")

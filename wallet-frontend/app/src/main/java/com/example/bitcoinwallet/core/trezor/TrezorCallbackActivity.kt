@@ -113,6 +113,7 @@ class TrezorCallbackActivity : ComponentActivity() {
      * Parsuje Trezor sign response a rozliší serializedTx (Trezor Connect)
      * od signedPsbt (legacy PSBT flow).
      * Vrací Pair(data, type) nebo null.
+     * Pro multisig: také extrahuje `signatures` array a uloží do SessionStore.
      */
     private fun parseSignResult(responseJson: String): Pair<String, SignResultType>? {
         return try {
@@ -130,6 +131,19 @@ class TrezorCallbackActivity : ComponentActivity() {
             val payload = root.optJSONObject("payload") ?: run {
                 Log.e("TrezorCallback", "Missing payload in sign response")
                 return null
+            }
+
+            // Extract per-input signatures array (used for multisig)
+            val signaturesArray = payload.optJSONArray("signatures")
+            if (signaturesArray != null) {
+                val sigs = mutableListOf<String>()
+                for (i in 0 until signaturesArray.length()) {
+                    sigs.add(signaturesArray.optString(i, ""))
+                }
+                Log.d("TrezorCallback", "Extracted ${sigs.size} per-input signatures")
+                SessionStore.setPendingTrezorSignatures(sigs)
+            } else {
+                SessionStore.setPendingTrezorSignatures(null)
             }
 
             // Trezor Connect signTransaction vrací serializedTx (kompletní podepsaná tx)

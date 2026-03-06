@@ -36,6 +36,14 @@ object SessionStore {
         _pendingSignType.value = value
     }
 
+    /** Per-input DER signatures from Trezor Connect (for multisig) */
+    private val _pendingTrezorSignatures = MutableStateFlow<List<String>?>(null)
+    val pendingTrezorSignatures: StateFlow<List<String>?> = _pendingTrezorSignatures.asStateFlow()
+
+    fun setPendingTrezorSignatures(value: List<String>?) {
+        _pendingTrezorSignatures.value = value
+    }
+
     /** Preferred fiat currency for balance display (czk, usd, eur). */
     private val _preferredCurrency = MutableStateFlow("czk")
     val preferredCurrency: StateFlow<String> = _preferredCurrency.asStateFlow()
@@ -52,6 +60,7 @@ object SessionStore {
         pendingBatchXpubs = mutableListOf()
         _pendingSignedPsbt.value = null
         _pendingSignType.value = null
+        _pendingTrezorSignatures.value = null
         _preferredCurrency.value = "czk"
     }
 

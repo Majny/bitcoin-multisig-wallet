@@ -97,6 +97,35 @@ fun Route.psbtRoutes(
                     rbf = request.rbf
                 )
 
+                // Sestav Trezor Connect params — mapuj signerAccountIndex na cosigner index
+                val signerCosignerIdx = if (wallet.type == "MULTI_SIG" && request.signerAccountIndex != null) {
+                    // Najdi cosigner jehož BIP-48 account index odpovídá signerAccountIndex
+                    val sorted = wallet.cosigners.sortedBy { it.idx }
+                    val match = sorted.indexOfFirst { cos ->
+                        val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
+                        val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
+                        cosAccount == request.signerAccountIndex
+                    }
+                    if (match >= 0) {
+                        log.info("Mapped signerAccountIndex={} to cosignerIdx={} (path={})",
+                            request.signerAccountIndex, match, sorted[match].originPath)
+                        match
+                    } else {
+                        log.warn("signerAccountIndex={} not found in cosigners, defaulting to 0", request.signerAccountIndex)
+                        0
+                    }
+                } else 0
+
+                val trezorParams = PsbtBuilder.buildTrezorConnectParams(
+                    wallet = wallet,
+                    utxos = utxosWithPrevTx,
+                    outputs = request.outputs,
+                    changeAddress = if (result.changeAmount > 0) changeAddress.address else null,
+                    changeAmount = result.changeAmount,
+                    changeIndex = if (result.changeAmount > 0) changeAddress.index else null,
+                    signerCosignerIndex = signerCosignerIdx
+                )
+
                 // 5. Ulož do DB
                 val requiredSigs = if (wallet.type == "MULTI_SIG") wallet.m ?: 1 else 1
                 val totalOutputSats = request.outputs.sumOf { it.amountSats }
@@ -106,17 +135,8 @@ fun Route.psbtRoutes(
                     requiredSigs = requiredSigs,
                     label = request.label,
                     totalOutputSats = totalOutputSats,
-                    estimatedFeeSats = result.estimatedFee
-                )
-                
-                // Sestav Trezor Connect params pro singlesig
-                val trezorParams = PsbtBuilder.buildTrezorConnectParams(
-                    wallet = wallet,
-                    utxos = utxosWithPrevTx,
-                    outputs = request.outputs,
-                    changeAddress = if (result.changeAmount > 0) changeAddress.address else null,
-                    changeAmount = result.changeAmount,
-                    changeIndex = if (result.changeAmount > 0) changeAddress.index else null
+                    estimatedFeeSats = result.estimatedFee,
+                    trezorConnectParams = trezorParams
                 )
 
                 log.info("PSBT created id={} fee={} vsize={} base64Len={} trezorConnect={}",
@@ -406,6 +426,83 @@ fun Route.psbtRoutes(
             ))
         }
         
+        /**
+         * POST /psbt/{id}/sign-trezor
+         * Přidá Trezor Connect podpisy k multisig PSBT.
+         * Klient pošle DER signatures z Trezor Connect response.
+         * Backend aktualizuje uložené TrezorConnectParams s novými podpisy
+         * pro další kolo podepisování.
+         */
+        post("/{id}/sign-trezor") {
+            val appCall = call
+            val id = appCall.parameters["id"]
+            if (id == null) {
+                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
+                return@post
+            }
+
+            val uuid = try {
+                UUID.fromString(id)
+            } catch (e: Exception) {
+                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
+                return@post
+            }
+
+            val request = appCall.receive<AddTrezorSignaturesRequest>()
+
+            val existing = repository.findById(uuid)
+            if (existing == null) {
+                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
+                return@post
+            }
+
+            // Zkontroluj, jestli tento cosigner už nepodepsal
+            if (existing.signatures.any { it.fingerprint == request.fingerprint }) {
+                appCall.respond(HttpStatusCode.Conflict, mapOf("error" to "Already signed by this cosigner"))
+                return@post
+            }
+
+            val newSigCount = existing.currentSigs + 1
+            val newStatus = if (newSigCount >= existing.requiredSigs) "signed" else "pending"
+
+            // Aktualizuj TrezorConnectParams — vlož podpisy do multisig.signatures
+            // pro příští kolo podepisování
+            val updatedParams = existing.trezorConnectParams?.let { params ->
+                val updatedInputs = params.inputs.map { input ->
+                    val ms = input.multisig ?: return@map input
+                    val sigIdx = request.cosignerIndex.coerceIn(0, ms.signatures.size - 1)
+                    val updatedSigs = ms.signatures.toMutableList()
+                    // DER sigs z Trezor jsou indexovány po inputech
+                    val inputIndex = params.inputs.indexOf(input)
+                    val derSig = request.signatures.getOrNull(inputIndex) ?: ""
+                    if (derSig.isNotBlank()) updatedSigs[sigIdx] = derSig
+                    input.copy(multisig = ms.copy(signatures = updatedSigs))
+                }
+                params.copy(inputs = updatedInputs)
+            }
+
+            repository.updatePsbt(
+                id = uuid,
+                psbtBase64 = existing.psbtBase64,
+                currentSigs = newSigCount,
+                status = newStatus,
+                trezorConnectParams = updatedParams
+            )
+
+            repository.addSignature(
+                psbtId = uuid,
+                deviceId = request.fingerprint,
+                fingerprint = request.fingerprint
+            )
+
+            log.info("Trezor signatures added: psbtId={} cosigner={} newSigs={}/{} status={}",
+                id, request.cosignerIndex, newSigCount, existing.requiredSigs, newStatus)
+
+            val updated = repository.findById(uuid)
+                ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
+            appCall.respond(updated)
+        }
+
         /**
          * DELETE /psbt/{id}
          * Smaže PSBT.

@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitcoinwallet.core.api.PsbtDetailDto
+import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -42,6 +43,7 @@ data class PsbtDetailUiState(
     val totalOutputSats: Long = 0,
     val estimatedFeeSats: Long = 0,
     val psbtBase64: String = "",
+    val trezorConnectParams: TrezorConnectParamsDto? = null,
     val label: String? = null,
     val txid: String? = null,
     val signatures: List<SignatureUiInfo> = emptyList(),
@@ -182,6 +184,45 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     /**
+     * Handle Trezor Connect signing result for multisig from PSBT detail screen.
+     * Submits per-input signatures to backend.
+     */
+    fun onTrezorSigned(serializedTxHex: String) {
+        viewModelScope.launch {
+            val accessToken = SessionStore.session?.accessToken ?: return@launch
+            val psbtId = _uiState.value.psbtId
+            val fingerprint = SessionStore.session?.user?.trezorFingerprint ?: "unknown"
+            val trezorSigs = SessionStore.pendingTrezorSignatures.value
+
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+
+            try {
+                if (trezorSigs != null && trezorSigs.isNotEmpty()) {
+                    Log.d(TAG, "Submitting ${trezorSigs.size} Trezor signatures...")
+                    val result = WalletApi.client.signTrezor(
+                        psbtId = psbtId,
+                        accessToken = accessToken,
+                        signatures = trezorSigs,
+                        cosignerIndex = 0,  // TODO: let user select cosigner
+                        fingerprint = fingerprint,
+                        serializedTx = serializedTxHex
+                    )
+                    SessionStore.setPendingTrezorSignatures(null)
+                    Log.d(TAG, "Signatures submitted: ${result.currentSigs}/${result.requiredSigs}")
+                }
+                // Refresh to show updated state
+                fetchPsbtDetail(psbtId)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error submitting Trezor signatures", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to submit signatures"
+                )
+            }
+        }
+    }
+
+    /**
      * Open the signers dialog and load cosigner status from backend.
      */
     fun showSignersDialog() {
@@ -238,6 +279,7 @@ class PsbtDetailViewModel : ViewModel() {
             totalOutputSats = dto.totalOutputSats,
             estimatedFeeSats = dto.estimatedFeeSats,
             psbtBase64 = dto.psbtBase64,
+            trezorConnectParams = dto.trezorConnectParams,
             label = dto.label,
             txid = dto.txid,
             signatures = dto.signatures.map {
