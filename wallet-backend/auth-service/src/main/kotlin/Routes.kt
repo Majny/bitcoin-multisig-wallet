@@ -57,6 +57,8 @@ fun Application.configureAuthRoutes(
     refreshStore: RefreshStore
 ) {
     routing {
+        get("/health") { call.respondText("ok") }
+
         route("/auth") {
 
             get("/.well-known/jwks.json") {
