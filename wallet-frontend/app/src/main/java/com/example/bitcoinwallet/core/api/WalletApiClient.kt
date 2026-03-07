@@ -205,26 +205,6 @@ class WalletApiClient(
     }
 
     /**
-     * POST /api/v1/psbt/{id}/finalize
-     * Finalize a fully-signed PSBT into a raw transaction.
-     */
-    suspend fun finalizePsbt(psbtId: String, accessToken: String): FinalizeResponseDto {
-        return client.post("$baseUrl/psbt/$psbtId/finalize") {
-            header("Authorization", "Bearer $accessToken")
-        }.body()
-    }
-
-    /**
-     * POST /api/v1/psbt/{id}/broadcast
-     * Broadcast a finalized transaction to the network.
-     */
-    suspend fun broadcastPsbt(psbtId: String, accessToken: String): BroadcastResponseDto {
-        return client.post("$baseUrl/psbt/$psbtId/broadcast") {
-            header("Authorization", "Bearer $accessToken")
-        }.body()
-    }
-
-    /**
      * POST /api/v1/psbt/{id}/broadcast-raw
      * Broadcast a raw signed transaction hex (from Trezor Connect serializedTx).
      * Skips the addSignature/finalize flow.
@@ -566,7 +546,8 @@ data class PsbtDetailDto(
     val txid: String? = null,
     val createdAt: String = "",
     val updatedAt: String = "",
-    val trezorConnectParams: TrezorConnectParamsDto? = null
+    val trezorConnectParams: TrezorConnectParamsDto? = null,
+    val serializedTx: String? = null
 )
 
 @Serializable
@@ -589,13 +570,6 @@ data class AddTrezorSignaturesRequestDto(
     val fingerprint: String,
     val serializedTx: String? = null,
     val signerAccountIndex: Int? = null
-)
-
-@Serializable
-data class FinalizeResponseDto(
-    val psbtId: String,
-    val txHex: String,
-    val txid: String
 )
 
 @Serializable

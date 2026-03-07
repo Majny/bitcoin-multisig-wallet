@@ -30,14 +30,6 @@ data class UtxoSelection(
     val vout: Int
 )
 
-/**
- * Request pro kombinaci více PSBT (pro offline signing workflow).
- */
-@Serializable
-data class CombinePsbtsRequest(
-    val psbts: List<String>     // seznam PSBT v base64
-)
-
 // ========== Response DTOs ==========
 
 @Serializable
@@ -55,7 +47,8 @@ data class PsbtResponse(
     val txid: String? = null,
     val createdAt: String,
     val updatedAt: String,
-    val trezorConnectParams: TrezorConnectParams? = null
+    val trezorConnectParams: TrezorConnectParams? = null,
+    val serializedTx: String? = null
 )
 
 @Serializable
@@ -79,13 +72,6 @@ data class CreatePsbtResponse(
     val estimatedVsize: Int,
     val trezorConnectParams: TrezorConnectParams? = null,
     val signerCosignerIndex: Int = 0
-)
-
-@Serializable
-data class FinalizeResponse(
-    val psbtId: String,
-    val txHex: String,          // finální raw transakce připravená k broadcastu
-    val txid: String
 )
 
 @Serializable

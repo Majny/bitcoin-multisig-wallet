@@ -86,7 +86,8 @@ class PsbtRepository {
         psbtBase64: String,
         currentSigs: Int,
         status: String? = null,
-        trezorConnectParams: TrezorConnectParams? = null
+        trezorConnectParams: TrezorConnectParams? = null,
+        serializedTx: String? = null
     ) = transaction {
         PsbtsTable.update({ PsbtsTable.id eq id }) {
             it[PsbtsTable.psbtBase64] = psbtBase64
@@ -99,6 +100,9 @@ class PsbtRepository {
                 it[PsbtsTable.trezorConnectParams] = json.encodeToString(
                     TrezorConnectParams.serializer(), trezorConnectParams.copy(refTxs = null)
                 )
+            }
+            if (serializedTx != null) {
+                it[PsbtsTable.serializedTx] = serializedTx
             }
         }
     }
@@ -129,17 +133,6 @@ class PsbtRepository {
             it[status] = "broadcast"
             it[PsbtsTable.txid] = txid
             it[broadcastAt] = OffsetDateTime.now()
-            it[updatedAt] = OffsetDateTime.now()
-        }
-    }
-    
-    /**
-     * Označí PSBT jako finalizované.
-     */
-    fun markFinalized(id: UUID, txid: String) = transaction {
-        PsbtsTable.update({ PsbtsTable.id eq id }) {
-            it[status] = "finalized"
-            it[PsbtsTable.txid] = txid
             it[updatedAt] = OffsetDateTime.now()
         }
     }
@@ -185,7 +178,8 @@ class PsbtRepository {
             txid = row[PsbtsTable.txid],
             createdAt = row[PsbtsTable.createdAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
             updatedAt = row[PsbtsTable.updatedAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME),
-            trezorConnectParams = trezorParams
+            trezorConnectParams = trezorParams,
+            serializedTx = row[PsbtsTable.serializedTx]
         )
     }
 }

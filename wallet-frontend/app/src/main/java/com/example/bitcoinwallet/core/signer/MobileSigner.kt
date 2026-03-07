@@ -19,7 +19,7 @@ import kotlinx.serialization.json.Json
  *
  * - login Trezorem (fingerprint/xpub)
  * - list wallets (GET /wallets)  <-- jediný "source of truth" pro network/scriptType
- * - PSBT prepare/submit
+ * - account discovery (scan)
  */
 class MobileSigner(
     private val backendBaseUrl: String,
@@ -90,59 +90,6 @@ class MobileSigner(
         }
     }
 
-
-    /**
-     * POST {backendBaseUrl}/wallets/{walletId}/tx/prepare
-     */
-    suspend fun preparePsbt(
-        accessToken: String,
-        request: PreparePsbtRequest
-    ): PreparedPsbt {
-        val response: PreparePsbtResponse =
-            client.post("$backendBaseUrl/wallets/${request.walletId}/tx/prepare") {
-                contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer $accessToken")
-                setBody(
-                    PreparePsbtBackendRequest(
-                        amountSats = request.amountSats,
-                        destinationAddress = request.destinationAddress,
-                        feeRateSatsPerVb = request.feeRateSatsPerVb,
-                        selectedInputs = request.selectedInputs
-                    )
-                )
-            }.body()
-
-        return PreparedPsbt(
-            psbtId = response.psbtId,
-            psbtBase64 = response.psbtBase64,
-            walletId = request.walletId
-        )
-    }
-
-    /**
-     * POST {backendBaseUrl}/wallets/{walletId}/tx/submit
-     */
-    suspend fun submitSignedPsbt(
-        accessToken: String,
-        request: SubmitSignedPsbtRequest
-    ): SubmitSignedPsbtResult {
-        val response: SubmitSignedPsbtBackendResponse =
-            client.post("$backendBaseUrl/wallets/${request.walletId}/tx/submit") {
-                contentType(ContentType.Application.Json)
-                header("Authorization", "Bearer $accessToken")
-                setBody(
-                    SubmitSignedPsbtBackendRequest(
-                        psbtId = request.psbtId,
-                        signedPsbtBase64 = request.signedPsbtBase64
-                    )
-                )
-            }.body()
-
-        return SubmitSignedPsbtResult(
-            status = response.status,
-            txId = response.txId
-        )
-    }
 
     /**
      * POST {backendBaseUrl}/accounts/scan
@@ -220,21 +167,6 @@ enum class WalletType {
     MULTI_SIG
 }
 
-data class PreparePsbtRequest(
-    val walletId: String,
-    val amountSats: Long,
-    val destinationAddress: String,
-    val feeRateSatsPerVb: Long?,
-    val selectedInputs: List<CoinSelectionInput> = emptyList()
-)
-
-@Serializable
-data class CoinSelectionInput(
-    val txid: String,
-    val vout: Int
-)
-
-
 @Serializable
 data class RegistryWalletSummaryDto(
     val walletId: String,
@@ -245,24 +177,6 @@ data class RegistryWalletSummaryDto(
     val n: Int? = null,
     val label: String? = null,
     val accountIndex: Int? = null
-)
-
-
-data class PreparedPsbt(
-    val psbtId: String,
-    val psbtBase64: String,
-    val walletId: String
-)
-
-data class SubmitSignedPsbtRequest(
-    val walletId: String,
-    val psbtId: String,
-    val signedPsbtBase64: String
-)
-
-data class SubmitSignedPsbtResult(
-    val status: String,
-    val txId: String?
 )
 
 
@@ -298,33 +212,6 @@ data class WalletLoginSerializable(
     val label: String? = null,
     val type: String,
     val balanceSats: Long? = null
-)
-
-
-@Serializable
-data class PreparePsbtBackendRequest(
-    val amountSats: Long,
-    val destinationAddress: String,
-    val feeRateSatsPerVb: Long?,
-    val selectedInputs: List<CoinSelectionInput>
-)
-
-@Serializable
-data class PreparePsbtResponse(
-    val psbtId: String,
-    val psbtBase64: String
-)
-
-@Serializable
-data class SubmitSignedPsbtBackendRequest(
-    val psbtId: String,
-    val signedPsbtBase64: String
-)
-
-@Serializable
-data class SubmitSignedPsbtBackendResponse(
-    val status: String,
-    val txId: String? = null
 )
 
 /* ---------- ACCOUNT DISCOVERY ---------- */

@@ -207,164 +207,6 @@ fun Route.psbtRoutes(
         }
         
         /**
-         * POST /psbt/{id}/combine
-         * Kombinuje více částečně podepsaných PSBT.
-         */
-        post("/{id}/combine") {
-            val appCall = call
-            val id = appCall.parameters["id"]
-            if (id == null) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
-                return@post
-            }
-            
-            val uuid = try {
-                UUID.fromString(id)
-            } catch (e: Exception) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
-                return@post
-            }
-            
-            val request = appCall.receive<CombinePsbtsRequest>()
-            
-            val existing = repository.findById(uuid)
-            if (existing == null) {
-                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
-                return@post
-            }
-            
-            // Přidej existující PSBT do seznamu a kombinuj
-            val allPsbts = listOf(existing.psbtBase64) + request.psbts
-            val combined = PsbtBuilder.combinePsbts(allPsbts)
-            
-            // Analyzuj výsledek
-            val analysis = PsbtBuilder.analyzePsbt(combined)
-            val newStatus = if (analysis.isComplete) "signed" else "pending"
-            
-            repository.updatePsbt(
-                id = uuid,
-                psbtBase64 = combined,
-                currentSigs = analysis.signatureCount,
-                status = newStatus
-            )
-            
-            val updated = repository.findById(uuid)
-                ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
-            appCall.respond(updated)
-        }
-
-        /**
-         * POST /psbt/{id}/finalize
-         * Finalizuje PSBT a připraví raw transakci k broadcastu.
-         */
-        post("/{id}/finalize") {
-            val appCall = call
-            val id = appCall.parameters["id"]
-            if (id == null) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
-                return@post
-            }
-            
-            val uuid = try {
-                UUID.fromString(id)
-            } catch (e: Exception) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
-                return@post
-            }
-            
-            val existing = repository.findById(uuid)
-            if (existing == null) {
-                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
-                return@post
-            }
-            
-            // Zkontroluj, že máme dost podpisů
-            if (existing.currentSigs < existing.requiredSigs) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf(
-                    "error" to "Not enough signatures",
-                    "current" to existing.currentSigs,
-                    "required" to existing.requiredSigs
-                ))
-                return@post
-            }
-            
-            // Finalizuj PSBT
-            val result = PsbtBuilder.finalizePsbt(existing.psbtBase64)
-            
-            if (!result.complete) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Failed to finalize PSBT"))
-                return@post
-            }
-            
-            repository.markFinalized(uuid, result.txid)
-            
-            appCall.respond(FinalizeResponse(
-                psbtId = id,
-                txHex = result.txHex,
-                txid = result.txid
-            ))
-        }
-        
-        /**
-         * POST /psbt/{id}/broadcast
-         * Broadcastuje finalizovanou transakci do sítě.
-         */
-        post("/{id}/broadcast") {
-            val appCall = call
-            val id = appCall.parameters["id"]
-            if (id == null) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
-                return@post
-            }
-            
-            val uuid = try {
-                UUID.fromString(id)
-            } catch (e: Exception) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
-                return@post
-            }
-            
-            val existing = repository.findById(uuid)
-            if (existing == null) {
-                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
-                return@post
-            }
-            
-            if (existing.status != "finalized" && existing.status != "signed") {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf(
-                    "error" to "PSBT must be finalized before broadcast",
-                    "currentStatus" to existing.status
-                ))
-                return@post
-            }
-            
-            val finalResult = PsbtBuilder.finalizePsbt(existing.psbtBase64)
-            
-            if (finalResult.txHex.isEmpty()) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Failed to get transaction hex"))
-                return@post
-            }
-            
-            // Broadcast — síť se odvozuje z walletId (wallet-fp-testnet-WPKH-0)
-            val broadcastNetwork = if (existing.walletId.contains("testnet")) "testnet" else "mainnet"
-            val broadcastResult = blockchainClient.broadcastTransaction(finalResult.txHex, broadcastNetwork)
-            
-            if (broadcastResult.error != null) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to broadcastResult.error))
-                return@post
-            }
-            
-            val txid = broadcastResult.txid ?: finalResult.txid
-            repository.markBroadcast(uuid, txid)
-            
-            appCall.respond(BroadcastResponse(
-                psbtId = id,
-                txid = txid,
-                success = true
-            ))
-        }
-        
-        /**
          * POST /psbt/{id}/sign-trezor
          * Přidá Trezor Connect podpisy k multisig PSBT.
          * Klient pošle DER signatures z Trezor Connect response.
@@ -478,12 +320,16 @@ fun Route.psbtRoutes(
                 params.copy(inputs = updatedInputs)
             }
 
+            // Ulož serializedTx když je PSBT plně podepsané (pro pozdější broadcast z jiného účtu)
+            val storeTx = if (newStatus == "signed" && request.serializedTx != null) request.serializedTx else null
+
             repository.updatePsbt(
                 id = uuid,
                 psbtBase64 = existing.psbtBase64,
                 currentSigs = newSigCount,
                 status = newStatus,
-                trezorConnectParams = updatedParams
+                trezorConnectParams = updatedParams,
+                serializedTx = storeTx
             )
 
             repository.addSignature(
@@ -553,7 +399,12 @@ fun Route.psbtRoutes(
             }
 
             try {
-                val broadcastNetwork = if (existing.walletId.contains("testnet")) "testnet" else "mainnet"
+                val broadcastNetwork = try {
+                    registryClient.getWallet(existing.walletId).network
+                } catch (e: Exception) {
+                    log.warn("broadcast-raw: failed to get wallet network, falling back to walletId heuristic", e)
+                    if (existing.walletId.contains("testnet")) "testnet" else "mainnet"
+                }
                 val broadcastResult = blockchainClient.broadcastTransaction(request.txHex, broadcastNetwork)
 
                 if (broadcastResult.error != null) {

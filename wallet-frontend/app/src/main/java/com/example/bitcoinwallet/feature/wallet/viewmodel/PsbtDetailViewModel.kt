@@ -51,6 +51,7 @@ data class PsbtDetailUiState(
     val cosigners: List<CosignerUiInfo> = emptyList(),
     val showSignersDialog: Boolean = false,
     val signersLoading: Boolean = false,
+    val serializedTx: String? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
     val broadcastSuccess: Boolean = false
@@ -140,7 +141,7 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     /**
-     * Finalize the PSBT (if fully signed) and then broadcast.
+     * Broadcast the fully-signed transaction using the raw serializedTx from Trezor Connect.
      */
     fun broadcast(onSuccess: () -> Unit = {}) {
         viewModelScope.launch {
@@ -150,16 +151,21 @@ class PsbtDetailViewModel : ViewModel() {
             _uiState.value = state.copy(isLoading = true, error = null)
 
             try {
-                // If fully signed but not yet finalized, finalize first
-                if (state.status != "finalized") {
-                    Log.d(TAG, "Finalizing PSBT: ${state.psbtId}")
-                    WalletApi.client.finalizePsbt(state.psbtId, accessToken)
+                val serializedTx = state.serializedTx
+                if (serializedTx == null) {
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "No signed transaction available for broadcast"
+                    )
+                    return@launch
                 }
 
-                // Broadcast
-                Log.d(TAG, "Broadcasting PSBT: ${state.psbtId}")
-                val result = WalletApi.client.broadcastPsbt(state.psbtId, accessToken)
-
+                Log.d(TAG, "Broadcasting via serializedTx (Trezor Connect): ${state.psbtId}")
+                val result = WalletApi.client.broadcastRawTx(
+                    psbtId = state.psbtId,
+                    accessToken = accessToken,
+                    txHex = serializedTx
+                )
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     status = "broadcast",
@@ -319,6 +325,7 @@ class PsbtDetailViewModel : ViewModel() {
             estimatedFeeSats = dto.estimatedFeeSats,
             psbtBase64 = dto.psbtBase64,
             trezorConnectParams = adjustTrezorParamsForSigner(dto.trezorConnectParams),
+            serializedTx = dto.serializedTx,
             label = dto.label,
             txid = dto.txid,
             signatures = dto.signatures.map {

@@ -3,37 +3,6 @@ package cz.majny.wallet.gateway.dto
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class CoinSelectionInput(val txid: String, val vout: Int)
-
-@Serializable
-data class PreparePsbtBackendRequest(
-    val amountSats: Long,
-    val destinationAddress: String,
-    val feeRateSatsPerVb: Long? = null,
-    val selectedInputs: List<CoinSelectionInput> = emptyList()
-)
-
-@Serializable
-data class PreparePsbtResponse(
-    val psbtId: String,
-    val psbtBase64: String
-)
-
-@Serializable
-data class SubmitSignedPsbtBackendRequest(
-    val psbtId: String,
-    val signedPsbtBase64: String
-)
-
-@Serializable
-data class SubmitSignedPsbtBackendResponse(
-    val status: String,
-    val txId: String? = null
-)
-
-// ========== Nové DTO pro psbt-service ==========
-
-@Serializable
 data class TxOutput(
     val address: String,
     val amountSats: Long
@@ -159,24 +128,13 @@ data class PsbtDetailResponse(
     val txid: String? = null,
     val createdAt: String,
     val updatedAt: String,
-    val trezorConnectParams: TrezorConnectParams? = null
+    val trezorConnectParams: TrezorConnectParams? = null,
+    val serializedTx: String? = null
 )
 
 @Serializable
 data class PsbtListResponse(
     val psbts: List<PsbtDetailResponse>
-)
-
-@Serializable
-data class CombinePsbtsRequest(
-    val psbts: List<String>
-)
-
-@Serializable
-data class FinalizeResponse(
-    val psbtId: String,
-    val txHex: String,
-    val txid: String
 )
 
 @Serializable

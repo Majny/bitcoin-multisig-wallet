@@ -10,23 +10,6 @@ import io.ktor.server.routing.*
 
 fun Route.psbtRoutes() {
     authenticate("auth-jwt") {
-        // Legacy endpointy pro kompatibilitu
-        post("/wallets/{walletId}/tx/prepare") {
-            val walletId = call.parameters["walletId"] ?: error("walletId missing")
-            val req = call.receive<PreparePsbtBackendRequest>()
-            val resp = call.application.deps.psbt.prepare(walletId, req)
-            call.respond(resp)
-        }
-
-        post("/wallets/{walletId}/tx/submit") {
-            val walletId = call.parameters["walletId"] ?: error("walletId missing")
-            val req = call.receive<SubmitSignedPsbtBackendRequest>()
-            val resp = call.application.deps.psbt.submit(walletId, req)
-            call.respond(resp)
-        }
-        
-        // ========== Nové PSBT endpointy ==========
-        
         route("/psbt") {
             // POST /psbt - vytvoří nové PSBT
             post {
@@ -50,28 +33,6 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
             
-            // POST /psbt/{id}/combine - kombinuje PSBT
-            post("/{id}/combine") {
-                val id = call.parameters["id"] ?: error("id missing")
-                val req = call.receive<CombinePsbtsRequest>()
-                val resp = call.application.deps.psbt.combine(id, req)
-                call.respond(resp)
-            }
-            
-            // POST /psbt/{id}/finalize - finalizuje PSBT
-            post("/{id}/finalize") {
-                val id = call.parameters["id"] ?: error("id missing")
-                val resp = call.application.deps.psbt.finalize(id)
-                call.respond(resp)
-            }
-            
-            // POST /psbt/{id}/broadcast - broadcastuje transakci
-            post("/{id}/broadcast") {
-                val id = call.parameters["id"] ?: error("id missing")
-                val resp = call.application.deps.psbt.broadcast(id)
-                call.respond(resp)
-            }
-
             // POST /psbt/{id}/broadcast-raw - broadcastuje raw signed tx (z Trezor Connect)
             post("/{id}/broadcast-raw") {
                 val id = call.parameters["id"] ?: error("id missing")
