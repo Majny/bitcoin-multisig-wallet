@@ -29,9 +29,6 @@ object AddressDerivation {
     /** Regex to extract xpub/tpub from a descriptor string. */
     private val XPUB_RE = Regex("""([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})""")
 
-    /** Regex to extract ALL xpubs from a multisig descriptor. */
-    private val ALL_XPUBS_RE = Regex("""([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})""")
-
     /** Regex to extract M from multi(M, ...) or sortedmulti(M, ...) */
     private val MULTI_M_RE = Regex("""(?:sorted)?multi\((\d+)\s*,""")
 
@@ -146,7 +143,7 @@ object AddressDerivation {
         val isSorted = descriptor.contains("sortedmulti(")
 
         // Extract all xpubs
-        val xpubs = ALL_XPUBS_RE.findAll(descriptor).map { it.value }.toList()
+        val xpubs = XPUB_RE.findAll(descriptor).map { it.value }.toList()
         if (xpubs.isEmpty()) {
             throw IllegalArgumentException("No xpubs found in multisig descriptor")
         }

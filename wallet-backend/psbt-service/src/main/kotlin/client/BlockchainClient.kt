@@ -53,14 +53,6 @@ class BlockchainClient(private val baseUrl: String) {
         return response.body()
     }
 
-    /**
-     * Získá doporučené fee rates.
-     */
-    suspend fun getFeeEstimates(network: String = "mainnet"): FeeEstimates {
-        return client.get("$baseUrl/api/v1/blockchain/fees") {
-            parameter("network", network)
-        }.body()
-    }
 }
 
 @Serializable
@@ -79,11 +71,3 @@ data class BroadcastResult(
     val error: String? = null
 )
 
-@Serializable
-data class FeeEstimates(
-    val fastestFee: Int,
-    val halfHourFee: Int,
-    val hourFee: Int,
-    val economyFee: Int,
-    val minimumFee: Int
-)

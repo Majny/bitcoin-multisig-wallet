@@ -14,15 +14,6 @@ object ApiConfig {
      */
     const val API_GATEWAY_BASE_URL = "http://100.91.223.40:8080/api/v1"
     
-    /**
-     * Default fiat currency for price display.
-     */
-    const val DEFAULT_FIAT_CURRENCY = "czk"
-    
-    /**
-     * Request timeout in milliseconds.
-     */
-    const val REQUEST_TIMEOUT_MS = 30_000L
 }
 
 /**

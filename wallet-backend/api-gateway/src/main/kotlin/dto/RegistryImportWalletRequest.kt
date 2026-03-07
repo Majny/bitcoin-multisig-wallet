@@ -4,15 +4,6 @@ import kotlinx.serialization.Serializable
 
 
 
-@Serializable
-data class RegistryImportWalletRequest(
-    val fingerprint: String,
-    val xpub: String,
-    val derivationPath: String,
-    val deviceModel: String? = null,
-    val deviceLabel: String? = null
-)
-
 // ========== Wallet Import DTOs ==========
 
 /**
@@ -159,8 +150,3 @@ data class WalletAddressResponse(
     val type: String    // "receive" or "change"
 )
 
-@Serializable
-data class WalletAddressesResponse(
-    val walletId: String,
-    val addresses: List<WalletAddressResponse>
-)

@@ -54,23 +54,3 @@ data class DeriveAddressesResponse(
     val addresses: List<String>
 )
 
-/**
- * Result from Bitcoin Core's scantxoutset RPC.
- */
-@Serializable
-data class ScanTxOutSetResult(
-    val success: Boolean,
-    val txouts: Int = 0,
-    val total_amount: Double = 0.0,
-    val unspents: List<UnspentOutput> = emptyList()
-)
-
-@Serializable
-data class UnspentOutput(
-    val txid: String,
-    val vout: Int,
-    val scriptPubKey: String,
-    val desc: String,
-    val amount: Double,
-    val height: Int
-)

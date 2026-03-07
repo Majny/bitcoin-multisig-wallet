@@ -20,15 +20,6 @@ class WalletExplorer(
     private val blockchain: BlockchainClient
 ) {
 
-    companion object {
-        /**
-         * BIP-44 gap limit — kolik prázdných adres v řadě se kontroluje.
-         * Standard je 20, ale pro explorer stačí nižší protože adresy
-         * už jsou odvozené v registry.
-         */
-        const val GAP_LIMIT = 20
-    }
-
     /**
      * Vrátí množinu všech adres dané peněženky.
      * Používá se pro isMine labeling v transaction detail.

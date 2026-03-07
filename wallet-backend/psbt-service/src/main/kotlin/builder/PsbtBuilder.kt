@@ -5,7 +5,6 @@ import org.bitcoinj.base.BitcoinNetwork
 import org.bitcoinj.crypto.DeterministicKey
 import org.bitcoinj.crypto.HDKeyDerivation
 import org.slf4j.LoggerFactory
-import java.security.MessageDigest
 import java.util.*
 
 /**
@@ -659,7 +658,6 @@ object PsbtBuilder {
     
     private const val PSBT_IN_NON_WITNESS_UTXO = 0x00  // celá předchozí transakce
     private const val PSBT_IN_WITNESS_UTXO = 0x01
-    private const val PSBT_IN_PARTIAL_SIG = 0x02
     private const val PSBT_IN_WITNESS_SCRIPT = 0x05
     private const val PSBT_IN_BIP32_DERIVATION = 0x06
     private const val PSBT_OUT_BIP32_DERIVATION = 0x02
@@ -854,137 +852,6 @@ object PsbtBuilder {
         return ParsedPsbt(unsignedTx, globalKvs, inputKvs, outputKvs)
     }
     
-    /**
-     * Serializuje ParsedPsbt zpět do binárního formátu.
-     */
-    private fun serializePsbt(parsed: ParsedPsbt): ByteArray {
-        val result = mutableListOf<Byte>()
-        
-        // Magic
-        result.addAll(byteArrayOf(0x70, 0x73, 0x62, 0x74, 0xff.toByte()).toList())
-        
-        // Global key-value pairs
-        for (kv in parsed.globalKvs) {
-            val key = byteArrayOf(kv.keyType.toByte()) + kv.keyData
-            result.addAll(writeVarInt(key.size.toLong()))
-            result.addAll(key.toList())
-            result.addAll(writeVarInt(kv.value.size.toLong()))
-            result.addAll(kv.value.toList())
-        }
-        result.add(0x00) // separator
-        
-        // Input sections
-        for (inputKvs in parsed.inputKvs) {
-            for (kv in inputKvs) {
-                val key = byteArrayOf(kv.keyType.toByte()) + kv.keyData
-                result.addAll(writeVarInt(key.size.toLong()))
-                result.addAll(key.toList())
-                result.addAll(writeVarInt(kv.value.size.toLong()))
-                result.addAll(kv.value.toList())
-            }
-            result.add(0x00) // separator
-        }
-        
-        // Output sections
-        for (outputKvs in parsed.outputKvs) {
-            for (kv in outputKvs) {
-                val key = byteArrayOf(kv.keyType.toByte()) + kv.keyData
-                result.addAll(writeVarInt(key.size.toLong()))
-                result.addAll(key.toList())
-                result.addAll(writeVarInt(kv.value.size.toLong()))
-                result.addAll(kv.value.toList())
-            }
-            result.add(0x00) // separator
-        }
-        
-        return result.toByteArray()
-    }
-    
-    /**
-     * Sestaví witness data pro jeden vstup z partial_sig entries.
-     * P2WPKH: [signature, pubkey]
-     * P2WSH multisig: [OP_0, sig1, ..., sigM, witnessScript]
-     */
-    private fun buildWitness(inputKvs: List<PsbtKV>): List<ByteArray> {
-        val partialSigs = inputKvs.filter { it.keyType == PSBT_IN_PARTIAL_SIG }
-        val witnessScript = inputKvs.firstOrNull { it.keyType == PSBT_IN_WITNESS_SCRIPT }
-
-        if (witnessScript != null) {
-            // P2WSH multisig: OP_0 + signatures + witnessScript
-            // CHECKMULTISIG vyžaduje, aby podpisy byly ve stejném pořadí
-            // jako odpovídající pubklíče ve witness scriptu (BIP-67).
-            val sortedSigs = sortSigsByWitnessScript(partialSigs, witnessScript.value)
-            val items = mutableListOf<ByteArray>()
-            items.add(ByteArray(0)) // OP_0 for CHECKMULTISIG bug
-            for (sig in sortedSigs) {
-                items.add(sig.value)
-            }
-            items.add(witnessScript.value)
-            return items
-        } else {
-            // P2WPKH: [signature, pubkey]
-            val sig = partialSigs.firstOrNull()
-            return if (sig != null) {
-                listOf(sig.value, sig.keyData) // keyData = compressed pubkey
-            } else {
-                emptyList()
-            }
-        }
-    }
-
-    /**
-     * Seřadí partial_sigs podle pozice jejich pubklíče ve witness scriptu.
-     * Witness script formát: OP_M <0x21><pubkey1> ... <0x21><pubkeyN> OP_N OP_CHECKMULTISIG
-     */
-    private fun sortSigsByWitnessScript(sigs: List<PsbtKV>, witnessScript: ByteArray): List<PsbtKV> {
-        val pubkeyOrder = mutableListOf<String>()
-        var pos = 1 // přeskočí OP_M
-        while (pos < witnessScript.size - 2) { // -2 pro OP_N a OP_CHECKMULTISIG
-            val pushLen = witnessScript[pos].toInt() and 0xFF
-            if (pushLen == 0 || pushLen > 33) break
-            pos++
-            if (pos + pushLen > witnessScript.size) break
-            pubkeyOrder.add(bytesToHex(witnessScript.sliceArray(pos until pos + pushLen)))
-            pos += pushLen
-        }
-        return sigs.sortedBy { sig ->
-            val idx = pubkeyOrder.indexOf(bytesToHex(sig.keyData))
-            if (idx == -1) Int.MAX_VALUE else idx
-        }
-    }
-    
-    /**
-     * Sestaví finální segwit transakci z unsigned tx + witness dat.
-     * Formát: [version][marker=0x00][flag=0x01][inputs][outputs][witness...][locktime]
-     */
-    private fun buildSegwitTransaction(unsignedTx: ByteArray, witnesses: List<List<ByteArray>>): ByteArray {
-        val result = mutableListOf<Byte>()
-        
-        // Version (first 4 bytes)
-        result.addAll(unsignedTx.slice(0 until 4))
-        
-        // Segwit marker + flag
-        result.add(0x00)
-        result.add(0x01)
-        
-        // Inputs and outputs (everything between version and locktime)
-        val txBody = unsignedTx.slice(4 until unsignedTx.size - 4)
-        result.addAll(txBody)
-        
-        // Witness data for each input
-        for (witness in witnesses) {
-            result.addAll(writeVarInt(witness.size.toLong()))
-            for (item in witness) {
-                result.addAll(writeVarInt(item.size.toLong()))
-                result.addAll(item.toList())
-            }
-        }
-        
-        // Locktime (last 4 bytes)
-        result.addAll(unsignedTx.slice(unsignedTx.size - 4 until unsignedTx.size))
-        
-        return result.toByteArray()
-    }
     
     /**
      * Přečte compact size (variable-length integer) z byte pole.
@@ -1044,11 +911,6 @@ object PsbtBuilder {
         return outputCount.toInt()
     }
     
-    private fun doubleSha256(data: ByteArray): ByteArray {
-        val md = MessageDigest.getInstance("SHA-256")
-        return md.digest(md.digest(data))
-    }
-    
     private fun bytesToHex(bytes: ByteArray): String {
         return bytes.joinToString("") { "%02x".format(it) }
     }
@@ -1059,7 +921,6 @@ data class SelectedUtxo(
     val vout: Int,
     val value: Long,
     val scriptPubKey: String?,
-    val derivationPath: String? = null,
     val addressIndex: Int? = null,      // BIP-32 child index within chain
     val addressType: String? = null,    // "receive" (chain 0) or "change" (chain 1)
     val address: String? = null,        // the address owning this UTXO

@@ -104,7 +104,6 @@ class TrezorCallbackActivity : ComponentActivity() {
         startActivity(
             Intent(this@TrezorCallbackActivity, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                .putExtra("trezor_signed", true)
         )
         finish()
     }

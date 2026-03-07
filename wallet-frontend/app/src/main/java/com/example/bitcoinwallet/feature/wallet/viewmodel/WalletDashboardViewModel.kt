@@ -103,11 +103,4 @@ class WalletDashboardViewModel : ViewModel() {
     fun refresh() {
         loadWalletData()
     }
-    
-    /**
-     * Clear any error state.
-     */
-    fun clearError() {
-        _uiState.value = _uiState.value.copy(error = null)
-    }
 }

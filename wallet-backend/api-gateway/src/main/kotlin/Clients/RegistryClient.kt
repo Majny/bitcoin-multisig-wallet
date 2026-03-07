@@ -24,8 +24,6 @@ interface RegistryClient {
 
     suspend fun getWalletAddress(walletId: String, type: String = "receive", index: Int = 0): WalletAddressResponse
 
-    suspend fun getWalletAddresses(walletId: String, type: String? = null): WalletAddressesResponse
-
     suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse
 
     suspend fun deriveAddresses(descriptor: String, network: String, count: Int = 5): List<String>
@@ -84,12 +82,6 @@ class RegistryClientImpl(
                 parameters.append("type", type)
                 parameters.append("index", index.toString())
             }
-        }.body()
-    }
-
-    override suspend fun getWalletAddresses(walletId: String, type: String?): WalletAddressesResponse {
-        return client().get("$baseUrl/registry/wallets/$walletId/addresses") {
-            if (type != null) url { parameters.append("type", type) }
         }.body()
     }
 

@@ -33,10 +33,7 @@ data class TransactionDetailUiState(
         "%.1f sat/vB".format(feeSats.toDouble() / vsize)
     } else ""
 
-    val totalInputSats: Long get() = inputs.sumOf { it.valueSats }
     val totalOutputSats: Long get() = outputs.sumOf { it.valueSats }
-
-    val shortTxid: String get() = if (txid.length > 20) "${txid.take(10)}…${txid.takeLast(10)}" else txid
 }
 
 private fun formatSatsToBtc(sats: Long): String {

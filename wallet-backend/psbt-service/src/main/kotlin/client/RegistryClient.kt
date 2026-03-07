@@ -40,16 +40,6 @@ class RegistryClient(private val baseUrl: String) {
     }
     
     /**
-     * Získá receive adresu pro peněženku.
-     */
-    suspend fun getReceiveAddress(walletId: String, index: Int = 0): AddressDto {
-        return client.get("$baseUrl/registry/wallets/$walletId/addresses") {
-            parameter("type", "receive")
-            parameter("index", index)
-        }.body()
-    }
-
-    /**
      * Získá všechny adresy peněženky (receive + change).
      * Pokud type je specifikován, vrátí jen daný typ.
      */

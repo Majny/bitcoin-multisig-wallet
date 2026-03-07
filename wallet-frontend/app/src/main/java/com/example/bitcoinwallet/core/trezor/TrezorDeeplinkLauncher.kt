@@ -17,34 +17,6 @@ class TrezorDeeplinkLauncher(
     private val callbackHost: String = "trezor-callback",
 ) {
 
-    companion object {
-        /**
-         * Standard BIP derivation paths for Bitcoin.
-         * Purpose: 84 = Native SegWit (bech32), 86 = Taproot, 49 = Nested SegWit, 44 = Legacy
-         * Coin type: 0 = mainnet, 1 = testnet
-         */
-        val MAINNET_DERIVATION_PATHS = listOf(
-            "m/84'/0'/0'",  // Native SegWit account 0
-            "m/84'/0'/1'",  // Native SegWit account 1
-            "m/84'/0'/2'",  // Native SegWit account 2
-            "m/86'/0'/0'",  // Taproot account 0
-            "m/86'/0'/1'",  // Taproot account 1
-        )
-
-        val TESTNET_DERIVATION_PATHS = listOf(
-            "m/84'/1'/0'",  // Native SegWit testnet account 0
-            "m/84'/1'/1'",  // Native SegWit testnet account 1
-            "m/86'/1'/0'",  // Taproot testnet account 0
-        )
-
-        /**
-         * Get the next derivation path to scan.
-         * Used for sequential account discovery.
-         */
-        fun getDerivationPath(purpose: Int, coinType: Int, accountIndex: Int): String {
-            return "m/$purpose'/$coinType'/$accountIndex'"
-        }
-    }
 
     fun openGetPublicKey(
         context: Context,

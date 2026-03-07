@@ -17,7 +17,6 @@ val TextSecondary = Color(0xFFB0B0B0)
 val TextMuted = Color(0xFF888888)
 
 // Action colors
-val SendRed = Color(0xFFEF4444)
 val ReceiveGreen = Color(0xFF10B981)
 val AccentTeal = Color(0xFF14B8A6)
 val AccentBlue = Color(0xFF4A90D9)
@@ -26,7 +25,6 @@ val ErrorRed = Color(0xFFE57373)
 val TestnetAmber = Color(0xFFF59E0B)
 
 // Button colors
-val ButtonPrimary = Color(0xFF14B8A6)
 val ButtonSecondary = Color(0xFF2B4450)
 
 // UI element colors

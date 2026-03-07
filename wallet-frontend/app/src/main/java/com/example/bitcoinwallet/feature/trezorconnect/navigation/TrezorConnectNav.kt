@@ -71,7 +71,6 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                     // Login with all collected xpubs — backend scans and creates wallets for active accounts
                     val session = signer.loginWithTrezor(identities)
                     SessionStore.session = session
-                    SessionStore.walletsFetchedAtMs = System.currentTimeMillis()
 
                     // Check if any wallets were found for the connected network
                     val connectedNetwork = identities.first().derivationPath
