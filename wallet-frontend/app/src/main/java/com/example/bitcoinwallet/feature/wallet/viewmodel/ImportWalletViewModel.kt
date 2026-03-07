@@ -61,11 +61,7 @@ class ImportWalletViewModel : ViewModel() {
                     }
                 }
 
-                // Extract account index from active wallet ID: "wallet-400209115-testnet-WPKH-0" → 0
-                val accountIndex = SessionStore.activeWalletId
-                    ?.split("-")
-                    ?.lastOrNull()
-                    ?.toIntOrNull()
+                val accountIndex = SessionStore.activeAccountIndex
 
                 val request = ImportWalletRequestDto(
                     descriptor = state.descriptor.trim(),

@@ -13,6 +13,7 @@ object SessionStore {
     @Volatile var session: UserSession? = null
 
     @Volatile var activeWalletId: String? = null
+    @Volatile var activeAccountIndex: Int? = null
     @Volatile var walletsFetchedAtMs: Long? = null
 
     /** Account discovery: collected xpubs from Trezor bundle callback. */
@@ -56,6 +57,7 @@ object SessionStore {
         pendingIdentity = null
         session = null
         activeWalletId = null
+        activeAccountIndex = null
         walletsFetchedAtMs = null
         pendingBatchXpubs = mutableListOf()
         _pendingSignedPsbt.value = null

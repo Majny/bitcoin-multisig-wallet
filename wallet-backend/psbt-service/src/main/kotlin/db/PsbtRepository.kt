@@ -109,12 +109,14 @@ class PsbtRepository {
     fun addSignature(
         psbtId: UUID,
         deviceId: String,
-        fingerprint: String
+        fingerprint: String,
+        cosignerIndex: Int = 0
     ) = transaction {
         PsbtSignaturesTable.insert {
             it[PsbtSignaturesTable.psbtId] = psbtId
             it[PsbtSignaturesTable.deviceId] = deviceId
             it[PsbtSignaturesTable.fingerprint] = fingerprint
+            it[PsbtSignaturesTable.cosignerIndex] = cosignerIndex
             it[signedAt] = OffsetDateTime.now()
         }
     }
@@ -158,6 +160,7 @@ class PsbtRepository {
                 SignatureInfo(
                     fingerprint = row[PsbtSignaturesTable.fingerprint],
                     deviceId = row[PsbtSignaturesTable.deviceId],
+                    cosignerIndex = row[PsbtSignaturesTable.cosignerIndex],
                     signedAt = row[PsbtSignaturesTable.signedAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                 )
             }

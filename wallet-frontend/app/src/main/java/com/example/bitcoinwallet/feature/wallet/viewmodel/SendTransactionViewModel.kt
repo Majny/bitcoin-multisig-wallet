@@ -68,6 +68,7 @@ data class SendTransactionUiState(
     val txCreatedId: String? = null,
     val psbtBase64: String? = null,      // PSBT to be signed by Trezor
     val trezorConnectParams: TrezorConnectParamsDto? = null, // structured params for Trezor Connect
+    val signerCosignerIndex: Int = 0,       // resolved cosigner index from createPsbt response
     val awaitingTrezor: Boolean = false,  // waiting for Trezor callback
     val isSubmitting: Boolean = false,    // submitting signed PSBT to backend
     val broadcastSuccess: Boolean = false,
@@ -228,16 +229,7 @@ class SendTransactionViewModel : ViewModel() {
                 Log.d(TAG, "Creating PSBT: to=${state.recipientAddress}, amount=${state.amountSats} sats, feeRate=$feeRate sat/vB, utxos=${utxoSelection?.size ?: "auto"}")
 
                 // Extract account index for multisig cosigner matching.
-                // Multisig wallet IDs (w-{hash}) don't contain a numeric suffix,
-                // so for multisig we look up the singlesig wallet's account index instead.
-                val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
-                val signerAccount = if (wallet?.type == WalletType.MULTI_SIG) {
-                    SessionStore.session?.user?.wallets
-                        ?.firstOrNull { it.type == WalletType.SINGLE_SIG }
-                        ?.id?.split("-")?.lastOrNull()?.toIntOrNull() ?: 0
-                } else {
-                    walletId?.split("-")?.lastOrNull()?.toIntOrNull()
-                }
+                val signerAccount = SessionStore.activeAccountIndex
 
                 val response = WalletApi.client.createPsbt(
                     accessToken = accessToken,
@@ -280,6 +272,7 @@ class SendTransactionViewModel : ViewModel() {
                     txCreatedId = response.id,
                     psbtBase64 = response.psbtBase64,
                     trezorConnectParams = response.trezorConnectParams,
+                    signerCosignerIndex = response.signerCosignerIndex,
                     feeSats = response.estimatedFee,
                     awaitingTrezor = true
                 )
@@ -313,11 +306,9 @@ class SendTransactionViewModel : ViewModel() {
                 onTrezorMultisigSigned(signedData, onBroadcastSuccess)
             }
             // Singlesig: broadcast serialized tx directly
-            signType == SignResultType.SERIALIZED_TX -> {
+            else -> {
                 onTrezorSerializedTx(signedData, onBroadcastSuccess)
             }
-            // Fallback: signed PSBT flow
-            else -> onTrezorSigned(signedData, onBroadcastSuccess)
         }
     }
 
@@ -351,13 +342,15 @@ class SendTransactionViewModel : ViewModel() {
                 if (trezorSigs != null && trezorSigs.isNotEmpty()) {
                     // Submit per-input signatures via sign-trezor endpoint
                     Log.d(TAG, "Submitting ${trezorSigs.size} Trezor signatures for multisig PSBT...")
+                    val signerAccountIdx = SessionStore.activeAccountIndex
                     val result = WalletApi.client.signTrezor(
                         psbtId = psbtId,
                         accessToken = accessToken,
                         signatures = trezorSigs,
-                        cosignerIndex = 0,  // TODO: let user pick cosigner
+                        cosignerIndex = _uiState.value.signerCosignerIndex,
                         fingerprint = fingerprint,
-                        serializedTx = serializedTxHex
+                        serializedTx = serializedTxHex,
+                        signerAccountIndex = signerAccountIdx
                     )
                     SessionStore.setPendingTrezorSignatures(null)
 
@@ -450,71 +443,6 @@ class SendTransactionViewModel : ViewModel() {
                 onBroadcastSuccess()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to broadcast raw tx", e)
-                _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    error = e.message ?: "Failed to broadcast transaction"
-                )
-            }
-        }
-    }
-
-    /**
-     * Called when Trezor returns a signed PSBT (legacy/multisig flow).
-     * Submits the signature to backend, then finalizes and broadcasts.
-     *
-     * @param signedPsbtBase64 The PSBT signed by Trezor.
-     * @param onBroadcastSuccess Called when tx is successfully broadcast.
-     */
-    fun onTrezorSigned(signedPsbtBase64: String, onBroadcastSuccess: () -> Unit) {
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(
-                awaitingTrezor = false,
-                isSubmitting = true,
-                error = null
-            )
-
-            val accessToken = SessionStore.session?.accessToken
-            val psbtId = _uiState.value.txCreatedId
-            val fingerprint = SessionStore.session?.user?.trezorFingerprint ?: "unknown"
-
-            if (accessToken == null || psbtId == null) {
-                _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    error = "No active session or PSBT"
-                )
-                return@launch
-            }
-
-            try {
-                // 1. Submit signed PSBT to backend
-                Log.d(TAG, "Submitting signed PSBT to backend...")
-                WalletApi.client.addSignature(
-                    psbtId = psbtId,
-                    accessToken = accessToken,
-                    signedPsbtBase64 = signedPsbtBase64,
-                    deviceId = fingerprint,   // byl hardcoded "trezor"; použij fingerprint jako identifikátor
-                    fingerprint = fingerprint
-                )
-
-                // 2. Finalize
-                Log.d(TAG, "Finalizing PSBT...")
-                WalletApi.client.finalizePsbt(psbtId, accessToken)
-
-                // 3. Broadcast
-                Log.d(TAG, "Broadcasting transaction...")
-                val broadcastResp = WalletApi.client.broadcastPsbt(psbtId, accessToken)
-
-                Log.d(TAG, "Transaction broadcast! txid=${broadcastResp.txid}")
-
-                _uiState.value = _uiState.value.copy(
-                    isSubmitting = false,
-                    broadcastSuccess = true,
-                    broadcastTxid = broadcastResp.txid
-                )
-
-                onBroadcastSuccess()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to submit/finalize/broadcast", e)
                 _uiState.value = _uiState.value.copy(
                     isSubmitting = false,
                     error = e.message ?: "Failed to broadcast transaction"

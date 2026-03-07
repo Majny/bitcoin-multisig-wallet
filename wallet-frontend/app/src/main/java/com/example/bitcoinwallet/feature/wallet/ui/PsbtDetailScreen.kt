@@ -446,8 +446,8 @@ private fun SignersDialog(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Cosigner #${cosigner.cosignerIndex + 1}",
-                                color = TextPrimary,
+                                text = if (cosigner.isMe) "Cosigner #${cosigner.cosignerIndex + 1} (You)" else "Cosigner #${cosigner.cosignerIndex + 1}",
+                                color = if (cosigner.isMe) AccentTeal else TextPrimary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.SemiBold
                             )

@@ -13,6 +13,8 @@ import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import org.bitcoinj.base.BitcoinNetwork
+import org.bitcoinj.crypto.DeterministicKey
 import org.slf4j.LoggerFactory
 import java.util.*
 
@@ -147,7 +149,8 @@ fun Route.psbtRoutes(
                     psbtBase64 = result.psbtBase64,
                     estimatedFee = result.estimatedFee,
                     estimatedVsize = result.estimatedVsize,
-                    trezorConnectParams = trezorParams
+                    trezorConnectParams = trezorParams,
+                    signerCosignerIndex = signerCosignerIdx
                 ))
                 
             } catch (e: Exception) {
@@ -203,71 +206,6 @@ fun Route.psbtRoutes(
             appCall.respond(PsbtListResponse(psbts))
         }
         
-        /**
-         * POST /psbt/{id}/sign
-         * Přidá podpis k existujícímu PSBT.
-         * Klient pošle aktualizovaný PSBT s novým podpisem.
-         */
-        post("/{id}/sign") {
-            val appCall = call
-            val id = appCall.parameters["id"]
-            if (id == null) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
-                return@post
-            }
-            
-            val uuid = try {
-                UUID.fromString(id)
-            } catch (e: Exception) {
-                appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
-                return@post
-            }
-            
-            val request = appCall.receive<AddSignatureRequest>()
-            
-            val existing = repository.findById(uuid)
-            if (existing == null) {
-                appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
-                return@post
-            }
-            
-            // Zkontroluj, jestli tento signer už nepodepsal
-            if (existing.signatures.any { it.fingerprint == request.fingerprint }) {
-                appCall.respond(HttpStatusCode.Conflict, mapOf("error" to "Already signed by this device"))
-                return@post
-            }
-            
-            // Kombinuj uložený PSBT s nově podepsaným (sloučí partial_sigs)
-            val combinedBase64 = try {
-                PsbtBuilder.combinePsbts(listOf(existing.psbtBase64, request.psbtBase64))
-            } catch (e: Exception) {
-                log.warn("Combine failed, using submitted PSBT as-is: {}", e.message)
-                request.psbtBase64
-            }
-
-            // Analyzuj výsledný PSBT pro skutečný počet podpisů
-            val analysis = PsbtBuilder.analyzePsbt(combinedBase64)
-            val actualSigCount = maxOf(analysis.signatureCount, existing.currentSigs + 1)
-            val newStatus = if (actualSigCount >= existing.requiredSigs) "signed" else "pending"
-            
-            repository.updatePsbt(
-                id = uuid,
-                psbtBase64 = combinedBase64,
-                currentSigs = actualSigCount,
-                status = newStatus
-            )
-            
-            repository.addSignature(
-                psbtId = uuid,
-                deviceId = request.deviceId,
-                fingerprint = request.fingerprint
-            )
-            
-            val updated = repository.findById(uuid)
-                ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
-            appCall.respond(updated)
-        }
-
         /**
          * POST /psbt/{id}/combine
          * Kombinuje více částečně podepsaných PSBT.
@@ -456,8 +394,35 @@ fun Route.psbtRoutes(
                 return@post
             }
 
+            // Resolve cosignerIndex: prefer signerAccountIndex mapping if provided
+            val resolvedCosignerIndex = if (request.signerAccountIndex != null) {
+                try {
+                    val wallet = registryClient.getWallet(existing.walletId)
+                    val sorted = wallet.cosigners.sortedBy { it.idx }
+                    val match = sorted.indexOfFirst { cos ->
+                        val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
+                        val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
+                        cosAccount == request.signerAccountIndex
+                    }
+                    if (match >= 0) {
+                        log.info("sign-trezor: mapped signerAccountIndex={} to cosignerIdx={}", request.signerAccountIndex, match)
+                        match
+                    } else {
+                        log.warn("sign-trezor: signerAccountIndex={} not found, using request.cosignerIndex={}", request.signerAccountIndex, request.cosignerIndex)
+                        request.cosignerIndex
+                    }
+                } catch (e: Exception) {
+                    log.warn("sign-trezor: failed to resolve signerAccountIndex, using request.cosignerIndex={}", request.cosignerIndex, e)
+                    request.cosignerIndex
+                }
+            } else {
+                request.cosignerIndex
+            }
+
             // Zkontroluj, jestli tento cosigner už nepodepsal
-            if (existing.signatures.any { it.fingerprint == request.fingerprint }) {
+            // Používáme cosignerIndex místo fingerprint, protože stejné zařízení
+            // může podepisovat jako více cosignerů (různé BIP-48 účty)
+            if (existing.signatures.any { it.cosignerIndex == resolvedCosignerIndex }) {
                 appCall.respond(HttpStatusCode.Conflict, mapOf("error" to "Already signed by this cosigner"))
                 return@post
             }
@@ -466,16 +431,48 @@ fun Route.psbtRoutes(
             val newStatus = if (newSigCount >= existing.requiredSigs) "signed" else "pending"
 
             // Aktualizuj TrezorConnectParams — vlož podpisy do multisig.signatures
-            // pro příští kolo podepisování
+            // pro příští kolo podepisování.
+            // POZOR: multisig.pubkeys jsou v BIP-67 pořadí (seřazeno per-input),
+            // které se liší od idx pořadí cosignerů. Musíme najít správnou pozici
+            // porovnáním signer's public_key s pubkeys v každém inputu.
+            val signerXpub = try {
+                val sorted = registryClient.getWallet(existing.walletId).cosigners.sortedBy { it.idx }
+                sorted.getOrNull(resolvedCosignerIndex)?.xpubRoot
+            } catch (e: Exception) {
+                log.warn("sign-trezor: failed to get signer xpub for sig placement", e)
+                null
+            }
+
+            val signerPublicKey = signerXpub?.let { xpub ->
+                try {
+                    val network = if (xpub.startsWith("xpub")) BitcoinNetwork.MAINNET else BitcoinNetwork.TESTNET
+                    val key = DeterministicKey.deserializeB58(xpub, network)
+                    key.pubKeyPoint.getEncoded(true).joinToString("") { "%02x".format(it) }
+                } catch (e: Exception) {
+                    log.warn("sign-trezor: failed to derive public_key from xpub", e)
+                    null
+                }
+            }
+
             val updatedParams = existing.trezorConnectParams?.let { params ->
-                val updatedInputs = params.inputs.map { input ->
-                    val ms = input.multisig ?: return@map input
-                    val sigIdx = request.cosignerIndex.coerceIn(0, ms.signatures.size - 1)
+                val updatedInputs = params.inputs.mapIndexed { inputIndex, input ->
+                    val ms = input.multisig ?: return@mapIndexed input
                     val updatedSigs = ms.signatures.toMutableList()
-                    // DER sigs z Trezor jsou indexovány po inputech
-                    val inputIndex = params.inputs.indexOf(input)
                     val derSig = request.signatures.getOrNull(inputIndex) ?: ""
-                    if (derSig.isNotBlank()) updatedSigs[sigIdx] = derSig
+                    if (derSig.isBlank()) return@mapIndexed input
+
+                    // Najdi pozici signer's pubkey v BIP-67 sorted pubkeys pro tento input
+                    val sigIdx = if (signerPublicKey != null) {
+                        val match = ms.pubkeys.indexOfFirst { it.node.public_key == signerPublicKey }
+                        if (match >= 0) match else {
+                            log.warn("sign-trezor: signer pubkey not found in input {} pubkeys, fallback to cosignerIndex={}", inputIndex, resolvedCosignerIndex)
+                            resolvedCosignerIndex.coerceIn(0, ms.signatures.size - 1)
+                        }
+                    } else {
+                        resolvedCosignerIndex.coerceIn(0, ms.signatures.size - 1)
+                    }
+
+                    updatedSigs[sigIdx] = derSig
                     input.copy(multisig = ms.copy(signatures = updatedSigs))
                 }
                 params.copy(inputs = updatedInputs)
@@ -492,11 +489,12 @@ fun Route.psbtRoutes(
             repository.addSignature(
                 psbtId = uuid,
                 deviceId = request.fingerprint,
-                fingerprint = request.fingerprint
+                fingerprint = request.fingerprint,
+                cosignerIndex = resolvedCosignerIndex
             )
 
             log.info("Trezor signatures added: psbtId={} cosigner={} newSigs={}/{} status={}",
-                id, request.cosignerIndex, newSigCount, existing.requiredSigs, newStatus)
+                id, resolvedCosignerIndex, newSigCount, existing.requiredSigs, newStatus)
 
             val updated = repository.findById(uuid)
                 ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
@@ -609,10 +607,10 @@ fun Route.psbtRoutes(
                 val wallet = registryClient.getWallet(psbt.walletId)
 
                 // Mapuj existující podpisy podle fingerprintu
-                val signedMap = psbt.signatures.associateBy { it.fingerprint }
+                val signedMap = psbt.signatures.associateBy { it.cosignerIndex }
 
                 val signers = wallet.cosigners.map { cosigner ->
-                    val sig = signedMap[cosigner.fingerprint]
+                    val sig = signedMap[cosigner.idx]
                     SignerDetail(
                         fingerprint = cosigner.fingerprint,
                         cosignerIndex = cosigner.idx,

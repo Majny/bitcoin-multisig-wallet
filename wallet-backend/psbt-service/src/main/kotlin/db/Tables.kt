@@ -28,7 +28,8 @@ object PsbtSignaturesTable : Table("psbt_signatures") {
     val psbtId = uuid("psbt_id").references(PsbtsTable.id)
     val deviceId = varchar("device_id", 255)
     val fingerprint = varchar("fingerprint", 16)
+    val cosignerIndex = integer("cosigner_index").default(0)
     val signedAt = timestampWithTimeZone("signed_at")
-    
+
     override val primaryKey = PrimaryKey(id)
 }

@@ -48,6 +48,7 @@ object WalletMembersTable : Table("wallet_members") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
     val deviceId = text("device_id").references(DevicesTable.deviceId)
     val accountIndex = integer("account_index").default(-1)  // -1 = singlesig / unknown
+    val label = text("label").nullable()
     val createdAt = timestampWithTimeZone("created_at")
     override val primaryKey = PrimaryKey(walletId, deviceId, accountIndex)
 }

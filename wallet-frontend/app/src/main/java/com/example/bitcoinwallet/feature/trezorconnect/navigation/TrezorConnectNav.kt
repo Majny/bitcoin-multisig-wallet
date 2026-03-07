@@ -111,6 +111,7 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                 },
                 onConfirm = { selected ->
                     SessionStore.activeWalletId = selected.id
+                    SessionStore.activeAccountIndex = selected.accountIndex
 
                     // Navigate to wallet dashboard
                     navController.navigate(WalletRoutes.Graph) {

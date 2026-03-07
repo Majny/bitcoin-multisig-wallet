@@ -111,11 +111,12 @@ class RegistryRepository {
         getWallet(req.walletId) ?: error("Wallet insert failed")
     }
 
-    fun attachMember(walletId: String, deviceId: String, accountIndex: Int = -1) = transaction {
+    fun attachMember(walletId: String, deviceId: String, accountIndex: Int = -1, label: String? = null) = transaction {
         WalletMembersTable.insertIgnore {
             it[WalletMembersTable.walletId] = walletId
             it[WalletMembersTable.deviceId] = deviceId
             it[WalletMembersTable.accountIndex] = accountIndex
+            if (label != null) it[WalletMembersTable.label] = label
             it[createdAt] = OffsetDateTime.now()
         }
     }
@@ -131,7 +132,8 @@ class RegistryRepository {
                 WalletsTable.n,
                 WalletsTable.label,
                 WalletsTable.accountIndex,
-                WalletMembersTable.accountIndex
+                WalletMembersTable.accountIndex,
+                WalletMembersTable.label
             )
             .where { WalletMembersTable.deviceId eq deviceId }
 
@@ -147,6 +149,9 @@ class RegistryRepository {
                 row[WalletsTable.accountIndex]
             }
 
+            // Prefer per-member label over global wallet label
+            val resolvedLabel = row[WalletMembersTable.label] ?: row[WalletsTable.label]
+
             WalletSummary(
                 walletId = row[WalletsTable.walletId],
                 network = row[WalletsTable.network],
@@ -154,7 +159,7 @@ class RegistryRepository {
                 scriptType = row[WalletsTable.scriptType],
                 m = row[WalletsTable.m],
                 n = row[WalletsTable.n],
-                label = row[WalletsTable.label],
+                label = resolvedLabel,
                 accountIndex = resolvedAccountIndex
             )
         }

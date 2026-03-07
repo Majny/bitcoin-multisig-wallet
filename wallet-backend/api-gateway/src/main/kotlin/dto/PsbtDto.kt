@@ -122,9 +122,10 @@ data class BroadcastRawTxRequest(
 @Serializable
 data class AddTrezorSignaturesRequest(
     val signatures: List<String>,
-    val cosignerIndex: Int,
+    val cosignerIndex: Int = 0,
     val fingerprint: String,
-    val serializedTx: String? = null
+    val serializedTx: String? = null,
+    val signerAccountIndex: Int? = null
 )
 
 @Serializable
@@ -164,13 +165,6 @@ data class PsbtDetailResponse(
 @Serializable
 data class PsbtListResponse(
     val psbts: List<PsbtDetailResponse>
-)
-
-@Serializable
-data class AddSignatureRequest(
-    val psbtBase64: String,
-    val deviceId: String,
-    val fingerprint: String
 )
 
 @Serializable

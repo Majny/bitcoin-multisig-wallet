@@ -31,16 +31,6 @@ data class UtxoSelection(
 )
 
 /**
- * Request pro přidání podpisu k existující PSBT.
- */
-@Serializable
-data class AddSignatureRequest(
-    val psbtBase64: String,     // PSBT s novým podpisem
-    val deviceId: String,
-    val fingerprint: String
-)
-
-/**
  * Request pro kombinaci více PSBT (pro offline signing workflow).
  */
 @Serializable
@@ -72,6 +62,7 @@ data class PsbtResponse(
 data class SignatureInfo(
     val fingerprint: String,
     val deviceId: String,
+    val cosignerIndex: Int = 0,
     val signedAt: String
 )
 
@@ -86,7 +77,8 @@ data class CreatePsbtResponse(
     val psbtBase64: String,
     val estimatedFee: Long,
     val estimatedVsize: Int,
-    val trezorConnectParams: TrezorConnectParams? = null
+    val trezorConnectParams: TrezorConnectParams? = null,
+    val signerCosignerIndex: Int = 0
 )
 
 @Serializable
@@ -227,9 +219,10 @@ data class BroadcastRawTxRequest(
 @Serializable
 data class AddTrezorSignaturesRequest(
     val signatures: List<String>,
-    val cosignerIndex: Int,
+    val cosignerIndex: Int = 0,
     val fingerprint: String,
-    val serializedTx: String? = null
+    val serializedTx: String? = null,
+    val signerAccountIndex: Int? = null
 )
 
 // ========== Internal DTOs (pro komunikaci s jinými službami) ==========

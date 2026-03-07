@@ -84,7 +84,8 @@ class MobileSigner(
                 network = it.network,
                 scriptType = it.scriptType,
                 m = it.m,
-                n = it.n
+                n = it.n,
+                accountIndex = it.accountIndex
             )
         }
     }
@@ -210,7 +211,8 @@ data class WalletSummary(
     val network: String,
     val scriptType: String,
     val m: Int? = null,
-    val n: Int? = null
+    val n: Int? = null,
+    val accountIndex: Int? = null
 )
 
 enum class WalletType {
@@ -241,7 +243,8 @@ data class RegistryWalletSummaryDto(
     val scriptType: String,
     val m: Int? = null,
     val n: Int? = null,
-    val label: String? = null
+    val label: String? = null,
+    val accountIndex: Int? = null
 )
 
 

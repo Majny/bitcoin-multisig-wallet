@@ -16,7 +16,6 @@ interface PsbtClient {
     suspend fun create(req: CreatePsbtRequest): CreatePsbtResponse
     suspend fun getById(id: String): PsbtDetailResponse
     suspend fun getByWallet(walletId: String, status: String? = null): PsbtListResponse
-    suspend fun addSignature(id: String, req: AddSignatureRequest): PsbtDetailResponse
     suspend fun combine(id: String, req: CombinePsbtsRequest): PsbtDetailResponse
     suspend fun finalize(id: String): FinalizeResponse
     suspend fun broadcast(id: String): BroadcastResponse
@@ -78,17 +77,6 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
         val resp = upstreamRequest("psbt") {
             client.get("${cfg.psbtBaseUrl}/psbt/wallet/$walletId") {
                 status?.let { parameter("status", it) }
-            }
-        }.ensureSuccess("psbt")
-        return resp.body()
-    }
-    
-    override suspend fun addSignature(id: String, req: AddSignatureRequest): PsbtDetailResponse {
-        requireAttached(this::client.isInitialized, "psbt")
-        val resp = upstreamRequest("psbt") {
-            client.post("${cfg.psbtBaseUrl}/psbt/$id/sign") {
-                contentType(ContentType.Application.Json)
-                setBody(req)
             }
         }.ensureSuccess("psbt")
         return resp.body()

@@ -50,14 +50,6 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
             
-            // POST /psbt/{id}/sign - přidá podpis
-            post("/{id}/sign") {
-                val id = call.parameters["id"] ?: error("id missing")
-                val req = call.receive<AddSignatureRequest>()
-                val resp = call.application.deps.psbt.addSignature(id, req)
-                call.respond(resp)
-            }
-            
             // POST /psbt/{id}/combine - kombinuje PSBT
             post("/{id}/combine") {
                 val id = call.parameters["id"] ?: error("id missing")
@@ -92,6 +84,7 @@ fun Route.psbtRoutes() {
             post("/{id}/sign-trezor") {
                 val id = call.parameters["id"] ?: error("id missing")
                 val req = call.receive<AddTrezorSignaturesRequest>()
+                call.application.log.info("GW sign-trezor id=$id fp=${req.fingerprint} cosignerIdx=${req.cosignerIndex} signerAccountIdx=${req.signerAccountIndex} sigs=${req.signatures.size}")
                 val resp = call.application.deps.psbt.signTrezor(id, req)
                 call.respond(resp)
             }

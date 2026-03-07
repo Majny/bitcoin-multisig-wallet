@@ -569,6 +569,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onClose = { navController.popBackStack() },
                 onSwitchAccount = {
                     SessionStore.activeWalletId = null
+                    SessionStore.activeAccountIndex = null
                     navController.navigate(
                         com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.SelectAccount
                     ) {

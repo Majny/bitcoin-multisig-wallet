@@ -68,9 +68,9 @@ class WalletImporter(
         if (existing != null) {
             log.info("Wallet already exists: {}", parsed.walletId)
 
-            // Auto-attach device's active account as member
+            // Auto-attach device's active account as member (with per-member label)
             if (request.deviceId != null) {
-                autoAttachDevice(parsed.walletId, request.deviceId, request.accountIndex)
+                autoAttachDevice(parsed.walletId, request.deviceId, request.accountIndex, request.label)
             }
 
             return ImportResult(
@@ -151,16 +151,18 @@ class WalletImporter(
     private fun autoAttachDevice(
         walletId: String,
         deviceId: String,
-        accountIndex: Int?
+        accountIndex: Int?,
+        label: String? = null
     ) {
         try {
             repo.attachMember(
                 walletId = walletId,
                 deviceId = deviceId,
-                accountIndex = accountIndex ?: -1
+                accountIndex = accountIndex ?: -1,
+                label = label
             )
-            log.info("Auto-attached device {} to wallet {} (accountIndex={})",
-                deviceId, walletId, accountIndex)
+            log.info("Auto-attached device {} to wallet {} (accountIndex={}, label={})",
+                deviceId, walletId, accountIndex, label)
         } catch (e: Exception) {
             log.warn("Could not attach device {} to wallet {}: {}",
                 deviceId, walletId, e.message)

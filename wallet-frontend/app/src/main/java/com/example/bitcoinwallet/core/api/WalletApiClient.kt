@@ -177,30 +177,6 @@ class WalletApiClient(
     }
 
     /**
-     * POST /api/v1/psbt/{id}/sign
-     * Add a signature (signed PSBT) to a PSBT.
-     */
-    suspend fun addSignature(
-        psbtId: String,
-        accessToken: String,
-        signedPsbtBase64: String,
-        deviceId: String,
-        fingerprint: String
-    ): PsbtDetailDto {
-        return client.post("$baseUrl/psbt/$psbtId/sign") {
-            header("Authorization", "Bearer $accessToken")
-            contentType(ContentType.Application.Json)
-            setBody(
-                AddSignatureRequestDto(
-                    psbtBase64 = signedPsbtBase64,
-                    deviceId = deviceId,
-                    fingerprint = fingerprint
-                )
-            )
-        }.body()
-    }
-
-    /**
      * POST /api/v1/psbt/{id}/sign-trezor
      * Submit Trezor Connect signatures for multisig PSBT.
      */
@@ -210,7 +186,8 @@ class WalletApiClient(
         signatures: List<String>,
         cosignerIndex: Int,
         fingerprint: String,
-        serializedTx: String? = null
+        serializedTx: String? = null,
+        signerAccountIndex: Int? = null
     ): PsbtDetailDto {
         return client.post("$baseUrl/psbt/$psbtId/sign-trezor") {
             header("Authorization", "Bearer $accessToken")
@@ -220,7 +197,8 @@ class WalletApiClient(
                     signatures = signatures,
                     cosignerIndex = cosignerIndex,
                     fingerprint = fingerprint,
-                    serializedTx = serializedTx
+                    serializedTx = serializedTx,
+                    signerAccountIndex = signerAccountIndex
                 )
             )
         }.body()
@@ -569,7 +547,8 @@ data class CreatePsbtResponseDto(
     val psbtBase64: String,
     val estimatedFee: Long,
     val estimatedVsize: Int,
-    val trezorConnectParams: TrezorConnectParamsDto? = null
+    val trezorConnectParams: TrezorConnectParamsDto? = null,
+    val signerCosignerIndex: Int = 0
 )
 
 @Serializable
@@ -599,14 +578,8 @@ data class PsbtListResponseDto(
 data class PsbtSignatureDto(
     val fingerprint: String,
     val deviceId: String,
+    val cosignerIndex: Int = 0,
     val signedAt: String
-)
-
-@Serializable
-data class AddSignatureRequestDto(
-    val psbtBase64: String,
-    val deviceId: String,
-    val fingerprint: String
 )
 
 @Serializable
@@ -614,7 +587,8 @@ data class AddTrezorSignaturesRequestDto(
     val signatures: List<String>,
     val cosignerIndex: Int,
     val fingerprint: String,
-    val serializedTx: String? = null
+    val serializedTx: String? = null,
+    val signerAccountIndex: Int? = null
 )
 
 @Serializable

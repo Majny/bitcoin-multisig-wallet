@@ -28,7 +28,8 @@ data class CosignerUiInfo(
     val originPath: String? = null,
     val xpub: String? = null,
     val status: SignerStatus,
-    val deviceId: String? = null
+    val deviceId: String? = null,
+    val isMe: Boolean = false
 )
 
 /**
@@ -198,14 +199,16 @@ class PsbtDetailViewModel : ViewModel() {
 
             try {
                 if (trezorSigs != null && trezorSigs.isNotEmpty()) {
-                    Log.d(TAG, "Submitting ${trezorSigs.size} Trezor signatures...")
+                    val signerAccountIdx = SessionStore.activeAccountIndex
+                    Log.d(TAG, "Submitting ${trezorSigs.size} Trezor signatures, signerAccountIndex=$signerAccountIdx")
                     val result = WalletApi.client.signTrezor(
                         psbtId = psbtId,
                         accessToken = accessToken,
                         signatures = trezorSigs,
-                        cosignerIndex = 0,  // TODO: let user select cosigner
+                        cosignerIndex = 0,
                         fingerprint = fingerprint,
-                        serializedTx = serializedTxHex
+                        serializedTx = serializedTxHex,
+                        signerAccountIndex = signerAccountIdx
                     )
                     SessionStore.setPendingTrezorSignatures(null)
                     Log.d(TAG, "Signatures submitted: ${result.currentSigs}/${result.requiredSigs}")
@@ -235,6 +238,8 @@ class PsbtDetailViewModel : ViewModel() {
                 Log.d(TAG, "Loading signers for PSBT: $psbtId")
                 val response = WalletApi.client.getSignerStatus(psbtId, accessToken)
 
+                val myAccountIndex = SessionStore.activeAccountIndex
+
                 val cosigners = response.signers.map { signer ->
                     val status = when {
                         signer.signed -> SignerStatus.SIGNED
@@ -249,7 +254,12 @@ class PsbtDetailViewModel : ViewModel() {
                         originPath = signer.originPath,
                         xpub = signer.xpub,
                         status = status,
-                        deviceId = signer.deviceId
+                        deviceId = signer.deviceId,
+                        isMe = signer.originPath?.let { path ->
+                            val segments = path.replace("'", "").replace("h", "").split("/")
+                            val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
+                            cosAccount == myAccountIndex
+                        } ?: false
                     )
                 }
 
@@ -268,6 +278,35 @@ class PsbtDetailViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(showSignersDialog = false)
     }
 
+    /**
+     * Adjust TrezorConnectParams address_n for the current signer's BIP-48 account.
+     * Stored params may have a different signer's account in address_n[2].
+     * BIP-48 path: [purpose', coinType', account', scriptType', chain, index]
+     */
+    private fun adjustTrezorParamsForSigner(
+        params: TrezorConnectParamsDto?
+    ): TrezorConnectParamsDto? {
+        val accountIndex = SessionStore.activeAccountIndex ?: return params
+        params ?: return null
+        val hardenedAccount = accountIndex.toLong() or 0x80000000L
+
+        fun adjustAddressN(addressN: List<Long>): List<Long> {
+            if (addressN.size < 4) return addressN
+            // address_n = [purpose', coinType', account', scriptType', chain, index]
+            return addressN.toMutableList().also { it[2] = hardenedAccount }
+        }
+
+        val adjustedInputs = params.inputs.map { input ->
+            input.copy(address_n = adjustAddressN(input.address_n))
+        }
+        val adjustedOutputs = params.outputs.map { output ->
+            val adjN = output.address_n?.let { adjustAddressN(it) }
+            output.copy(address_n = adjN)
+        }
+        Log.d(TAG, "Adjusted TrezorConnectParams for accountIndex=$accountIndex")
+        return params.copy(inputs = adjustedInputs, outputs = adjustedOutputs)
+    }
+
     private fun mapDtoToState(dto: PsbtDetailDto): PsbtDetailUiState {
         val current = _uiState.value
         return PsbtDetailUiState(
@@ -279,7 +318,7 @@ class PsbtDetailViewModel : ViewModel() {
             totalOutputSats = dto.totalOutputSats,
             estimatedFeeSats = dto.estimatedFeeSats,
             psbtBase64 = dto.psbtBase64,
-            trezorConnectParams = dto.trezorConnectParams,
+            trezorConnectParams = adjustTrezorParamsForSigner(dto.trezorConnectParams),
             label = dto.label,
             txid = dto.txid,
             signatures = dto.signatures.map {
@@ -291,7 +330,7 @@ class PsbtDetailViewModel : ViewModel() {
             },
             // Preserve UI-only state that should survive a data refresh
             showSignersDialog = current.showSignersDialog,
-            cosigners = current.cosigners,
+            cosigners = if (current.showSignersDialog) current.cosigners else emptyList(),
             broadcastSuccess = current.broadcastSuccess || dto.status == "broadcast",
             isLoading = false
         )
