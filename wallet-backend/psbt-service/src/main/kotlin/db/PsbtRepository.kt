@@ -144,6 +144,26 @@ class PsbtRepository {
         PsbtsTable.deleteWhere { PsbtsTable.id eq id }
     }
     
+    /**
+     * Vrátí set "txid:vout" UTXO klíčů, které jsou použité v pending/signed PSBTs
+     * pro danou wallet (ještě nebroadcastované).
+     */
+    fun getReservedUtxos(walletId: String): Set<String> = transaction {
+        PsbtsTable.selectAll()
+            .where { PsbtsTable.walletId eq walletId }
+            .andWhere { PsbtsTable.status inList listOf("pending", "signed") }
+            .mapNotNull { row -> row[PsbtsTable.trezorConnectParams] }
+            .flatMap { paramsJson ->
+                try {
+                    val params = json.decodeFromString(TrezorConnectParams.serializer(), paramsJson)
+                    params.inputs.map { "${it.prev_hash}:${it.prev_index}" }
+                } catch (_: Exception) {
+                    emptyList()
+                }
+            }
+            .toSet()
+    }
+
     // ========== Helpers ==========
     
     private fun getSignatures(psbtId: UUID): List<SignatureInfo> =

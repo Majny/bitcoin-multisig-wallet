@@ -182,8 +182,16 @@ private fun UtxoRow(
         }
 
         // Status label
-        val statusText = if (utxo.confirmed) "Confirmed" else "Unconfirmed"
-        val statusColor = if (utxo.confirmed) ReceiveGreen else BitcoinOrangeLight
+        val statusText = when {
+            utxo.reserved -> "Reserved"
+            utxo.confirmed -> "Confirmed"
+            else -> "Unconfirmed"
+        }
+        val statusColor = when {
+            utxo.reserved -> ErrorRed
+            utxo.confirmed -> ReceiveGreen
+            else -> BitcoinOrangeLight
+        }
 
         Text(
             text = statusText,
@@ -192,14 +200,17 @@ private fun UtxoRow(
             modifier = Modifier.padding(end = 12.dp)
         )
 
-        // Checkbox — tapping toggles selection
+        // Checkbox — disabled for reserved UTXOs
         Checkbox(
             checked = utxo.selected,
-            onCheckedChange = { onToggle() },
+            onCheckedChange = if (utxo.reserved) null else { { onToggle() } },
+            enabled = !utxo.reserved,
             colors = CheckboxDefaults.colors(
                 checkedColor = AccentTeal,
-                uncheckedColor = TextSecondary,
-                checkmarkColor = TextPrimary
+                uncheckedColor = if (utxo.reserved) TextMuted.copy(alpha = 0.3f) else TextSecondary,
+                checkmarkColor = TextPrimary,
+                disabledCheckedColor = TextMuted.copy(alpha = 0.3f),
+                disabledUncheckedColor = TextMuted.copy(alpha = 0.3f)
             )
         )
     }

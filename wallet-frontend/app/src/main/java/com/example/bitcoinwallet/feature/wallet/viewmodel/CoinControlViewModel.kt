@@ -32,7 +32,8 @@ data class SelectableUtxo(
     val address: String,
     val addressType: String,
     val confirmed: Boolean,
-    val selected: Boolean = false
+    val selected: Boolean = false,
+    val reserved: Boolean = false
 ) {
     val key: String get() = "$txid:$vout"
     val valueBtc: Double get() = valueSats / 100_000_000.0
@@ -110,7 +111,26 @@ class CoinControlViewModel : ViewModel() {
                 val response = repository.getWalletUtxos(walletId, accessToken)
                 Log.d(TAG, "Loaded ${response.utxos.size} UTXOs, total: ${response.totalSats} sats")
 
+                // Zjisti které UTXOs jsou rezervované v pending/signed PSBTs
+                val reservedKeys = try {
+                    val psbts = WalletApi.client.listPsbtsForWallet(walletId, accessToken)
+                    psbts.psbts
+                        .filter { it.status == "pending" || it.status == "signed" }
+                        .flatMap { psbt ->
+                            psbt.trezorConnectParams?.inputs?.map { "${it.prev_hash}:${it.prev_index}" }
+                                ?: emptyList()
+                        }
+                        .toSet()
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to load reserved UTXOs", e)
+                    emptySet()
+                }
+                if (reservedKeys.isNotEmpty()) {
+                    Log.d(TAG, "Reserved UTXOs (in pending PSBTs): $reservedKeys")
+                }
+
                 val items = response.utxos.map { dto ->
+                    val key = "${dto.txid}:${dto.vout}"
                     SelectableUtxo(
                         txid = dto.txid,
                         vout = dto.vout,
@@ -118,7 +138,8 @@ class CoinControlViewModel : ViewModel() {
                         address = dto.address,
                         addressType = dto.addressType,
                         confirmed = dto.confirmed,
-                        selected = "${dto.txid}:${dto.vout}" in preSelectedKeys
+                        selected = key in preSelectedKeys,
+                        reserved = key in reservedKeys
                     )
                 }
 
@@ -141,7 +162,7 @@ class CoinControlViewModel : ViewModel() {
     fun toggleUtxo(key: String) {
         _uiState.value = _uiState.value.copy(
             utxos = _uiState.value.utxos.map {
-                if (it.key == key) it.copy(selected = !it.selected) else it
+                if (it.key == key && !it.reserved) it.copy(selected = !it.selected) else it
             }
         )
     }

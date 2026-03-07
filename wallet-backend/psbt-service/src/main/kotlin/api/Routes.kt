@@ -46,18 +46,23 @@ fun Route.psbtRoutes(
                         cos.idx, cos.fingerprint, cos.originPath)
                 }
 
-                // 2. Získej UTXOs
+                // 2. Získej UTXOs (vyloučíme ty, které jsou v jiných pending/signed PSBTs)
+                val reservedUtxos = repository.getReservedUtxos(request.walletId)
+                if (reservedUtxos.isNotEmpty()) {
+                    log.info("Reserved UTXOs (used in pending PSBTs): {}", reservedUtxos)
+                }
+
                 val utxos = if (request.utxos != null) {
                     // Manuální výběr (coin control)
                     selectSpecificUtxos(request.utxos, request.walletId, wallet.network, blockchainClient, registryClient)
                 } else {
                     // Automatický výběr — posíláme celý wallet pro správný výpočet fee (singlesig vs multisig)
                     val totalNeeded = request.outputs.sumOf { it.amountSats }
-                    autoSelectUtxos(wallet, totalNeeded, request.feeRate, blockchainClient, registryClient)
+                    autoSelectUtxos(wallet, totalNeeded, request.feeRate, blockchainClient, registryClient, reservedUtxos)
                 }
-                
+
                 if (utxos.isEmpty()) {
-                    appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "No UTXOs available"))
+                    appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "No UTXOs available. All funds may be reserved by pending transactions."))
                     return@post
                 }
 
@@ -541,7 +546,8 @@ private suspend fun autoSelectUtxos(
     targetAmount: Long,
     feeRate: Double,
     blockchainClient: BlockchainClient,
-    registryClient: RegistryClient
+    registryClient: RegistryClient,
+    reservedUtxos: Set<String> = emptySet()
 ): List<SelectedUtxo> = coroutineScope {
     val allAddresses = registryClient.getAllAddresses(wallet.walletId)
 
@@ -556,7 +562,12 @@ private suspend fun autoSelectUtxos(
         }
     }.awaitAll().flatten()
 
-    val sortedUtxos = allUtxos.sortedByDescending { it.utxo.value }
+    // Vyloučíme UTXOs použité v jiných pending PSBTs
+    val availableUtxos = if (reservedUtxos.isNotEmpty()) {
+        allUtxos.filter { "${it.utxo.txid}:${it.utxo.vout}" !in reservedUtxos }
+    } else allUtxos
+
+    val sortedUtxos = availableUtxos.sortedByDescending { it.utxo.value }
 
     // Velikost jednoho vstupu: singlesig P2WPKH = 68 vB,
     // multisig P2WSH = 57 + 73*M + 34*N vB (viz PsbtBuilder.estimateVsize)
