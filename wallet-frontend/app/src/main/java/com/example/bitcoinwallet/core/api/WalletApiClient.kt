@@ -295,7 +295,7 @@ class WalletApiClient(
                         if (!response.status.isSuccess()) {
                             val body = response.bodyAsText()
                             Log.e("WalletApiClient", "HTTP ${response.status.value}: $body")
-                            throw Exception("Server error (${response.status.value}): $body")
+                            throw Exception("Request failed (${response.status.value}). Please try again.")
                         }
                     }
                 }

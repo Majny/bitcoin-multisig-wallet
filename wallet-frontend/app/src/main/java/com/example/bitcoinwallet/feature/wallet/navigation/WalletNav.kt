@@ -24,6 +24,7 @@ import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
 import com.example.bitcoinwallet.feature.wallet.ui.QrScannerScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
+import com.example.bitcoinwallet.feature.wallet.ui.TransactionErrorScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionSentScreen
 import com.example.bitcoinwallet.feature.wallet.ui.ReceiveBtcScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionDetailScreen
@@ -83,6 +84,12 @@ object WalletRoutes {
     fun psbtDetail(psbtId: String) = "wallet_psbt_detail/$psbtId"
 
     const val QrScanner = "wallet_qr_scanner"
+
+    const val TransactionError = "wallet_tx_error/{message}"
+    fun transactionError(message: String): String {
+        val encoded = java.net.URLEncoder.encode(message, "UTF-8")
+        return "wallet_tx_error/$encoded"
+    }
 }
 
 fun NavGraphBuilder.walletGraph(navController: NavController) {
@@ -212,7 +219,15 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
                 onCreateTransaction = {
-                    viewModel.createTransaction { psbtBase64, trezorParams ->
+                    viewModel.createTransaction(
+                        onError = { errorMsg ->
+                            navController.navigate(
+                                WalletRoutes.transactionError(errorMsg)
+                            ) {
+                                popUpTo(WalletRoutes.Dashboard) { inclusive = false }
+                            }
+                        }
+                    ) { psbtBase64, trezorParams ->
                         if (trezorParams != null) {
                             // Singlesig: use structured Trezor Connect params
                             Log.d("WalletNav", "Opening Trezor with STRUCTURED params: coin=${trezorParams.coin}, inputs=${trezorParams.inputs.size}, outputs=${trezorParams.outputs.size}, version=${trezorParams.version}, locktime=${trezorParams.locktime}")
@@ -242,6 +257,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
         
+        composable(WalletRoutes.TransactionError) { backStackEntry ->
+            val message = backStackEntry.arguments?.getString("message")
+                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+                ?: "An unknown error occurred"
+
+            TransactionErrorScreen(
+                message = message,
+                onReturn = {
+                    navController.navigate(WalletRoutes.Dashboard) {
+                        popUpTo(WalletRoutes.Graph) { inclusive = false }
+                    }
+                }
+            )
+        }
+
         composable(WalletRoutes.CoinControl) {
             val coinControlVm: CoinControlViewModel = viewModel()
             val coinControlState by coinControlVm.uiState.collectAsState()
@@ -501,7 +531,15 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     navController.navigate(WalletRoutes.CoinControl)
                 },
                 onCreateTransaction = {
-                    viewModel.createTransaction { _, _ ->
+                    viewModel.createTransaction(
+                        onError = { errorMsg ->
+                            navController.navigate(
+                                WalletRoutes.transactionError(errorMsg)
+                            ) {
+                                popUpTo(WalletRoutes.Dashboard) { inclusive = false }
+                            }
+                        }
+                    ) { _, _ ->
                         // PSBT je uložen v DB — všichni cosigneři ho uvidí
                         navController.popBackStack()
                     }

@@ -406,7 +406,16 @@ private fun SummarySection(state: SendTransactionUiState) {
         SummaryRow("Network Fee", formatFee(state.feeSats, state.feeRateSatVb))
         HorizontalDivider(color = DarkCard, thickness = 1.dp)
         SummaryRow("Total", formatBtc(state.totalSats), bold = true)
-        SummaryRow("Remaining Balance", formatBtc(state.remainingSats))
+        HorizontalDivider(color = DarkCard, thickness = 1.dp)
+        if (state.reservedSats > 0 && state.autoSelect) {
+            SummaryRow(
+                "Available Balance",
+                formatBtc(maxOf(state.balanceSats - state.reservedSats, 0L))
+            )
+        } else {
+            SummaryRow("Balance", formatBtc(state.balanceSats))
+        }
+        SummaryRow("Remaining After Tx", formatBtc(state.remainingSats))
     }
 }
 
@@ -414,7 +423,8 @@ private fun SummarySection(state: SendTransactionUiState) {
 private fun SummaryRow(
     label: String,
     value: String,
-    bold: Boolean = false
+    bold: Boolean = false,
+    valueColor: Color = TextPrimary
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -428,7 +438,7 @@ private fun SummaryRow(
         )
         Text(
             text = value,
-            color = TextPrimary,
+            color = valueColor,
             fontSize = 13.sp,
             fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal
         )

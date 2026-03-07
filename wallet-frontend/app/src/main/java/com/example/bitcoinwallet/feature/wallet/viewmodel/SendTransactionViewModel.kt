@@ -52,6 +52,7 @@ data class SendTransactionUiState(
 
     // Loaded data
     val balanceSats: Long = 0L,
+    val reservedSats: Long = 0L,
     val feeEstimates: FeeEstimatesDto? = null,
 
     // Computed summary
@@ -116,11 +117,29 @@ class SendTransactionViewModel : ViewModel() {
                 val balance = repository.getWalletBalance(walletId, accessToken)
                 val fees = repository.getFeeEstimates(accessToken)
 
-                Log.d(TAG, "Balance: ${balance.balanceSats} sats, fees: fast=${fees.fastestFee} med=${fees.halfHourFee} low=${fees.hourFee}")
+                // Zjisti kolik sats je rezervováno v pending PSBTs.
+                // Rezervovaná částka = součet VSTUPNÍCH UTXO (celé UTXO je zamčené
+                // do potvrzení transakce, change se vrátí až jako nové UTXO).
+                val reserved = try {
+                    val psbts = WalletApi.client.listPsbtsForWallet(walletId, accessToken)
+                    psbts.psbts
+                        .filter { it.status == "pending" || it.status == "signed" }
+                        .sumOf { psbt ->
+                            psbt.trezorConnectParams?.inputs
+                                ?.sumOf { it.amount.toLongOrNull() ?: 0L }
+                                ?: 0L
+                        }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to calculate reserved sats", e)
+                    0L
+                }
+
+                Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: fast=${fees.fastestFee} med=${fees.halfHourFee} low=${fees.hourFee}")
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
                     balanceSats = balance.balanceSats,
+                    reservedSats = reserved,
                     feeEstimates = fees
                 )
                 recalculate()
@@ -198,7 +217,10 @@ class SendTransactionViewModel : ViewModel() {
      * @param onPsbtReady Called with psbtBase64 and optional Trezor Connect params.
      *        For singlesig, trezorParams != null and should be used for Trezor deeplink.
      */
-    fun createTransaction(onPsbtReady: (psbtBase64: String, trezorParams: TrezorConnectParamsDto?) -> Unit) {
+    fun createTransaction(
+        onError: ((message: String) -> Unit)? = null,
+        onPsbtReady: (psbtBase64: String, trezorParams: TrezorConnectParamsDto?) -> Unit
+    ) {
         val state = _uiState.value
 
         // Validate
@@ -281,10 +303,12 @@ class SendTransactionViewModel : ViewModel() {
                 onPsbtReady(response.psbtBase64, response.trezorConnectParams)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create PSBT", e)
+                val errorMsg = e.message ?: "Failed to create transaction"
                 _uiState.value = _uiState.value.copy(
                     isSending = false,
-                    error = e.message ?: "Failed to create transaction"
+                    error = errorMsg
                 )
+                onError?.invoke(errorMsg)
             }
         }
     }
@@ -458,28 +482,31 @@ class SendTransactionViewModel : ViewModel() {
         val btcAmount = state.amountBtc.toDoubleOrNull() ?: 0.0
         val amountSats = (btcAmount * 100_000_000).toLong()
 
-        // Estimate vsize based on wallet type (1-in, 2-out):
-        //   P2WPKH (singlesig):  ~141 vbytes
-        //   P2WSH m-of-n:        (base(113)*4 + witness(5 + 73m + 34n)) / 4
+        // Odhad vsize pro 1 vstup, 2 výstupy (stejný vzorec jako backend PsbtBuilder):
+        //   overhead = 10, output = 31 * 2 = 62
+        //   P2WPKH (singlesig) vstup: 68 vB  → celkem 140
+        //   P2WSH m-of-n vstup: (57 + 73*m + 34*n) vB
         val walletId = SessionStore.activeWalletId
         val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
-        val estimatedVsize = if (wallet?.type == WalletType.MULTI_SIG) {
+        val inputVsize = if (wallet?.type == WalletType.MULTI_SIG) {
             val m = wallet.m ?: 2
             val n = wallet.n ?: 3
-            (457 + 73 * m + 34 * n) / 4 + 1
+            57 + 73 * m + 34 * n
         } else {
-            141
+            68
         }
+        val estimatedVsize = 10 + 62 + inputVsize
         val feeRate = getSelectedFeeRate()
         val feeSats = (estimatedVsize * feeRate).toLong()
 
         val totalSats = amountSats + feeSats
 
         // In manual UTXO mode, show remaining from selected UTXOs (= change output)
+        // In auto mode, exclude reserved sats (pending PSBTs)
         val availableSats = if (!state.autoSelect && state.selectedUtxos.isNotEmpty()) {
             state.selectedUtxos.sumOf { it.valueSats }
         } else {
-            state.balanceSats
+            maxOf(state.balanceSats - state.reservedSats, 0L)
         }
         val remainingSats = availableSats - totalSats
 
@@ -540,6 +567,12 @@ class SendTransactionViewModel : ViewModel() {
                 )
                 hasError = true
             }
+        } else if (state.autoSelect && state.reservedSats > 0 && state.totalSats > state.balanceSats - state.reservedSats) {
+            val reservedBtc = String.format("%.8f", state.reservedSats / 100_000_000.0)
+            _uiState.value = _uiState.value.copy(
+                amountError = "Insufficient available funds. $reservedBtc BTC is reserved in pending transactions."
+            )
+            hasError = true
         } else if (state.totalSats > state.balanceSats) {
             _uiState.value = _uiState.value.copy(amountError = "Insufficient balance")
             hasError = true
