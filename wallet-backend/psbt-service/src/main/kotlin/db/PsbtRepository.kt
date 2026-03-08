@@ -15,9 +15,7 @@ class PsbtRepository {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    /**
-     * Vytvoří nový PSBT záznam.
-     */
+    /* Creates a new PSBT record in the database. Stores TrezorConnectParams without refTxs (too large). */
     fun create(
         walletId: String,
         psbtBase64: String,
@@ -29,7 +27,6 @@ class PsbtRepository {
         trezorConnectParams: TrezorConnectParams? = null
     ): UUID = transaction {
         val now = OffsetDateTime.now()
-        // Store params without refTxs (too large for DB)
         val paramsToStore = trezorConnectParams?.copy(refTxs = null)
         PsbtsTable.insert {
             it[PsbtsTable.walletId] = walletId
@@ -46,30 +43,26 @@ class PsbtRepository {
             it[updatedAt] = now
         }[PsbtsTable.id]
     }
-    
-    /**
-     * Najde PSBT podle ID.
-     */
+
+    /* Finds a PSBT by its UUID, including all associated signatures. */
     fun findById(id: UUID): PsbtResponse? = transaction {
         val row = PsbtsTable.selectAll()
             .where { PsbtsTable.id eq id }
             .singleOrNull() ?: return@transaction null
-        
+
         val signatures = getSignatures(id)
         rowToPsbtResponse(row, signatures)
     }
-    
-    /**
-     * Vrátí seznam PSBT pro danou peněženku.
-     */
+
+    /* Returns a list of PSBTs for the given wallet, optionally filtered by status. */
     fun findByWallet(walletId: String, status: String? = null): List<PsbtResponse> = transaction {
         val query = PsbtsTable.selectAll()
             .where { PsbtsTable.walletId eq walletId }
-        
+
         if (status != null) {
             query.andWhere { PsbtsTable.status eq status }
         }
-        
+
         query.orderBy(PsbtsTable.createdAt, SortOrder.DESC)
             .map { row ->
                 val id = row[PsbtsTable.id]
@@ -77,10 +70,8 @@ class PsbtRepository {
                 rowToPsbtResponse(row, signatures)
             }
     }
-    
-    /**
-     * Aktualizuje PSBT data (po přidání podpisu).
-     */
+
+    /* Updates PSBT data after a signature is added (new sig count, status, updated params). */
     fun updatePsbt(
         id: UUID,
         psbtBase64: String,
@@ -106,10 +97,8 @@ class PsbtRepository {
             }
         }
     }
-    
-    /**
-     * Přidá záznam o podpisu.
-     */
+
+    /* Records a signature from a cosigner (device fingerprint + cosigner index). */
     fun addSignature(
         psbtId: UUID,
         deviceId: String,
@@ -124,10 +113,8 @@ class PsbtRepository {
             it[signedAt] = OffsetDateTime.now()
         }
     }
-    
-    /**
-     * Označí PSBT jako broadcast.
-     */
+
+    /* Marks a PSBT as broadcast and stores the resulting transaction ID. */
     fun markBroadcast(id: UUID, txid: String) = transaction {
         PsbtsTable.update({ PsbtsTable.id eq id }) {
             it[status] = "broadcast"
@@ -136,17 +123,15 @@ class PsbtRepository {
             it[updatedAt] = OffsetDateTime.now()
         }
     }
-    
-    /**
-     * Smaže PSBT.
-     */
+
+    /* Deletes a PSBT record and releases its reserved UTXOs. */
     fun delete(id: UUID) = transaction {
         PsbtsTable.deleteWhere { PsbtsTable.id eq id }
     }
-    
-    /**
-     * Vrátí set "txid:vout" UTXO klíčů, které jsou použité v pending/signed PSBTs
-     * pro danou wallet (ještě nebroadcastované).
+
+    /*
+     * Returns the set of "txid:vout" UTXO keys reserved by pending/signed PSBTs
+     * for the given wallet (not yet broadcast). Used to prevent double-spending.
      */
     fun getReservedUtxos(walletId: String): Set<String> = transaction {
         PsbtsTable.selectAll()
@@ -165,7 +150,8 @@ class PsbtRepository {
     }
 
     // ========== Helpers ==========
-    
+
+    /* Fetches all signature records for a PSBT. */
     private fun getSignatures(psbtId: UUID): List<SignatureInfo> =
         PsbtSignaturesTable.selectAll()
             .where { PsbtSignaturesTable.psbtId eq psbtId }
@@ -177,7 +163,8 @@ class PsbtRepository {
                     signedAt = row[PsbtSignaturesTable.signedAt].format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
                 )
             }
-    
+
+    /* Converts a database row + signatures to a PsbtResponse DTO. */
     private fun rowToPsbtResponse(row: ResultRow, signatures: List<SignatureInfo>): PsbtResponse {
         val paramsJson = row[PsbtsTable.trezorConnectParams]
         val trezorParams = paramsJson?.let {

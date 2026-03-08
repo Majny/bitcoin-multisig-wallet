@@ -4,18 +4,16 @@ import kotlinx.serialization.Serializable
 
 // ========== Request DTOs ==========
 
-/**
- * Request pro vytvoření nové PSBT transakce.
- */
+/* Request for creating a new PSBT transaction. */
 @Serializable
 data class CreatePsbtRequest(
     val walletId: String,
     val outputs: List<TxOutput>,
     val feeRate: Double,                    // sats/vB
-    val utxos: List<UtxoSelection>? = null, // pokud null, automatický výběr
-    val rbf: Boolean = true,                // Replace-by-fee enabled
+    val utxos: List<UtxoSelection>? = null, // if null, auto-select UTXOs
+    val rbf: Boolean = true,                // Replace-by-fee enabled (BIP-125)
     val label: String? = null,
-    val signerAccountIndex: Int? = null      // BIP-48 account index podepisujícího cosignera (pro multisig TrezorConnect params)
+    val signerAccountIndex: Int? = null      // BIP-48 account index of the signing cosigner (for multisig TrezorConnect params)
 )
 
 @Serializable
@@ -27,7 +25,8 @@ data class TxOutput(
 @Serializable
 data class UtxoSelection(
     val txid: String,
-    val vout: Int
+    val vout: Int,
+    val address: String? = null  // if provided, skips full wallet scan
 )
 
 // ========== Response DTOs ==========
@@ -81,7 +80,7 @@ data class BroadcastResponse(
     val success: Boolean
 )
 
-// ========== Signers endpoint ==========
+// ========== Signers Endpoint ==========
 
 @Serializable
 data class SignerStatusResponse(
@@ -106,10 +105,9 @@ data class SignerDetail(
 
 // ========== Trezor Connect DTOs ==========
 
-/**
- * Multisig pubkey entry pro Trezor Connect.
- * node = xpub string cosignera (account-level, e.g. "xpub6...")
- * address_n = [chain, index] relativni k account xpub
+/*
+ * HD node structure for Trezor Connect.
+ * Represents a single cosigner's account-level public key.
  */
 @Serializable
 data class HDNodeDto(
@@ -120,16 +118,21 @@ data class HDNodeDto(
     val public_key: String
 )
 
+/*
+ * Multisig pubkey entry for Trezor Connect.
+ * node = cosigner's account-level HD node.
+ * address_n = [chain, index] relative to the account xpub.
+ */
 @Serializable
 data class TrezorConnectMultisigPubkey(
     val node: HDNodeDto,
     val address_n: List<Long>
 )
 
-/**
- * Multisig metadata pro Trezor Connect.
- * Kazdy input/output multisig transakce musi mit tento objekt.
- * signatures = existujici podpisy (prazdny string = jeste nepodepsano).
+/*
+ * Multisig metadata for Trezor Connect.
+ * Every multisig input/output must include this object.
+ * signatures = existing signatures (empty string = not yet signed).
  */
 @Serializable
 data class TrezorConnectMultisig(
@@ -138,10 +141,10 @@ data class TrezorConnectMultisig(
     val signatures: List<String> = emptyList()
 )
 
-/**
+/*
  * Trezor Connect signTransaction input.
- * address_n = full BIP-32 derivation path jako uint32 array (hardened = index | 0x80000000).
- * Pro multisig: multisig objekt s pubkeys a threshold.
+ * address_n = full BIP-32 derivation path as uint32 array (hardened = index | 0x80000000).
+ * For multisig: includes multisig object with all cosigner pubkeys and threshold.
  */
 @Serializable
 data class TrezorConnectInput(
@@ -150,15 +153,15 @@ data class TrezorConnectInput(
     val prev_index: Int,
     val amount: String,
     val script_type: String = "SPENDWITNESS",
-    val sequence: Long = 0xFFFFFFFDL,  // RBF signaling (BIP125)
+    val sequence: Long = 0xFFFFFFFDL,  // RBF signaling (BIP-125)
     val multisig: TrezorConnectMultisig? = null
 )
 
-/**
+/*
  * Trezor Connect signTransaction output.
  * External output: address + amount + script_type="PAYTOADDRESS"
  * Change output:   address_n + amount + script_type="PAYTOWITNESS"
- * Pro multisig change: multisig objekt s pubkeys.
+ * For multisig change: includes multisig object with all cosigner pubkeys.
  */
 @Serializable
 data class TrezorConnectOutput(
@@ -169,9 +172,10 @@ data class TrezorConnectOutput(
     val multisig: TrezorConnectMultisig? = null
 )
 
-/**
- * Reference transaction — Trezor firmware potřebuje celé předchozí transakce
- * pro ověření částek vstupů. Stačí poskytnout raw hex přes tx_hex pole.
+/*
+ * Reference transaction for Trezor Connect.
+ * Trezor firmware needs full previous transactions to verify input amounts.
+ * The raw hex is provided via the tx_hex field.
  */
 @Serializable
 data class TrezorConnectRefTx(
@@ -179,6 +183,7 @@ data class TrezorConnectRefTx(
     val tx_hex: String
 )
 
+/* Complete Trezor Connect signTransaction parameters. */
 @Serializable
 data class TrezorConnectParams(
     val coin: String,
@@ -189,18 +194,16 @@ data class TrezorConnectParams(
     val locktime: Int = 0
 )
 
-/**
- * Request pro broadcast raw signed transaction (z Trezor Connect serializedTx).
- */
+/* Request for broadcasting a raw signed transaction hex (from Trezor Connect serializedTx). */
 @Serializable
 data class BroadcastRawTxRequest(
     val txHex: String
 )
 
-/**
- * Request pro pridani Trezor Connect podpisu k multisig PSBT.
- * signatures = DER-encoded hex podpisy (jeden per input), z Trezor Connect response.
- * cosignerIndex = index cosignera ktery podepsal.
+/*
+ * Request for adding Trezor Connect signatures to a multisig PSBT.
+ * signatures = DER-encoded hex signatures (one per input) from Trezor Connect response.
+ * cosignerIndex = index of the cosigner who signed.
  */
 @Serializable
 data class AddTrezorSignaturesRequest(
@@ -211,7 +214,7 @@ data class AddTrezorSignaturesRequest(
     val signerAccountIndex: Int? = null
 )
 
-// ========== Internal DTOs (pro komunikaci s jinými službami) ==========
+// ========== Internal DTOs (communication with other services) ==========
 
 @Serializable
 data class UtxoDto(
@@ -231,10 +234,10 @@ data class UtxoStatusDto(
 data class WalletDetailDto(
     val walletId: String,
     val network: String,
-    val type: String,               // "single" or "multisig"
-    val scriptType: String,         // "p2wpkh", "p2tr", "p2wsh"
-    val m: Int? = null,             // pro multisig: počet požadovaných podpisů
-    val n: Int? = null,             // pro multisig: celkový počet cosignerů
+    val type: String,               // "SINGLE_SIG" or "MULTI_SIG"
+    val scriptType: String,         // "WPKH", "WSH", "TR"
+    val m: Int? = null,             // for multisig: required signature count
+    val n: Int? = null,             // for multisig: total cosigner count
     val receiveDescriptor: String,
     val changeDescriptor: String,
     val cosigners: List<CosignerDto> = emptyList()

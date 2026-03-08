@@ -245,7 +245,7 @@ class SendTransactionViewModel : ViewModel() {
 
                 // In manual mode, pass selected UTXOs to backend
                 val utxoSelection = if (!state.autoSelect && state.selectedUtxos.isNotEmpty()) {
-                    state.selectedUtxos.map { UtxoSelectionDto(txid = it.txid, vout = it.vout) }
+                    state.selectedUtxos.map { UtxoSelectionDto(txid = it.txid, vout = it.vout, address = it.address) }
                 } else null
 
                 Log.d(TAG, "Creating PSBT: to=${state.recipientAddress}, amount=${state.amountSats} sats, feeRate=$feeRate sat/vB, utxos=${utxoSelection?.size ?: "auto"}")

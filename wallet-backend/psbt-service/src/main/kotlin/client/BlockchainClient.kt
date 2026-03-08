@@ -11,39 +11,31 @@ import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/**
- * Klient pro komunikaci s blockchain-service.
- */
+/* HTTP client for communicating with blockchain-service. */
 class BlockchainClient(private val baseUrl: String) {
-    
+
     private val client = HttpClient(CIO) {
         install(ContentNegotiation) {
             json(Json { ignoreUnknownKeys = true })
         }
     }
-    
-    /**
-     * Získá UTXOs pro adresu.
-     */
+
+    /* Fetches unspent transaction outputs (UTXOs) for a Bitcoin address. */
     suspend fun getUtxos(address: String, network: String = "mainnet"): List<UtxoDto> {
         return client.get("$baseUrl/api/v1/blockchain/address/$address/utxos") {
             parameter("network", network)
         }.body()
     }
 
-    /**
-     * Získá raw hex transakce — potřebné pro PSBT_IN_NON_WITNESS_UTXO.
-     * Trezor firmware 2.4+ vyžaduje celou předchozí transakci pro všechny vstupy.
-     */
+    /* Fetches raw transaction hex — needed for PSBT_IN_NON_WITNESS_UTXO.
+     * Trezor firmware 2.4+ requires the full previous transaction for all inputs. */
     suspend fun getRawTransaction(txid: String, network: String = "mainnet"): RawTxResponse {
         return client.get("$baseUrl/api/v1/blockchain/tx/$txid/hex") {
             parameter("network", network)
         }.body()
     }
 
-    /**
-     * Broadcast raw transakce.
-     */
+    /* Broadcasts a raw signed transaction to the Bitcoin network. */
     suspend fun broadcastTransaction(txHex: String, network: String = "mainnet"): BroadcastResult {
         val response = client.post("$baseUrl/api/v1/blockchain/tx/broadcast") {
             parameter("network", network)
@@ -52,7 +44,6 @@ class BlockchainClient(private val baseUrl: String) {
         }
         return response.body()
     }
-
 }
 
 @Serializable
@@ -70,4 +61,3 @@ data class BroadcastResult(
     val txid: String? = null,
     val error: String? = null
 )
-

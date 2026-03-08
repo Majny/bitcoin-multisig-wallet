@@ -3,11 +3,12 @@ package cz.majny.wallet.psbt.db
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 
+/* PSBT records — stores transaction data, signing status, and Trezor Connect params. */
 object PsbtsTable : Table("psbts") {
     val id = uuid("id").autoGenerate()
     val walletId = varchar("wallet_id", 255)
     val psbtBase64 = text("psbt_base64")
-    val status = varchar("status", 50).default("pending")
+    val status = varchar("status", 50).default("pending")       // pending → signed → broadcast
     val txType = varchar("tx_type", 50).default("send")
     val requiredSigs = integer("required_sigs").default(1)
     val currentSigs = integer("current_sigs").default(0)
@@ -24,6 +25,7 @@ object PsbtsTable : Table("psbts") {
     override val primaryKey = PrimaryKey(id)
 }
 
+/* Signature records — tracks which cosigners have signed each PSBT. */
 object PsbtSignaturesTable : Table("psbt_signatures") {
     val id = uuid("id").autoGenerate()
     val psbtId = uuid("psbt_id").references(PsbtsTable.id)

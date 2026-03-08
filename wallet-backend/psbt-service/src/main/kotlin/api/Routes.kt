@@ -1,7 +1,9 @@
 package cz.majny.wallet.psbt.api
 
 import cz.majny.wallet.psbt.builder.PsbtBuilder
+import cz.majny.wallet.psbt.builder.PsbtEncoding
 import cz.majny.wallet.psbt.builder.SelectedUtxo
+import cz.majny.wallet.psbt.builder.TrezorParamsBuilder
 import cz.majny.wallet.psbt.client.BlockchainClient
 import cz.majny.wallet.psbt.client.RegistryClient
 import cz.majny.wallet.psbt.db.PsbtRepository
@@ -26,18 +28,21 @@ fun Route.psbtRoutes(
     registryClient: RegistryClient
 ) {
     route("/psbt") {
-        
-        /**
+
+        /*
          * POST /psbt/create
-         * Vytvoří novou PSBT transakci.
+         * Creates a new PSBT transaction.
+         * Fetches wallet detail, selects UTXOs (auto or manual), builds PSBT binary,
+         * generates Trezor Connect params, and stores everything in DB.
+         * Called by api-gateway when user initiates a send transaction.
          */
         post("/create") {
             val appCall = call
             val request = appCall.receive<CreatePsbtRequest>()
             log.info("Creating PSBT for wallet: {}", request.walletId)
-            
+
             try {
-                // 1. Získej detail peněženky z registry
+                // 1. Fetch wallet detail from wallet-registry
                 val wallet = registryClient.getWallet(request.walletId)
                 log.info("Wallet: id={} type={} network={} m={} n={} cosigners={}",
                     wallet.walletId, wallet.type, wallet.network, wallet.m, wallet.n, wallet.cosigners.size)
@@ -46,28 +51,29 @@ fun Route.psbtRoutes(
                         cos.idx, cos.fingerprint, cos.originPath)
                 }
 
-                // 2. Získej UTXOs (vyloučíme ty, které jsou v jiných pending/signed PSBTs)
+                // 2. Select UTXOs (exclude those reserved by other pending/signed PSBTs)
                 val reservedUtxos = repository.getReservedUtxos(request.walletId)
                 if (reservedUtxos.isNotEmpty()) {
                     log.info("Reserved UTXOs (used in pending PSBTs): {}", reservedUtxos)
                 }
 
                 val utxos = if (request.utxos != null) {
-                    // Manuální výběr (coin control)
+                    // Manual selection (coin control)
                     selectSpecificUtxos(request.utxos, request.walletId, wallet.network, blockchainClient, registryClient)
                 } else {
-                    // Automatický výběr — posíláme celý wallet pro správný výpočet fee (singlesig vs multisig)
+                    // Auto selection — largest-first, fee calculated per wallet type
                     val totalNeeded = request.outputs.sumOf { it.amountSats }
                     autoSelectUtxos(wallet, totalNeeded, request.feeRate, blockchainClient, registryClient, reservedUtxos)
                 }
 
                 if (utxos.isEmpty()) {
-                    appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "No UTXOs available. All funds may be reserved by pending transactions."))
+                    appCall.respond(HttpStatusCode.BadRequest,
+                        mapOf("error" to "No UTXOs available. All funds may be reserved by pending transactions."))
                     return@post
                 }
 
-                // 2b. Stáhni raw hex předchozích transakcí pro PSBT_IN_NON_WITNESS_UTXO.
-                // Trezor firmware 2.4+ to vyžaduje i pro native segwit vstupy.
+                // 2b. Fetch raw hex of previous transactions for PSBT_IN_NON_WITNESS_UTXO.
+                // Trezor firmware 2.4+ requires this even for native segwit inputs.
                 val rawTxMap: Map<String, String?> = coroutineScope {
                     utxos.map { it.txid }.distinct().map { txid ->
                         async {
@@ -88,12 +94,12 @@ fun Route.psbtRoutes(
                 log.info("UTXOs with prevTx: {}/{} have rawTxHex",
                     utxosWithPrevTx.count { it.rawTxHex != null }, utxosWithPrevTx.size)
 
-                // 3. Získej change adresu
+                // 3. Get change address from wallet-registry
                 val changeAddress = registryClient.getChangeAddress(request.walletId)
                 log.info("Change address: addr={} index={} type={}",
                     changeAddress.address, changeAddress.index, changeAddress.type)
-                
-                // 4. Vytvoř PSBT
+
+                // 4. Build PSBT
                 val result = PsbtBuilder.createPsbt(
                     wallet = wallet,
                     utxos = utxosWithPrevTx,
@@ -104,9 +110,8 @@ fun Route.psbtRoutes(
                     rbf = request.rbf
                 )
 
-                // Sestav Trezor Connect params — mapuj signerAccountIndex na cosigner index
+                // 5. Map signerAccountIndex to cosigner index for Trezor Connect
                 val signerCosignerIdx = if (wallet.type == "MULTI_SIG" && request.signerAccountIndex != null) {
-                    // Najdi cosigner jehož BIP-48 account index odpovídá signerAccountIndex
                     val sorted = wallet.cosigners.sortedBy { it.idx }
                     val match = sorted.indexOfFirst { cos ->
                         val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
@@ -118,12 +123,14 @@ fun Route.psbtRoutes(
                             request.signerAccountIndex, match, sorted[match].originPath)
                         match
                     } else {
-                        log.warn("signerAccountIndex={} not found in cosigners, defaulting to 0", request.signerAccountIndex)
+                        log.warn("signerAccountIndex={} not found in cosigners, defaulting to 0",
+                            request.signerAccountIndex)
                         0
                     }
                 } else 0
 
-                val trezorParams = PsbtBuilder.buildTrezorConnectParams(
+                // 6. Build Trezor Connect signTransaction params
+                val trezorParams = TrezorParamsBuilder.build(
                     wallet = wallet,
                     utxos = utxosWithPrevTx,
                     outputs = request.outputs,
@@ -133,7 +140,7 @@ fun Route.psbtRoutes(
                     signerCosignerIndex = signerCosignerIdx
                 )
 
-                // 5. Ulož do DB
+                // 7. Store in DB
                 val requiredSigs = if (wallet.type == "MULTI_SIG") wallet.m ?: 1 else 1
                 val totalOutputSats = request.outputs.sumOf { it.amountSats }
                 val id = repository.create(
@@ -157,17 +164,18 @@ fun Route.psbtRoutes(
                     trezorConnectParams = trezorParams,
                     signerCosignerIndex = signerCosignerIdx
                 ))
-                
+
             } catch (e: Exception) {
                 log.error("Failed to create PSBT", e)
-                appCall.respond(HttpStatusCode.InternalServerError, 
+                appCall.respond(HttpStatusCode.InternalServerError,
                     mapOf("error" to (e.message ?: "Failed to create PSBT")))
             }
         }
-        
-        /**
+
+        /*
          * GET /psbt/{id}
-         * Vrátí detail konkrétního PSBT.
+         * Returns the detail of a specific PSBT by its UUID.
+         * Called by frontend to display transaction detail and signing status.
          */
         get("/{id}") {
             val appCall = call
@@ -176,26 +184,27 @@ fun Route.psbtRoutes(
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
                 return@get
             }
-            
+
             val uuid = try {
                 UUID.fromString(id)
             } catch (e: Exception) {
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
                 return@get
             }
-            
+
             val psbt = repository.findById(uuid)
             if (psbt == null) {
                 appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
                 return@get
             }
-            
+
             appCall.respond(psbt)
         }
-        
-        /**
-         * GET /psbt/wallet/{walletId}
-         * Vrátí seznam PSBT pro danou peněženku.
+
+        /*
+         * GET /psbt/wallet/{walletId}?status=pending
+         * Returns a list of PSBTs for the given wallet, optionally filtered by status.
+         * Called by frontend to show pending/signed/broadcast transactions.
          */
         get("/wallet/{walletId}") {
             val appCall = call
@@ -204,19 +213,23 @@ fun Route.psbtRoutes(
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing walletId"))
                 return@get
             }
-            
+
             val status = appCall.request.queryParameters["status"]
             val psbts = repository.findByWallet(walletId, status)
-            
+
             appCall.respond(PsbtListResponse(psbts))
         }
-        
-        /**
+
+        /*
          * POST /psbt/{id}/sign-trezor
-         * Přidá Trezor Connect podpisy k multisig PSBT.
-         * Klient pošle DER signatures z Trezor Connect response.
-         * Backend aktualizuje uložené TrezorConnectParams s novými podpisy
-         * pro další kolo podepisování.
+         * Adds Trezor Connect signatures from one cosigner to a multisig PSBT.
+         * Client sends DER signatures from the Trezor Connect response.
+         * Backend updates the stored TrezorConnectParams with new signatures
+         * so the next cosigner sees them when signing.
+         *
+         * BIP-67 note: multisig.pubkeys are in BIP-67 order (sorted per-input),
+         * which differs from the idx order of cosigners. We match the signer's
+         * public_key against pubkeys in each input to find the correct position.
          */
         post("/{id}/sign-trezor") {
             val appCall = call
@@ -252,23 +265,25 @@ fun Route.psbtRoutes(
                         cosAccount == request.signerAccountIndex
                     }
                     if (match >= 0) {
-                        log.info("sign-trezor: mapped signerAccountIndex={} to cosignerIdx={}", request.signerAccountIndex, match)
+                        log.info("sign-trezor: mapped signerAccountIndex={} to cosignerIdx={}",
+                            request.signerAccountIndex, match)
                         match
                     } else {
-                        log.warn("sign-trezor: signerAccountIndex={} not found, using request.cosignerIndex={}", request.signerAccountIndex, request.cosignerIndex)
+                        log.warn("sign-trezor: signerAccountIndex={} not found, using request.cosignerIndex={}",
+                            request.signerAccountIndex, request.cosignerIndex)
                         request.cosignerIndex
                     }
                 } catch (e: Exception) {
-                    log.warn("sign-trezor: failed to resolve signerAccountIndex, using request.cosignerIndex={}", request.cosignerIndex, e)
+                    log.warn("sign-trezor: failed to resolve signerAccountIndex, using request.cosignerIndex={}",
+                        request.cosignerIndex, e)
                     request.cosignerIndex
                 }
             } else {
                 request.cosignerIndex
             }
 
-            // Zkontroluj, jestli tento cosigner už nepodepsal
-            // Používáme cosignerIndex místo fingerprint, protože stejné zařízení
-            // může podepisovat jako více cosignerů (různé BIP-48 účty)
+            // Check if this cosigner already signed (using cosignerIndex, not fingerprint,
+            // because the same device can sign as multiple cosigners via different BIP-48 accounts)
             if (existing.signatures.any { it.cosignerIndex == resolvedCosignerIndex }) {
                 appCall.respond(HttpStatusCode.Conflict, mapOf("error" to "Already signed by this cosigner"))
                 return@post
@@ -277,11 +292,7 @@ fun Route.psbtRoutes(
             val newSigCount = existing.currentSigs + 1
             val newStatus = if (newSigCount >= existing.requiredSigs) "signed" else "pending"
 
-            // Aktualizuj TrezorConnectParams — vlož podpisy do multisig.signatures
-            // pro příští kolo podepisování.
-            // POZOR: multisig.pubkeys jsou v BIP-67 pořadí (seřazeno per-input),
-            // které se liší od idx pořadí cosignerů. Musíme najít správnou pozici
-            // porovnáním signer's public_key s pubkeys v každém inputu.
+            // Get signer's root xpub to find their position in BIP-67 sorted pubkeys
             val signerXpub = try {
                 val sorted = registryClient.getWallet(existing.walletId).cosigners.sortedBy { it.idx }
                 sorted.getOrNull(resolvedCosignerIndex)?.xpubRoot
@@ -301,6 +312,7 @@ fun Route.psbtRoutes(
                 }
             }
 
+            // Update TrezorConnectParams — place signatures at correct BIP-67 position
             val updatedParams = existing.trezorConnectParams?.let { params ->
                 val updatedInputs = params.inputs.mapIndexed { inputIndex, input ->
                     val ms = input.multisig ?: return@mapIndexed input
@@ -308,11 +320,12 @@ fun Route.psbtRoutes(
                     val derSig = request.signatures.getOrNull(inputIndex) ?: ""
                     if (derSig.isBlank()) return@mapIndexed input
 
-                    // Najdi pozici signer's pubkey v BIP-67 sorted pubkeys pro tento input
+                    // Find signer's pubkey position in BIP-67 sorted pubkeys for this input
                     val sigIdx = if (signerPublicKey != null) {
                         val match = ms.pubkeys.indexOfFirst { it.node.public_key == signerPublicKey }
                         if (match >= 0) match else {
-                            log.warn("sign-trezor: signer pubkey not found in input {} pubkeys, fallback to cosignerIndex={}", inputIndex, resolvedCosignerIndex)
+                            log.warn("sign-trezor: signer pubkey not found in input {} pubkeys, fallback to cosignerIndex={}",
+                                inputIndex, resolvedCosignerIndex)
                             resolvedCosignerIndex.coerceIn(0, ms.signatures.size - 1)
                         }
                     } else {
@@ -325,7 +338,7 @@ fun Route.psbtRoutes(
                 params.copy(inputs = updatedInputs)
             }
 
-            // Ulož serializedTx když je PSBT plně podepsané (pro pozdější broadcast z jiného účtu)
+            // Store serializedTx when PSBT is fully signed (for later broadcast from another account)
             val storeTx = if (newStatus == "signed" && request.serializedTx != null) request.serializedTx else null
 
             repository.updatePsbt(
@@ -348,13 +361,15 @@ fun Route.psbtRoutes(
                 id, resolvedCosignerIndex, newSigCount, existing.requiredSigs, newStatus)
 
             val updated = repository.findById(uuid)
-                ?: return@post appCall.respond(HttpStatusCode.InternalServerError, mapOf("error" to "Failed to fetch updated PSBT"))
+                ?: return@post appCall.respond(HttpStatusCode.InternalServerError,
+                    mapOf("error" to "Failed to fetch updated PSBT"))
             appCall.respond(updated)
         }
 
-        /**
+        /*
          * DELETE /psbt/{id}
-         * Smaže PSBT.
+         * Deletes a PSBT and releases its reserved UTXOs.
+         * Called by frontend when user cancels a pending transaction.
          */
         delete("/{id}") {
             val appCall = call
@@ -363,22 +378,23 @@ fun Route.psbtRoutes(
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing id"))
                 return@delete
             }
-            
+
             val uuid = try {
                 UUID.fromString(id)
             } catch (e: Exception) {
                 appCall.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid id format"))
                 return@delete
             }
-            
+
             repository.delete(uuid)
             appCall.respond(HttpStatusCode.NoContent)
         }
 
-        /**
+        /*
          * POST /psbt/{id}/broadcast-raw
-         * Broadcastuje raw signed transaction (z Trezor Connect serializedTx).
-         * Přeskočí sign/finalize — Trezor vrací kompletně podepsanou transakci.
+         * Broadcasts a raw signed transaction hex to the Bitcoin network.
+         * Skips PSBT sign/finalize — Trezor returns a complete signed transaction.
+         * Called by frontend after Trezor signs the last required signature.
          */
         post("/{id}/broadcast-raw") {
             val appCall = call
@@ -433,9 +449,10 @@ fun Route.psbtRoutes(
             }
         }
 
-        /**
+        /*
          * GET /psbt/{id}/signers
-         * Vrátí stav podpisů — kteří cosigneři podepsali a kteří chybí.
+         * Returns the signing status — which cosigners have signed and which are missing.
+         * Called by frontend to display progress of multisig signing rounds.
          */
         get("/{id}/signers") {
             val appCall = call
@@ -459,10 +476,7 @@ fun Route.psbtRoutes(
             }
 
             try {
-                // Načti wallet detail (cosigner list)
                 val wallet = registryClient.getWallet(psbt.walletId)
-
-                // Mapuj existující podpisy podle fingerprintu
                 val signedMap = psbt.signatures.associateBy { it.cosignerIndex }
 
                 val signers = wallet.cosigners.map { cosigner ->
@@ -495,12 +509,12 @@ fun Route.psbtRoutes(
     }
 }
 
-// ========== Helpers ==========
+// ========== UTXO Selection Helpers ==========
 
-/**
- * Vybere konkrétní UTXOs podle seznamu txid:vout.
- * Prohledá VŠECHNY adresy peněženky (receive + change).
- * scriptPubKey se odvozuje z adresy, aby ho Trezor mohl ověřit (PSBT_IN_WITNESS_UTXO).
+/*
+ * Selects specific UTXOs by txid:vout from the user's coin control list.
+ * If selections include an address, queries only those addresses (fast path).
+ * Otherwise falls back to scanning ALL wallet addresses (slow path).
  */
 private suspend fun selectSpecificUtxos(
     selections: List<UtxoSelection>,
@@ -510,15 +524,25 @@ private suspend fun selectSpecificUtxos(
     registryClient: RegistryClient
 ): List<SelectedUtxo> = coroutineScope {
     val selectionSet = selections.map { "${it.txid}:${it.vout}" }.toSet()
-    val allAddresses = registryClient.getAllAddresses(walletId)
 
-    allAddresses.map { addrDto ->
+    // Fast path: selections have addresses — query only those (no full wallet scan)
+    val knownAddresses = selections.mapNotNull { it.address }.distinct()
+    val addressesToScan = if (knownAddresses.size == selections.size) {
+        val allAddresses = registryClient.getAllAddresses(walletId)
+        val addrMap = allAddresses.associateBy { it.address }
+        knownAddresses.mapNotNull { addrMap[it] }
+    } else {
+        // Slow path: some selections missing address — scan all wallet addresses
+        registryClient.getAllAddresses(walletId)
+    }
+
+    addressesToScan.map { addrDto ->
         async {
             try {
                 blockchainClient.getUtxos(addrDto.address, network)
                     .filter { utxo -> "${utxo.txid}:${utxo.vout}" in selectionSet }
                     .map { utxo ->
-                        val scriptHex = PsbtBuilder.addressToScriptHex(addrDto.address).ifEmpty { null }
+                        val scriptHex = PsbtEncoding.addressToScriptHex(addrDto.address).ifEmpty { null }
                         SelectedUtxo(
                             txid = utxo.txid,
                             vout = utxo.vout,
@@ -536,10 +560,11 @@ private suspend fun selectSpecificUtxos(
     }.awaitAll().flatten()
 }
 
-/**
- * Automaticky vybere UTXOs pro pokrytí požadované částky + fee.
- * Prohledá VŠECHNY adresy peněženky a seřadí od největšího (largest-first).
- * Fee per input se počítá správně pro singlesig i multisig.
+/*
+ * Automatically selects UTXOs to cover the target amount + estimated fee.
+ * Searches ALL wallet addresses, sorts by value descending (largest-first strategy),
+ * and excludes UTXOs reserved by other pending/signed PSBTs.
+ * Fee per input is calculated correctly for singlesig (68 vB) vs multisig (57+73M+34N vB).
  */
 private suspend fun autoSelectUtxos(
     wallet: WalletDetailDto,
@@ -562,15 +587,13 @@ private suspend fun autoSelectUtxos(
         }
     }.awaitAll().flatten()
 
-    // Vyloučíme UTXOs použité v jiných pending PSBTs
+    // Exclude UTXOs used in other pending PSBTs
     val availableUtxos = if (reservedUtxos.isNotEmpty()) {
         allUtxos.filter { "${it.utxo.txid}:${it.utxo.vout}" !in reservedUtxos }
     } else allUtxos
 
     val sortedUtxos = availableUtxos.sortedByDescending { it.utxo.value }
 
-    // Velikost jednoho vstupu: singlesig P2WPKH = 68 vB,
-    // multisig P2WSH = 57 + 73*M + 34*N vB (viz PsbtBuilder.estimateVsize)
     val isMultisig = wallet.type == "MULTI_SIG"
     val m = wallet.m ?: 1
     val n = wallet.n ?: 1
@@ -580,7 +603,7 @@ private suspend fun autoSelectUtxos(
     var totalSelected = 0L
 
     for (rich in sortedUtxos) {
-        val scriptHex = PsbtBuilder.addressToScriptHex(rich.addrDto.address).ifEmpty { null }
+        val scriptHex = PsbtEncoding.addressToScriptHex(rich.addrDto.address).ifEmpty { null }
         selected.add(SelectedUtxo(
             txid = rich.utxo.txid,
             vout = rich.utxo.vout,
@@ -592,7 +615,7 @@ private suspend fun autoSelectUtxos(
         ))
         totalSelected += rich.utxo.value
 
-        // Odhadni fee pro aktuální počet vstupů (2 výstupy: recipient + change)
+        // Estimate fee for current input count (2 outputs: recipient + change)
         val estimatedFee = (perInputVsize * selected.size + 31 * 2 + 10) * feeRate
 
         if (totalSelected >= targetAmount + estimatedFee) {

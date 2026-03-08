@@ -1,28 +1,33 @@
 package cz.majny.wallet.psbt.builder
 
 import cz.majny.wallet.psbt.api.*
+import cz.majny.wallet.psbt.builder.PsbtEncoding.PSBT_IN_BIP32_DERIVATION
+import cz.majny.wallet.psbt.builder.PsbtEncoding.PSBT_IN_NON_WITNESS_UTXO
+import cz.majny.wallet.psbt.builder.PsbtEncoding.PSBT_IN_WITNESS_SCRIPT
+import cz.majny.wallet.psbt.builder.PsbtEncoding.PSBT_IN_WITNESS_UTXO
+import cz.majny.wallet.psbt.builder.PsbtEncoding.PSBT_OUT_BIP32_DERIVATION
 import org.bitcoinj.base.BitcoinNetwork
 import org.bitcoinj.crypto.DeterministicKey
 import org.bitcoinj.crypto.HDKeyDerivation
 import org.slf4j.LoggerFactory
 import java.util.*
 
-/**
- * PSBT Builder - staví Bitcoin transakce ve formátu PSBT (BIP-174).
- * 
- * Podporuje:
- * - Single-sig P2WPKH transakce
- * - Multisig P2WSH transakce (M-of-N)
- * 
- * POZNÁMKA: Tato implementace vytváří PSBT strukturu manuálně.
- * Pro produkční nasazení zvážit rust-bitcoin přes JNI nebo Bitcoin Core RPC.
+/*
+ * Core PSBT (BIP-174) builder. Creates unsigned Bitcoin transactions in PSBT format
+ * with all required metadata (witness UTXOs, BIP-32 derivation paths, witness scripts).
+ * Supports singlesig P2WPKH and multisig P2WSH transactions.
+ *
+ * Low-level encoding is delegated to PsbtEncoding.
+ * Trezor Connect params are built by TrezorParamsBuilder.
  */
 object PsbtBuilder {
-    
+
     private val log = LoggerFactory.getLogger(PsbtBuilder::class.java)
-    
-    /**
-     * Vytvoří PSBT transakci.
+
+    /*
+     * Creates a complete PSBT for the given wallet, UTXOs, and outputs.
+     * Calculates fee from estimated vsize, checks dust limit on change,
+     * and returns the PSBT as base64 along with fee and change metadata.
      */
     fun createPsbt(
         wallet: WalletDetailDto,
@@ -35,44 +40,41 @@ object PsbtBuilder {
     ): PsbtBuildResult {
         log.info("Building PSBT: {} inputs, {} outputs, fee rate {} sats/vB",
             utxos.size, outputs.size, feeRate)
-        
-        // Vypočítej celkový vstup a výstup
+
         val totalInput = utxos.sumOf { it.value }
         val totalOutput = outputs.sumOf { it.amountSats }
-        
-        // Odhadni velikost transakce pro výpočet fee
+
         val estimatedVsize = estimateVsize(
             inputCount = utxos.size,
-            outputCount = outputs.size + 1, // +1 pro change
+            outputCount = outputs.size + 1, // +1 for change
             isMultisig = wallet.type == "MULTI_SIG",
             m = wallet.m ?: 1,
             n = wallet.n ?: 1
         )
-        
+
         val fee = (estimatedVsize * feeRate).toLong()
         val changeAmount = totalInput - totalOutput - fee
-        
+
         log.info("Total input: {} sats, output: {} sats, fee: {} sats, change: {} sats",
             totalInput, totalOutput, fee, changeAmount)
-        
+
         if (changeAmount < 0) {
             throw IllegalArgumentException(
                 "Insufficient funds: input=$totalInput, output=$totalOutput, fee=$fee"
             )
         }
-        
-        // Dust limit check — pokud je change pod limitem, přidá se do fee
+
+        // Dust limit check — change below threshold is added to the fee instead
         val dustLimit = 546L
         val finalChange = if (changeAmount > dustLimit) {
             changeAmount
         } else {
             if (changeAmount > 0) {
-                log.info("Change amount {} sats je pod dust limitem ({}), přidáno do fee", changeAmount, dustLimit)
+                log.info("Change amount {} sats is below dust limit ({}), added to fee", changeAmount, dustLimit)
             }
             0L
         }
-        
-        // Vytvoř PSBT strukturu
+
         val psbtBase64 = buildPsbtBase64(
             wallet = wallet,
             utxos = utxos,
@@ -82,7 +84,7 @@ object PsbtBuilder {
             changeIndex = if (finalChange > 0) changeIndex else null,
             rbf = rbf
         )
-        
+
         return PsbtBuildResult(
             psbtBase64 = psbtBase64,
             estimatedFee = fee,
@@ -90,268 +92,28 @@ object PsbtBuilder {
             changeAmount = finalChange
         )
     }
-    
-    /**
-     * Převede Bitcoin adresu na scriptPubKey hex string.
-     * Používá se pro PSBT_IN_WITNESS_UTXO pole.
-     */
-    fun addressToScriptHex(address: String): String = bytesToHex(addressToScript(address))
 
-    /**
-     * Sestaví Trezor Connect signTransaction parametry ze stejných dat jako PSBT.
-     * Podporuje singlesig P2WPKH i multisig P2WSH.
+    /*
+     * Estimates transaction virtual size in vBytes.
+     * vsize = weight / 4, where weight = non_witness_bytes * 4 + witness_bytes * 1 (BIP-141).
      *
-     * @param signerCosignerIndex Pro multisig: index cosignera ktery bude podepisovat (default 0).
+     * Overhead (10 vB):
+     *   version(4B) + locktime(4B) + segwit marker+flag(~0.5B) + input/output count varints(~1.5B)
+     *
+     * Each output (31 vB):
+     *   amount(8B) + script_length(1B) + scriptPubKey(22B P2WPKH / 34B P2WSH) ≈ 31B
+     *
+     * Singlesig P2WPKH input (68 vB):
+     *   Non-witness: prevout_hash(32B) + prevout_index(4B) + empty_scriptSig(1B) + sequence(4B) = 41B * 4 = 164 wu
+     *   Witness: witness_count(1B) + sig_len(1B) + DER_signature(72B) + pubkey_len(1B) + compressed_pubkey(33B) = 108B * 1 = 108 wu
+     *   Total: (164 + 108) / 4 = 68 vB
+     *
+     * Multisig P2WSH input (57 + 73*M + 34*N vB):
+     *   Non-witness: same 41B * 4 = 164 wu
+     *   Witness: OP_0(1B) + M * (sig_len + DER_sig ≈ 73B) + witness_script(OP_M + N * 34B_pubkey + OP_N + OP_CHECKMULTISIG)
+     *   Example 2-of-3: 57 + 73*2 + 34*3 = 305 vB per input
      */
-    fun buildTrezorConnectParams(
-        wallet: WalletDetailDto,
-        utxos: List<SelectedUtxo>,
-        outputs: List<TxOutput>,
-        changeAddress: String?,
-        changeAmount: Long,
-        changeIndex: Int?,
-        signerCosignerIndex: Int = 0
-    ): TrezorConnectParams? {
-        val coin = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin")) "Bitcoin" else "Testnet"
-
-        val refTxs = utxos.mapNotNull { utxo ->
-            val hex = utxo.rawTxHex ?: return@mapNotNull null
-            TrezorConnectRefTx(hash = utxo.txid, tx_hex = hex)
-        }.distinctBy { it.hash }.ifEmpty { null }
-
-        if (refTxs == null) {
-            log.warn("No raw tx hex available for refTxs — Trezor may fail to verify inputs")
-        } else {
-            log.info("Built {} refTxs for Trezor Connect", refTxs.size)
-        }
-
-        if (wallet.type == "MULTI_SIG") {
-            return buildMultisigTrezorConnectParams(
-                wallet, utxos, outputs, changeAddress, changeAmount, changeIndex, coin, refTxs, signerCosignerIndex
-            )
-        }
-
-        // ---- Singlesig P2WPKH ----
-        val originPath: List<Long> = if (wallet.cosigners.isNotEmpty()) {
-            parseOriginPathToUint32(wallet.cosigners.first().originPath)
-        } else {
-            val parsed = parseDescriptorOrigin(wallet.receiveDescriptor)
-            if (parsed == null) {
-                log.warn("Cannot parse origin path from descriptor: {}", wallet.receiveDescriptor)
-                return null
-            }
-            parsed
-        }
-
-        val trezorInputs = utxos.map { utxo ->
-            val chain = if (utxo.addressType == "change") 1L else 0L
-            val idx = (utxo.addressIndex ?: 0).toLong()
-            TrezorConnectInput(
-                address_n = originPath + listOf(chain, idx),
-                prev_hash = utxo.txid,
-                prev_index = utxo.vout,
-                amount = utxo.value.toString(),
-                script_type = "SPENDWITNESS"
-            )
-        }
-
-        val trezorOutputs = mutableListOf<TrezorConnectOutput>()
-        for (output in outputs) {
-            trezorOutputs.add(TrezorConnectOutput(
-                address = output.address,
-                amount = output.amountSats.toString(),
-                script_type = "PAYTOADDRESS"
-            ))
-        }
-
-        if (changeAddress != null && changeAmount > 0 && changeIndex != null) {
-            trezorOutputs.add(TrezorConnectOutput(
-                address_n = originPath + listOf(1L, changeIndex.toLong()),
-                amount = changeAmount.toString(),
-                script_type = "PAYTOWITNESS"
-            ))
-        }
-
-        return TrezorConnectParams(
-            coin = coin,
-            inputs = trezorInputs,
-            outputs = trezorOutputs,
-            refTxs = refTxs
-        )
-    }
-
-    /**
-     * Sestaví Trezor Connect params pro multisig P2WSH transakci.
-     * Každý input/output obsahuje `multisig` objekt s pubkeys všech cosignerů.
-     * address_n = derivation path cosignera ktery podepisuje (signerCosignerIndex).
-     */
-    private fun buildMultisigTrezorConnectParams(
-        wallet: WalletDetailDto,
-        utxos: List<SelectedUtxo>,
-        outputs: List<TxOutput>,
-        changeAddress: String?,
-        changeAmount: Long,
-        changeIndex: Int?,
-        coin: String,
-        refTxs: List<TrezorConnectRefTx>?,
-        signerCosignerIndex: Int
-    ): TrezorConnectParams? {
-        if (wallet.cosigners.isEmpty()) {
-            log.warn("Multisig wallet has no cosigners, cannot build TrezorConnectParams")
-            return null
-        }
-
-        val m = wallet.m ?: 2
-        val sortedCosigners = wallet.cosigners.sortedBy { it.idx }
-        val signerCosigner = sortedCosigners.getOrNull(signerCosignerIndex) ?: run {
-            log.warn("Cosigner index {} out of range ({})", signerCosignerIndex, sortedCosigners.size)
-            return null
-        }
-        val signerOriginPath = parseOriginPathToUint32(signerCosigner.originPath)
-
-        log.info("Building multisig TrezorConnectParams: m={} n={} signer=cosigner[{}] fp={} path={}",
-            m, sortedCosigners.size, signerCosignerIndex, signerCosigner.fingerprint, signerCosigner.originPath)
-
-        val btcNetwork = if (coin == "Bitcoin") BitcoinNetwork.MAINNET else BitcoinNetwork.TESTNET
-
-        // Convert each cosigner's xpub to HDNodeDto once
-        val cosignerHdNodes = sortedCosigners.map { cos ->
-            xpubToHDNode(cos.xpubRoot, btcNetwork)
-        }
-
-        val isSortedMulti = wallet.receiveDescriptor.contains("sortedmulti(")
-
-        // BIP-67: sort cosigner HDNodes by derived child pubkey at a given chain/index.
-        // Trezor firmware does NOT sort pubkeys internally — the order we provide must
-        // exactly match the witness script order, otherwise Trezor computes a different
-        // P2WSH address and returns Failure_DataError.
-        fun sortedMultisigPubkeys(chain: Int, index: Int): List<TrezorConnectMultisigPubkey> {
-            if (!isSortedMulti) {
-                return cosignerHdNodes.map { hdNode ->
-                    TrezorConnectMultisigPubkey(node = hdNode, address_n = listOf(chain.toLong(), index.toLong()))
-                }
-            }
-            // Derive child pubkeys and sort by BIP-67 (lexicographic on compressed pubkey)
-            val withDerived = sortedCosigners.mapIndexed { i, cos ->
-                val accountKey = DeterministicKey.deserializeB58(cos.xpubRoot, btcNetwork)
-                val chainKey = HDKeyDerivation.deriveChildKey(accountKey, chain)
-                val childKey = HDKeyDerivation.deriveChildKey(chainKey, index)
-                Pair(cosignerHdNodes[i], childKey.pubKey)
-            }
-            val sorted = withDerived.sortedWith(
-                compareBy<Pair<HDNodeDto, ByteArray>> { it.second.size }
-                    .thenBy { it.second.joinToString("") { b -> "%02x".format(b) } }
-            )
-            return sorted.map { (hdNode, _) ->
-                TrezorConnectMultisigPubkey(node = hdNode, address_n = listOf(chain.toLong(), index.toLong()))
-            }
-        }
-
-        val trezorInputs = utxos.map { utxo ->
-            val chain = if (utxo.addressType == "change") 1 else 0
-            val idx = utxo.addressIndex ?: 0
-
-            TrezorConnectInput(
-                address_n = signerOriginPath + listOf(chain.toLong(), idx.toLong()),
-                prev_hash = utxo.txid,
-                prev_index = utxo.vout,
-                amount = utxo.value.toString(),
-                script_type = "SPENDWITNESS",
-                multisig = TrezorConnectMultisig(
-                    pubkeys = sortedMultisigPubkeys(chain, idx),
-                    m = m,
-                    signatures = sortedCosigners.map { "" }
-                )
-            )
-        }
-
-        val trezorOutputs = mutableListOf<TrezorConnectOutput>()
-        for (output in outputs) {
-            trezorOutputs.add(TrezorConnectOutput(
-                address = output.address,
-                amount = output.amountSats.toString(),
-                script_type = "PAYTOADDRESS"
-            ))
-        }
-
-        if (changeAddress != null && changeAmount > 0 && changeIndex != null) {
-            trezorOutputs.add(TrezorConnectOutput(
-                address_n = signerOriginPath + listOf(1L, changeIndex.toLong()),
-                amount = changeAmount.toString(),
-                script_type = "PAYTOWITNESS",
-                multisig = TrezorConnectMultisig(
-                    pubkeys = sortedMultisigPubkeys(1, changeIndex),
-                    m = m,
-                    signatures = sortedCosigners.map { "" }
-                )
-            ))
-        }
-
-        return TrezorConnectParams(
-            coin = coin,
-            inputs = trezorInputs,
-            outputs = trezorOutputs,
-            refTxs = refTxs
-        )
-    }
-
-    /**
-     * Parsuje origin path "84h/1h/0h" nebo "84'/1'/0'" na List<Long> (uint32).
-     * Hardened indexy mají bit 0x80000000.
-     */
-    private fun parseOriginPathToUint32(originPath: String): List<Long> {
-        return originPath.split("/").filter { it.isNotBlank() }.map { part ->
-            val cleaned = part.replace("'", "h")
-            val hardened = cleaned.endsWith("h")
-            val num = cleaned.trimEnd('h').toLong()
-            if (hardened) (num or 0x80000000L) else num
-        }
-    }
-
-    /**
-     * Converts an xpub/tpub string to an HDNodeDto for Trezor Connect.
-     * Trezor firmware expects structured HDNodeType, not raw xpub strings.
-     */
-    private fun xpubToHDNode(xpubStr: String, network: BitcoinNetwork): HDNodeDto {
-        val key = DeterministicKey.deserializeB58(xpubStr, network)
-        return HDNodeDto(
-            depth = key.depth,
-            fingerprint = (key.parentFingerprint.toLong() and 0xFFFFFFFFL),
-            child_num = (key.childNumber.i.toLong() and 0xFFFFFFFFL),
-            chain_code = key.chainCode.joinToString("") { "%02x".format(it) },
-            public_key = key.pubKeyPoint.getEncoded(true).joinToString("") { "%02x".format(it) }
-        )
-    }
-
-    /**
-     * Parsuje origin path z Bitcoin output descriptoru.
-     * Formát: wpkh([fingerprint/84h/1h/0h]xpub...) → [0x80000054, 0x80000001, 0x80000000]
-     * Vrací null pokud descriptor neobsahuje origin info.
-     */
-    private fun parseDescriptorOrigin(descriptor: String): List<Long>? {
-        // Najdi obsah hranatých závorek: [fingerprint/path]
-        val bracketStart = descriptor.indexOf('[')
-        val bracketEnd = descriptor.indexOf(']')
-        if (bracketStart < 0 || bracketEnd < 0 || bracketEnd <= bracketStart) return null
-
-        val inside = descriptor.substring(bracketStart + 1, bracketEnd)
-        // inside = "aabbccdd/84h/1h/0h" nebo "aabbccdd/84'/1'/0'"
-        val parts = inside.split("/")
-        if (parts.size < 2) return null
-
-        // Přeskočit fingerprint (první element), parsovat zbytek jako path
-        val pathParts = parts.drop(1) // ["84h", "1h", "0h"]
-        return pathParts.map { part ->
-            val cleaned = part.replace("'", "h")
-            val hardened = cleaned.endsWith("h")
-            val num = cleaned.trimEnd('h').toLong()
-            if (hardened) (num or 0x80000000L) else num
-        }
-    }
-
-    // ========== Helpers ==========
-
-    private fun estimateVsize(
+    fun estimateVsize(
         inputCount: Int,
         outputCount: Int,
         isMultisig: Boolean,
@@ -367,7 +129,15 @@ object PsbtBuilder {
         }
         return overhead + outputSize + inputSize
     }
-    
+
+    // ========== Internal PSBT Construction ==========
+
+    /*
+     * Builds the full PSBT binary structure and returns it as base64.
+     * Structure: magic || global section || per-input sections || per-output sections.
+     * Includes PSBT_IN_NON_WITNESS_UTXO, PSBT_IN_WITNESS_UTXO, PSBT_IN_WITNESS_SCRIPT (multisig),
+     * PSBT_IN_BIP32_DERIVATION, and PSBT_OUT_BIP32_DERIVATION (change output).
+     */
     private fun buildPsbtBase64(
         wallet: WalletDetailDto,
         utxos: List<SelectedUtxo>,
@@ -378,7 +148,8 @@ object PsbtBuilder {
         rbf: Boolean
     ): String {
         log.debug("=== PSBT BUILD START ===")
-        log.debug("wallet.type={} wallet.network={} wallet.m={} wallet.n={}", wallet.type, wallet.network, wallet.m, wallet.n)
+        log.debug("wallet.type={} wallet.network={} wallet.m={} wallet.n={}",
+            wallet.type, wallet.network, wallet.m, wallet.n)
         log.debug("cosigners ({}):", wallet.cosigners.size)
         for (cos in wallet.cosigners) {
             log.debug("  cosigner idx={} fingerprint={} originPath={} xpubRoot={}...",
@@ -396,58 +167,57 @@ object PsbtBuilder {
 
         val psbt = mutableListOf<Byte>()
 
-        // Magic: "psbt" + 0xff
+        // PSBT magic: "psbt" + 0xff separator
         psbt.addAll(byteArrayOf(0x70, 0x73, 0x62, 0x74, 0xff.toByte()).toList())
-        
-        // Global: unsigned tx
+
+        // Global section: unsigned transaction
         val unsignedTx = buildUnsignedTx(utxos, outputs, changeAddress, changeAmount, rbf)
-        psbt.add(0x01)
-        psbt.add(0x00)
-        psbt.addAll(writeVarInt(unsignedTx.size.toLong()))
+        psbt.add(0x01) // key length
+        psbt.add(0x00) // key type = PSBT_GLOBAL_UNSIGNED_TX
+        psbt.addAll(PsbtEncoding.writeVarInt(unsignedTx.size.toLong()))
         psbt.addAll(unsignedTx.toList())
-        psbt.add(0x00)
-        
+        psbt.add(0x00) // global section separator
+
         val isMultisig = wallet.type == "MULTI_SIG" && wallet.cosigners.isNotEmpty()
 
-        // Pre-derive cosigner chain keys once (for all inputs) — both singlesig and multisig.
-        // PSBT_IN_BIP32_DERIVATION is required so Trezor can identify the signing key
-        // without querying any blockchain backend.
+        // Pre-derive cosigner chain keys once (both chains, all cosigners).
+        // Needed for PSBT_IN_BIP32_DERIVATION so Trezor can identify the signing key.
         val cosignerChainKeys: Map<Int, List<Pair<CosignerDto, DeterministicKey>>>? =
             if (wallet.cosigners.isNotEmpty()) {
                 val btcNetwork = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin"))
                     BitcoinNetwork.MAINNET else BitcoinNetwork.TESTNET
-                // Group by chain: 0=receive, 1=change
                 mapOf(
                     0 to wallet.cosigners.map { cos ->
                         val accountKey = DeterministicKey.deserializeB58(cos.xpubRoot, btcNetwork)
-                        cos to HDKeyDerivation.deriveChildKey(accountKey, 0) // chain 0 = receive
+                        cos to HDKeyDerivation.deriveChildKey(accountKey, 0)
                     },
                     1 to wallet.cosigners.map { cos ->
                         val accountKey = DeterministicKey.deserializeB58(cos.xpubRoot, btcNetwork)
-                        cos to HDKeyDerivation.deriveChildKey(accountKey, 1) // chain 1 = change
+                        cos to HDKeyDerivation.deriveChildKey(accountKey, 1)
                     }
                 )
             } else null
 
-        // Input sections
+        // Per-input sections
         for (utxo in utxos) {
-            // PSBT_IN_NON_WITNESS_UTXO (key 0x00) — celá předchozí transakce.
-            // Trezor firmware 2.4+ vyžaduje předchozí tx pro VŠECHNY vstupy (i P2WPKH),
-            // aby mohl ověřit správnost hodnoty výstupu a zobrazit správný poplatek.
+            // PSBT_IN_NON_WITNESS_UTXO (key 0x00) — full previous transaction.
+            // Trezor firmware 2.4+ requires this for ALL inputs (even P2WPKH)
+            // to verify output amounts and display the correct fee.
             if (utxo.rawTxHex != null) {
-                writeKv(psbt, PSBT_IN_NON_WITNESS_UTXO, ByteArray(0), hexToBytes(utxo.rawTxHex))
+                PsbtEncoding.writeKv(psbt, PSBT_IN_NON_WITNESS_UTXO, ByteArray(0),
+                    PsbtEncoding.hexToBytes(utxo.rawTxHex))
             }
 
-            // PSBT_IN_WITNESS_UTXO (key 0x01)
-            val witnessUtxo = buildWitnessUtxo(utxo.value, utxo.scriptPubKey)
-            psbt.add(0x01)
-            psbt.add(0x01)
-            psbt.addAll(writeVarInt(witnessUtxo.size.toLong()))
+            // PSBT_IN_WITNESS_UTXO (key 0x01) — amount + scriptPubKey of the spent output
+            val witnessUtxo = PsbtEncoding.buildWitnessUtxo(utxo.value, utxo.scriptPubKey)
+            psbt.add(0x01) // key length
+            psbt.add(0x01) // key type = PSBT_IN_WITNESS_UTXO
+            psbt.addAll(PsbtEncoding.writeVarInt(witnessUtxo.size.toLong()))
             psbt.addAll(witnessUtxo.toList())
 
             if (cosignerChainKeys != null
-                && utxo.addressIndex != null && utxo.addressType != null) {
-
+                && utxo.addressIndex != null && utxo.addressType != null
+            ) {
                 val chain = if (utxo.addressType == "change") 1 else 0
                 val idx = utxo.addressIndex
                 val m = wallet.m ?: 1
@@ -456,43 +226,43 @@ object PsbtBuilder {
                 // Derive child pubkeys for this input's address index
                 val cosignerPubkeys = chainEntries.map { (cos, chainKey) ->
                     val childKey = HDKeyDerivation.deriveChildKey(chainKey, idx)
-                    Triple(cos, childKey.pubKey, childKey) // (cosignerDto, compressedPubkey, key)
+                    Triple(cos, childKey.pubKey, childKey)
                 }
 
                 if (isMultisig) {
                     // BIP-67: sort pubkeys lexicographically for sortedmulti
                     val sorted = if (wallet.receiveDescriptor.contains("sortedmulti(")) {
-                        cosignerPubkeys.sortedWith(compareBy<Triple<CosignerDto, ByteArray, DeterministicKey>> {
-                            it.second.size
-                        }.thenBy { bytesToHex(it.second) })
+                        cosignerPubkeys.sortedWith(
+                            compareBy<Triple<CosignerDto, ByteArray, DeterministicKey>> {
+                                it.second.size
+                            }.thenBy { PsbtEncoding.bytesToHex(it.second) }
+                        )
                     } else {
                         cosignerPubkeys
                     }
 
-                    // PSBT_IN_WITNESS_SCRIPT (key 0x05) — only for P2WSH multisig
-                    val witnessScript = buildMultisigWitnessScript(m, sorted.map { it.second })
-                    writeKv(psbt, PSBT_IN_WITNESS_SCRIPT, ByteArray(0), witnessScript)
+                    // PSBT_IN_WITNESS_SCRIPT (key 0x05) — multisig redeem script
+                    val witnessScript = PsbtEncoding.buildMultisigWitnessScript(m, sorted.map { it.second })
+                    PsbtEncoding.writeKv(psbt, PSBT_IN_WITNESS_SCRIPT, ByteArray(0), witnessScript)
                 }
 
-                // PSBT_IN_BIP32_DERIVATION (key 0x06) for each cosigner — singlesig and multisig
+                // PSBT_IN_BIP32_DERIVATION (key 0x06) for each cosigner
                 for ((cos, pubkey, _) in cosignerPubkeys) {
-                    val bip32Value = encodeBip32Derivation(cos.fingerprint, cos.originPath, chain, idx)
+                    val bip32Value = PsbtEncoding.encodeBip32Derivation(cos.fingerprint, cos.originPath, chain, idx)
                     log.debug("  BIP32 deriv: fp={} path={} chain={} idx={} pubkey={} value={}",
                         cos.fingerprint, cos.originPath, chain, idx,
-                        bytesToHex(pubkey), bytesToHex(bip32Value))
-                    writeKv(psbt, PSBT_IN_BIP32_DERIVATION, pubkey, bip32Value)
+                        PsbtEncoding.bytesToHex(pubkey), PsbtEncoding.bytesToHex(bip32Value))
+                    PsbtEncoding.writeKv(psbt, PSBT_IN_BIP32_DERIVATION, pubkey, bip32Value)
                 }
             }
 
             psbt.add(0x00) // input separator
         }
-        
-        // Output sections
+
+        // Per-output sections
         val totalOutputs = outputs.size + (if (changeAddress != null) 1 else 0)
         for (i in 0 until totalOutputs) {
-            // Add PSBT_OUT_BIP32_DERIVATION for the change output so Trezor can
-            // identify it as belonging to the wallet (otherwise it shows full
-            // amount as going to external recipients).
+            // PSBT_OUT_BIP32_DERIVATION for change output so Trezor identifies it as internal
             val isChangeOutput = changeAddress != null && i == outputs.size
             if (isChangeOutput && cosignerChainKeys != null && changeIndex != null) {
                 val chainEntries = cosignerChainKeys[1] ?: emptyList()
@@ -501,28 +271,28 @@ object PsbtBuilder {
                     Triple(cos, childKey.pubKey, childKey)
                 }
                 for ((cos, pubkey, _) in changePubkeys) {
-                    val bip32Value = encodeBip32Derivation(cos.fingerprint, cos.originPath, 1, changeIndex)
-                    writeKv(psbt, PSBT_OUT_BIP32_DERIVATION, pubkey, bip32Value)
+                    val bip32Value = PsbtEncoding.encodeBip32Derivation(cos.fingerprint, cos.originPath, 1, changeIndex)
+                    PsbtEncoding.writeKv(psbt, PSBT_OUT_BIP32_DERIVATION, pubkey, bip32Value)
                 }
             }
-            psbt.add(0x00)
+            psbt.add(0x00) // output separator
         }
-        
+
         val result = Base64.getEncoder().encodeToString(psbt.toByteArray())
         log.debug("=== PSBT BUILD END ({} bytes raw, {} chars base64) ===", psbt.size, result.length)
         log.info("PSBT base64: {}", result)
 
-        // Self-check: try to parse the generated PSBT to catch structural issues early
+        // Self-check: parse the generated PSBT to catch structural issues early
         try {
-            val parsed = parsePsbt(Base64.getDecoder().decode(result))
+            val parsed = PsbtEncoding.parsePsbt(Base64.getDecoder().decode(result))
             log.debug("PSBT self-check OK: {} inputs, {} outputs",
                 parsed.inputKvs.size, parsed.outputKvs.size)
-            for ((i, inputKvs) in parsed.inputKvs.withIndex()) {
+            for ((inputIdx, inputKvs) in parsed.inputKvs.withIndex()) {
                 val hasNonWit = inputKvs.any { it.keyType == PSBT_IN_NON_WITNESS_UTXO }
                 val hasWitUtxo = inputKvs.any { it.keyType == PSBT_IN_WITNESS_UTXO }
                 val hasBip32 = inputKvs.any { it.keyType == PSBT_IN_BIP32_DERIVATION }
                 log.debug("  input[{}]: NON_WIT={} WIT_UTXO={} BIP32_DERIV={}",
-                    i, hasNonWit, hasWitUtxo, hasBip32)
+                    inputIdx, hasNonWit, hasWitUtxo, hasBip32)
             }
         } catch (e: Exception) {
             log.error("PSBT self-check FAILED: {}", e.message)
@@ -531,6 +301,10 @@ object PsbtBuilder {
         return result
     }
 
+    /*
+     * Builds the unsigned Bitcoin transaction (without witness data).
+     * Format: version || inputs (prevout + empty scriptSig + sequence) || outputs (amount + scriptPubKey) || locktime.
+     */
     private fun buildUnsignedTx(
         utxos: List<SelectedUtxo>,
         outputs: List<TxOutput>,
@@ -539,392 +313,56 @@ object PsbtBuilder {
         rbf: Boolean
     ): ByteArray {
         val tx = mutableListOf<Byte>()
-        
-        // Version 2
-        tx.addAll(intToLE(2, 4))
-        
+
+        // Version 2 (required for RBF / BIP-125)
+        tx.addAll(PsbtEncoding.intToLE(2, 4))
+
         // Inputs
-        tx.addAll(writeVarInt(utxos.size.toLong()))
+        tx.addAll(PsbtEncoding.writeVarInt(utxos.size.toLong()))
         for (utxo in utxos) {
-            tx.addAll(hexToBytes(utxo.txid).reversed())
-            tx.addAll(intToLE(utxo.vout, 4))
-            tx.add(0x00)
+            tx.addAll(PsbtEncoding.hexToBytes(utxo.txid).reversed()) // prevout hash (LE)
+            tx.addAll(PsbtEncoding.intToLE(utxo.vout, 4))            // prevout index
+            tx.add(0x00)                                              // empty scriptSig
             val seq: Int = if (rbf) 0xfffffffd.toInt() else 0xffffffff.toInt()
-            tx.addAll(intToLE(seq, 4))
+            tx.addAll(PsbtEncoding.intToLE(seq, 4))                   // sequence
         }
-        
+
         // Outputs
         val outputCount = outputs.size + (if (changeAddress != null) 1 else 0)
-        tx.addAll(writeVarInt(outputCount.toLong()))
-        
+        tx.addAll(PsbtEncoding.writeVarInt(outputCount.toLong()))
+
         for (output in outputs) {
-            tx.addAll(longToLE(output.amountSats))
-            val script = addressToScript(output.address)
-            tx.addAll(writeVarInt(script.size.toLong()))
+            tx.addAll(PsbtEncoding.longToLE(output.amountSats))
+            val script = PsbtEncoding.addressToScript(output.address)
+            tx.addAll(PsbtEncoding.writeVarInt(script.size.toLong()))
             tx.addAll(script.toList())
         }
-        
+
         if (changeAddress != null && changeAmount > 0) {
-            tx.addAll(longToLE(changeAmount))
-            val script = addressToScript(changeAddress)
-            tx.addAll(writeVarInt(script.size.toLong()))
+            tx.addAll(PsbtEncoding.longToLE(changeAmount))
+            val script = PsbtEncoding.addressToScript(changeAddress)
+            tx.addAll(PsbtEncoding.writeVarInt(script.size.toLong()))
             tx.addAll(script.toList())
         }
-        
+
         // Locktime
-        tx.addAll(intToLE(0, 4))
-        
+        tx.addAll(PsbtEncoding.intToLE(0, 4))
+
         return tx.toByteArray()
     }
-    
-    private fun buildWitnessUtxo(value: Long, scriptPubKeyHex: String?): ByteArray {
-        val result = mutableListOf<Byte>()
-        result.addAll(longToLE(value))
-        val scriptBytes = scriptPubKeyHex?.let { hexToBytes(it) } ?: ByteArray(0)
-        result.addAll(writeVarInt(scriptBytes.size.toLong()))
-        result.addAll(scriptBytes.toList())
-        return result.toByteArray()
-    }
-    
-    private fun addressToScript(address: String): ByteArray {
-        return when {
-            // P2WPKH (bc1q/tb1q with 20-byte program → 42 chars) or P2WSH (32-byte program → 62 chars)
-            address.startsWith("bc1q") || address.startsWith("tb1q") -> {
-                val decoded = bech32Decode(address)
-                when (decoded.size) {
-                    20 -> byteArrayOf(0x00, 0x14) + decoded   // P2WPKH: OP_0 <20 bytes>
-                    32 -> byteArrayOf(0x00, 0x20) + decoded   // P2WSH:  OP_0 <32 bytes>
-                    else -> {
-                        log.warn("Unexpected witness program length: {} for address {}", decoded.size, address)
-                        byteArrayOf(0x00, decoded.size.toByte()) + decoded
-                    }
-                }
-            }
-            // P2TR (bc1p/tb1p with 32-byte program)
-            address.startsWith("bc1p") || address.startsWith("tb1p") -> {
-                val decoded = bech32Decode(address)
-                byteArrayOf(0x51, 0x20) + decoded
-            }
-            else -> {
-                log.warn("Unknown address format: {}", address)
-                ByteArray(0)
-            }
-        }
-    }
-    
-    private fun writeVarInt(value: Long): List<Byte> = when {
-        value < 0xfd -> listOf(value.toByte())
-        value <= 0xffff -> listOf(0xfd.toByte(), (value and 0xff).toByte(), ((value shr 8) and 0xff).toByte())
-        else -> listOf(0xfe.toByte()) + intToLE(value.toInt(), 4)
-    }
-    
-    private fun intToLE(value: Int, bytes: Int) = (0 until bytes).map { ((value shr (it * 8)) and 0xff).toByte() }
-    
-    private fun longToLE(value: Long) = (0 until 8).map { ((value shr (it * 8)) and 0xff).toByte() }
-    
-    private fun hexToBytes(hex: String): ByteArray {
-        val data = ByteArray(hex.length / 2)
-        for (i in data.indices) {
-            data[i] = ((Character.digit(hex[2 * i], 16) shl 4) + Character.digit(hex[2 * i + 1], 16)).toByte()
-        }
-        return data
-    }
-    
-    private fun bech32Decode(address: String): ByteArray {
-        val charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-        val hrpEnd = address.lastIndexOf('1')
-        val data = address.substring(hrpEnd + 1).dropLast(6).drop(1)
-        val values = data.map { charset.indexOf(it) }
-        return convertBits(values, 5, 8)
-    }
-    
-    private fun convertBits(data: List<Int>, fromBits: Int, toBits: Int): ByteArray {
-        var acc = 0
-        var bits = 0
-        val result = mutableListOf<Byte>()
-        val maxv = (1 shl toBits) - 1
-        for (value in data) {
-            acc = (acc shl fromBits) or value
-            bits += fromBits
-            while (bits >= toBits) {
-                bits -= toBits
-                result.add(((acc shr bits) and maxv).toByte())
-            }
-        }
-        return result.toByteArray()
-    }
-    
-    // ========== PSBT Parsing & Serialization (BIP-174) ==========
-    
-    private const val PSBT_IN_NON_WITNESS_UTXO = 0x00  // celá předchozí transakce
-    private const val PSBT_IN_WITNESS_UTXO = 0x01
-    private const val PSBT_IN_WITNESS_SCRIPT = 0x05
-    private const val PSBT_IN_BIP32_DERIVATION = 0x06
-    private const val PSBT_OUT_BIP32_DERIVATION = 0x02
-    private const val PSBT_GLOBAL_UNSIGNED_TX = 0x00
-
-    // ========== Multisig PSBT helpers ==========
-
-    /**
-     * Write a single BIP-174 key-value pair into the PSBT byte list.
-     * Key format: varint(len(keyType + keyData)) || keyType || keyData
-     * Value format: varint(len(value)) || value
-     */
-    private fun writeKv(buf: MutableList<Byte>, keyType: Int, keyData: ByteArray, value: ByteArray) {
-        val keyBytes = byteArrayOf(keyType.toByte()) + keyData
-        buf.addAll(writeVarInt(keyBytes.size.toLong()))
-        buf.addAll(keyBytes.toList())
-        buf.addAll(writeVarInt(value.size.toLong()))
-        buf.addAll(value.toList())
-    }
-
-    /**
-     * Build multisig witness script:
-     *   OP_M <push 0x21> <pubkey1> ... <push 0x21> <pubkeyN> OP_N OP_CHECKMULTISIG
-     */
-    private fun buildMultisigWitnessScript(m: Int, pubkeys: List<ByteArray>): ByteArray {
-        val n = pubkeys.size
-        val buf = mutableListOf<Byte>()
-
-        // OP_M: OP_1=0x51, OP_2=0x52, ...
-        buf.add((0x50 + m).toByte())
-
-        for (pk in pubkeys) {
-            buf.add(pk.size.toByte()) // push data length (0x21 = 33)
-            buf.addAll(pk.toList())
-        }
-
-        // OP_N
-        buf.add((0x50 + n).toByte())
-
-        // OP_CHECKMULTISIG
-        buf.add(0xAE.toByte())
-
-        return buf.toByteArray()
-    }
-
-    /**
-     * Encode BIP-32 derivation value for PSBT_IN_BIP32_DERIVATION:
-     *   fingerprint (4 bytes) || path_element_1 (uint32 LE) || ... || chain (uint32 LE) || index (uint32 LE)
-     *
-     * @param fingerprint hex string, e.g. "aabbccdd"
-     * @param originPath  e.g. "48h/0h/0h/2h" or "84'/0'/0'"
-     * @param chain       0=receive, 1=change
-     * @param index       address index
-     */
-    private fun encodeBip32Derivation(
-        fingerprint: String,
-        originPath: String,
-        chain: Int,
-        index: Int
-    ): ByteArray {
-        val buf = mutableListOf<Byte>()
-
-        // 4-byte master fingerprint
-        val fpBytes = hexToBytes(fingerprint.padStart(8, '0').take(8))
-        buf.addAll(fpBytes.toList())
-
-        // Parse origin path elements: "48h/0h/0h/2h" → [0x80000030, 0x80000000, 0x80000000, 0x80000002]
-        val pathParts = originPath.split("/").filter { it.isNotBlank() }
-        for (part in pathParts) {
-            val cleaned = part.replace("'", "h")
-            val hardened = cleaned.endsWith("h")
-            val num = cleaned.trimEnd('h').toLong()
-            val value = if (hardened) (num or 0x80000000L) else num
-            buf.addAll(intToLE(value.toInt(), 4))
-        }
-
-        // Chain (0 or 1)
-        buf.addAll(intToLE(chain, 4))
-
-        // Index
-        buf.addAll(intToLE(index, 4))
-
-        return buf.toByteArray()
-    }
-    
-    private data class PsbtKV(
-        val keyType: Int,
-        val keyData: ByteArray,
-        val value: ByteArray
-    )
-    
-    private data class ParsedPsbt(
-        val unsignedTx: ByteArray,
-        val globalKvs: List<PsbtKV>,
-        val inputKvs: List<List<PsbtKV>>,
-        val outputKvs: List<List<PsbtKV>>
-    )
-    
-    /**
-     * Parsuje PSBT binární formát podle BIP-174.
-     */
-    private fun parsePsbt(data: ByteArray): ParsedPsbt {
-        // Verify magic: "psbt" + 0xff
-        require(data.size >= 5 && data[0] == 0x70.toByte() && data[4] == 0xff.toByte()) {
-            "Invalid PSBT magic"
-        }
-        
-        var pos = 5
-        
-        // Parse global key-value pairs
-        val globalKvs = mutableListOf<PsbtKV>()
-        var unsignedTx = ByteArray(0)
-        
-        while (pos < data.size) {
-            val (keyLen, p1) = readCompactSize(data, pos)
-            pos = p1
-            if (keyLen == 0L) break // separator
-            
-            val keyBytes = data.sliceArray(pos until (pos + keyLen.toInt()))
-            pos += keyLen.toInt()
-            
-            val (valLen, p2) = readCompactSize(data, pos)
-            pos = p2
-            val valBytes = data.sliceArray(pos until (pos + valLen.toInt()))
-            pos += valLen.toInt()
-            
-            val keyType = keyBytes[0].toInt() and 0xFF
-            val keyData = if (keyBytes.size > 1) keyBytes.sliceArray(1 until keyBytes.size) else ByteArray(0)
-            
-            globalKvs.add(PsbtKV(keyType, keyData, valBytes))
-            
-            if (keyType == PSBT_GLOBAL_UNSIGNED_TX) {
-                unsignedTx = valBytes
-            }
-        }
-        
-        require(unsignedTx.isNotEmpty()) { "PSBT missing unsigned transaction" }
-        
-        val inputCount = countTxInputs(unsignedTx)
-        val outputCount = countTxOutputs(unsignedTx)
-        
-        // Parse input sections
-        val inputKvs = mutableListOf<List<PsbtKV>>()
-        for (i in 0 until inputCount) {
-            val kvs = mutableListOf<PsbtKV>()
-            while (pos < data.size) {
-                val (keyLen, p1) = readCompactSize(data, pos)
-                pos = p1
-                if (keyLen == 0L) break
-                
-                val keyBytes = data.sliceArray(pos until (pos + keyLen.toInt()))
-                pos += keyLen.toInt()
-                
-                val (valLen, p2) = readCompactSize(data, pos)
-                pos = p2
-                val valBytes = data.sliceArray(pos until (pos + valLen.toInt()))
-                pos += valLen.toInt()
-                
-                val keyType = keyBytes[0].toInt() and 0xFF
-                val keyData = if (keyBytes.size > 1) keyBytes.sliceArray(1 until keyBytes.size) else ByteArray(0)
-                
-                kvs.add(PsbtKV(keyType, keyData, valBytes))
-            }
-            inputKvs.add(kvs)
-        }
-        
-        // Parse output sections
-        val outputKvs = mutableListOf<List<PsbtKV>>()
-        for (i in 0 until outputCount) {
-            val kvs = mutableListOf<PsbtKV>()
-            while (pos < data.size) {
-                val (keyLen, p1) = readCompactSize(data, pos)
-                pos = p1
-                if (keyLen == 0L) break
-                
-                val keyBytes = data.sliceArray(pos until (pos + keyLen.toInt()))
-                pos += keyLen.toInt()
-                
-                val (valLen, p2) = readCompactSize(data, pos)
-                pos = p2
-                val valBytes = data.sliceArray(pos until (pos + valLen.toInt()))
-                pos += valLen.toInt()
-                
-                val keyType = keyBytes[0].toInt() and 0xFF
-                val keyData = if (keyBytes.size > 1) keyBytes.sliceArray(1 until keyBytes.size) else ByteArray(0)
-                
-                kvs.add(PsbtKV(keyType, keyData, valBytes))
-            }
-            outputKvs.add(kvs)
-        }
-        
-        return ParsedPsbt(unsignedTx, globalKvs, inputKvs, outputKvs)
-    }
-    
-    
-    /**
-     * Přečte compact size (variable-length integer) z byte pole.
-     */
-    private fun readCompactSize(data: ByteArray, offset: Int): Pair<Long, Int> {
-        val first = data[offset].toInt() and 0xFF
-        return when {
-            first < 0xFD -> Pair(first.toLong(), offset + 1)
-            first == 0xFD -> {
-                val v = (data[offset + 1].toInt() and 0xFF) or
-                        ((data[offset + 2].toInt() and 0xFF) shl 8)
-                Pair(v.toLong(), offset + 3)
-            }
-            first == 0xFE -> {
-                val v = (data[offset + 1].toInt() and 0xFF) or
-                        ((data[offset + 2].toInt() and 0xFF) shl 8) or
-                        ((data[offset + 3].toInt() and 0xFF) shl 16) or
-                        ((data[offset + 4].toInt() and 0xFF) shl 24)
-                Pair(v.toLong() and 0xFFFFFFFFL, offset + 5)
-            }
-            else -> {
-                var v = 0L
-                for (i in 0 until 8) {
-                    v = v or ((data[offset + 1 + i].toLong() and 0xFF) shl (i * 8))
-                }
-                Pair(v, offset + 9)
-            }
-        }
-    }
-    
-    /**
-     * Spočítá vstupy z unsigned transaction.
-     */
-    private fun countTxInputs(tx: ByteArray): Int {
-        val (count, _) = readCompactSize(tx, 4) // skip version (4 bytes)
-        return count.toInt()
-    }
-    
-    /**
-     * Spočítá výstupy z unsigned transaction.
-     */
-    private fun countTxOutputs(tx: ByteArray): Int {
-        var pos = 4 // skip version
-        val (inputCount, p1) = readCompactSize(tx, pos)
-        pos = p1
-        
-        // Skip all inputs
-        for (i in 0 until inputCount.toInt()) {
-            pos += 32 + 4 // prevout hash (32) + index (4)
-            val (scriptLen, p2) = readCompactSize(tx, pos)
-            pos = p2
-            pos += scriptLen.toInt() // scriptSig
-            pos += 4 // sequence
-        }
-        
-        val (outputCount, _) = readCompactSize(tx, pos)
-        return outputCount.toInt()
-    }
-    
-    private fun bytesToHex(bytes: ByteArray): String {
-        return bytes.joinToString("") { "%02x".format(it) }
-    }
 }
+
+// ========== Data Classes ==========
 
 data class SelectedUtxo(
     val txid: String,
     val vout: Int,
     val value: Long,
     val scriptPubKey: String?,
-    val addressIndex: Int? = null,      // BIP-32 child index within chain
-    val addressType: String? = null,    // "receive" (chain 0) or "change" (chain 1)
-    val address: String? = null,        // the address owning this UTXO
-    val rawTxHex: String? = null        // raw previous tx hex pro PSBT_IN_NON_WITNESS_UTXO
+    val addressIndex: Int? = null,   // BIP-32 child index within chain
+    val addressType: String? = null, // "receive" (chain 0) or "change" (chain 1)
+    val address: String? = null,     // the address owning this UTXO
+    val rawTxHex: String? = null     // raw previous tx hex for PSBT_IN_NON_WITNESS_UTXO
 )
 
 data class PsbtBuildResult(
@@ -933,4 +371,3 @@ data class PsbtBuildResult(
     val estimatedVsize: Int,
     val changeAmount: Long
 )
-

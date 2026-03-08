@@ -444,7 +444,8 @@ data class PsbtTxOutputDto(
 @Serializable
 data class UtxoSelectionDto(
     val txid: String,
-    val vout: Int
+    val vout: Int,
+    val address: String? = null
 )
 
 @Serializable
