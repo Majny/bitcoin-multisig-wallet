@@ -1,6 +1,6 @@
 package cz.majny.wallet.registry.importer
 
-import cz.majny.wallet.registry.RegistryRepository
+import cz.majny.wallet.registry.Repository
 import cz.majny.wallet.registry.api.*
 import org.slf4j.LoggerFactory
 
@@ -21,7 +21,7 @@ import org.slf4j.LoggerFactory
  *   7. Derive addresses (receive + change)
  */
 class WalletImporter(
-    private val repo: RegistryRepository
+    private val repo: Repository
 ) {
     private val log = LoggerFactory.getLogger(WalletImporter::class.java)
 

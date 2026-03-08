@@ -9,48 +9,21 @@ import org.bitcoinj.crypto.HDKeyDerivation
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
-/**
- * Derives Bitcoin addresses from output descriptors using BitcoinJ.
- *
- * Supported descriptor types:
- * - `wpkh([fp/84h/0h/0h]xpub.../0/star)` -> P2WPKH (Native SegWit, bc1q...)
- * - `tr([fp/86h/0h/0h]xpub.../0/star)` -> P2TR (Taproot, bc1p...) -- limited
- * - `wsh(sortedmulti(M,[fp/48h/0h/0h/2h]xpub.../0/star,...))` -> P2WSH (multisig, bc1q...)
- * - `wsh(multi(M,...))` -> P2WSH (multisig, unsorted)
- *
- * Uses BIP-32 hierarchical deterministic key derivation:
- *   xpub (account level) -> /chain/index -> public key -> address
- *   chain = 0 (receive), 1 (change)
- */
 object AddressDerivation {
 
     private val log = LoggerFactory.getLogger(AddressDerivation::class.java)
 
-    /** Regex to extract xpub/tpub from a descriptor string. */
     private val XPUB_RE = Regex("""([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})""")
-
-    /** Regex to extract M from multi(M, ...) or sortedmulti(M, ...) */
     private val MULTI_M_RE = Regex("""(?:sorted)?multi\((\d+)\s*,""")
-
-    /**
-     * Default number of receive + change addresses to derive for a new wallet.
-     * BIP-44 gap limit is 20; we pre-derive that many.
-     */
+    // TODO: if we run out of 20, generate more
     const val DEFAULT_GAP_LIMIT = 20
 
-    // ------------------------------------------------------------------
-    // Public API
-    // ------------------------------------------------------------------
-
-    /**
-     * Derive a batch of addresses from a descriptor.
-     *
-     * @param descriptor  Output descriptor, e.g. "wpkh([fp/84h/0h/0h]xpub.../0/star)"
-     * @param network     "mainnet" or "testnet"
-     * @param chain       0 = receive, 1 = change
-     * @param fromIndex   first child index (inclusive)
-     * @param count       how many addresses to derive
-     * @return list of (index, address) pairs
+    /*
+     * Derives a batch of Bitcoin addresses from a descriptor string.
+     * Entry point for all address derivation in wallet-registry.
+     * Called by Repository when creating a wallet (20 receive + 20 change)
+     * and by Routes POST /registry/derive-addresses for account discovery.
+     * Detects singlesig vs multisig from the descriptor and delegates accordingly.
      */
     fun deriveAddresses(
         descriptor: String,
@@ -72,22 +45,11 @@ object AddressDerivation {
         }
     }
 
-    /**
-     * Convenience: derive a single address.
+    /*
+     * Derives singlesig (one-key) P2WPKH/P2TR addresses.
+     * Uses BitcoinJ BIP-32 derivation: xpub -> chain key (0=receive, 1=change) -> child key -> address.
+     * Returns a list of (index, address) pairs for the requested range.
      */
-    fun deriveAddress(
-        descriptor: String,
-        network: String,
-        chain: Int = 0,
-        index: Int = 0
-    ): String =
-        deriveAddresses(descriptor, network, chain, index, count = 1)
-            .first().address
-
-    // ------------------------------------------------------------------
-    // Single-sig derivation (P2WPKH, P2TR)
-    // ------------------------------------------------------------------
-
     private fun deriveSinglesigAddresses(
         descriptor: String,
         btcNetwork: BitcoinNetwork,
@@ -114,19 +76,16 @@ object AddressDerivation {
         }
     }
 
-    // ------------------------------------------------------------------
-    // Multisig P2WSH derivation
-    // ------------------------------------------------------------------
-
-    /**
-     * Derives P2WSH multisig addresses.
+    /*
+     * Derives P2WSH multisig addresses from a descriptor like:
+     *   wsh(sortedmulti(2,[fp1/48'/1'/0'/2']tpub1.../0/wildcard,[fp2/...]tpub2.../0/wildcard,...))
      *
      * For each address index:
      * 1. Derive child pubkey from each cosigner's xpub at chain/index
-     * 2. Sort pubkeys lexicographically (BIP-67, for sortedmulti)
-     * 3. Build witness script: OP_M <pubkey1> <pubkey2> ... <pubkeyN> OP_N OP_CHECKMULTISIG
-     * 4. SHA256 hash the witness script → 32-byte witness program
-     * 5. Encode as bech32 P2WSH address (bc1q... 62 chars)
+     * 2. BIP-67 sort pubkeys lexicographically (so all devices get the same order)
+     * 3. Build witness script: OP_M <pubkey1> ... <pubkeyN> OP_N OP_CHECKMULTISIG
+     * 4. SHA256 hash the witness script -> 32-byte witness program
+     * 5. Bech32 encode -> tb1q.../bc1q... address (62 chars)
      */
     private fun deriveMultisigAddresses(
         descriptor: String,
@@ -136,13 +95,11 @@ object AddressDerivation {
         fromIndex: Int,
         count: Int
     ): List<DerivedAddress> {
-        // Extract M from descriptor
         val mMatch = MULTI_M_RE.find(descriptor)
             ?: throw IllegalArgumentException("Cannot find M in multi(): ${descriptor.take(60)}")
         val m = mMatch.groupValues[1].toInt()
         val isSorted = descriptor.contains("sortedmulti(")
 
-        // Extract all xpubs
         val xpubs = XPUB_RE.findAll(descriptor).map { it.value }.toList()
         if (xpubs.isEmpty()) {
             throw IllegalArgumentException("No xpubs found in multisig descriptor")
@@ -154,12 +111,11 @@ object AddressDerivation {
             count, m, n, isSorted, chain, fromIndex, fromIndex + count
         )
 
-        // Parse all account-level keys
         val accountKeys = xpubs.map { xpub ->
             DeterministicKey.deserializeB58(xpub, btcNetwork)
         }
 
-        // Derive chain-level keys (once per cosigner)
+        // Derive chain-level keys once per cosigner (not per index)
         val chainKeys = accountKeys.map { key ->
             HDKeyDerivation.deriveChildKey(key, chain)
         }
@@ -173,56 +129,52 @@ object AddressDerivation {
                 childKey.pubKey // compressed 33-byte pubkey
             }
 
-            // BIP-67: sort pubkeys lexicographically
+            // BIP-67: sort pubkeys so all devices derive the same address
             val orderedPubkeys = if (isSorted) {
                 childPubkeys.sortedWith(compareBy<ByteArray> { it.size }.thenBy { it.toHex() })
             } else {
                 childPubkeys
             }
 
-            // Build witness script: OP_M <pubkey1> ... <pubkeyN> OP_N OP_CHECKMULTISIG
+            // Build witness script: OP_M <pk1> ... <pkN> OP_N OP_CHECKMULTISIG
             val witnessScript = buildMultisigWitnessScript(m, orderedPubkeys)
 
-            // P2WSH: SHA256(witnessScript) → 32-byte witness program
+            // P2WSH = SHA256(witnessScript) encoded as bech32
             val sha256 = MessageDigest.getInstance("SHA-256").digest(witnessScript)
-
-            // Bech32 encode: witness version 0 + 32-byte program
             val addr = segwitToBech32(hrp, 0, sha256)
 
             DerivedAddress(index = idx, address = addr)
         }
     }
 
-    /**
-     * Build the multisig witness script bytes:
-     *   OP_M <pubkey1_push> <pubkey1> ... <pubkeyN_push> <pubkeyN> OP_N OP_CHECKMULTISIG
+    /*
+     * Builds the raw multisig witness script (Bitcoin Script bytecode).
+     * Format: OP_M <push><pubkey1> ... <push><pubkeyN> OP_N OP_CHECKMULTISIG
+     * This bytecode defines the spending rules for the multisig address.
      */
     private fun buildMultisigWitnessScript(m: Int, pubkeys: List<ByteArray>): ByteArray {
         val n = pubkeys.size
         val buf = mutableListOf<Byte>()
 
-        // OP_M (OP_1 = 0x51, OP_2 = 0x52, ..., OP_16 = 0x60)
-        buf.add((0x50 + m).toByte())
+        buf.add((0x50 + m).toByte()) // OP_M (OP_1=0x51, OP_2=0x52, ...)
 
-        // Push each pubkey (33 bytes = 0x21 push)
         for (pk in pubkeys) {
-            buf.add(pk.size.toByte())
+            buf.add(pk.size.toByte()) // push 33 bytes (0x21)
             buf.addAll(pk.toList())
         }
 
-        // OP_N
-        buf.add((0x50 + n).toByte())
-
-        // OP_CHECKMULTISIG
-        buf.add(0xAE.toByte())
+        buf.add((0x50 + n).toByte()) // OP_N
+        buf.add(0xAE.toByte()) // OP_CHECKMULTISIG
 
         return buf.toByteArray()
     }
 
-    // ------------------------------------------------------------------
-    // Internals
-    // ------------------------------------------------------------------
-
+    /*
+     * Converts a BIP-32 child key to a Bitcoin address string.
+     * Uses BitcoinJ's built-in encoding for P2WPKH.
+     * P2TR (Taproot) is not supported by the current BitcoinJ version.
+     * P2WSH multisig uses a separate path (deriveMultisigAddresses).
+     */
     private fun toAddress(
         key: DeterministicKey,
         scriptType: DescriptorType,
@@ -236,8 +188,8 @@ object AddressDerivation {
                 key.toAddress(ScriptType.P2TR, network).toString()
             } catch (e: Exception) {
                 throw UnsupportedOperationException(
-                    "P2TR (Taproot) adresy nejsou podporovány aktuální verzí BitcoinJ. " +
-                    "Použij P2WPKH (wpkh) nebo P2WSH (wsh) descriptor.", e
+                    "P2TR (Taproot) addresses are not supported by the current BitcoinJ version. " +
+                    "Use P2WPKH (wpkh) or P2WSH (wsh) descriptor instead.", e
                 )
             }
 
@@ -245,9 +197,11 @@ object AddressDerivation {
             throw IllegalStateException("P2WSH_MULTISIG should use deriveMultisigAddresses()")
     }
 
+    /* Extracts the first xpub/tpub base58 string from a descriptor. */
     private fun extractXpub(descriptor: String): String? =
         XPUB_RE.find(descriptor)?.value
 
+    /* Detects script type from the descriptor prefix (wpkh/wsh/tr). */
     private fun detectScriptType(descriptor: String): DescriptorType = when {
         (descriptor.contains("wsh(") && descriptor.contains("multi(")) -> DescriptorType.P2WSH_MULTISIG
         descriptor.startsWith("wpkh(") || descriptor.contains("wpkh(") -> DescriptorType.P2WPKH
@@ -258,25 +212,23 @@ object AddressDerivation {
         }
     }
 
+    /* Maps "mainnet"/"testnet" string to BitcoinJ network constant. */
     private fun bitcoinNetwork(network: String): BitcoinNetwork = when (network.lowercase()) {
         "mainnet", "bitcoin" -> BitcoinNetwork.MAINNET
         else -> BitcoinNetwork.TESTNET
     }
 
+    /* Converts byte array to hex string (used for BIP-67 pubkey sorting). */
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    // ------------------------------------------------------------------
-    // Manual bech32 encoding (BitcoinJ 0.17 has no segwitToBech32 method)
-    // ------------------------------------------------------------------
+    // --- Bech32 encoding (BitcoinJ 0.17 lacks a public segwitToBech32 method) ---
 
     private val BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 
+    /* Encodes a SegWit witness program as a bech32 address (tb1q.../bc1q...). */
     private fun segwitToBech32(hrp: String, witnessVersion: Int, program: ByteArray): String {
-        // Convert 8-bit witness program to 5-bit groups
         val data = convertBits8to5(program)
-        // Prepend witness version
         val payload = intArrayOf(witnessVersion) + data
-        // Compute bech32 checksum
         val checksum = createBech32Checksum(hrp, payload)
         val sb = StringBuilder(hrp.length + 1 + payload.size + checksum.size)
         sb.append(hrp).append('1')
@@ -285,6 +237,7 @@ object AddressDerivation {
         return sb.toString()
     }
 
+    /* Converts 8-bit bytes to 5-bit groups for bech32 base-32 encoding. */
     private fun convertBits8to5(data: ByteArray): IntArray {
         var acc = 0
         var bits = 0
@@ -303,6 +256,7 @@ object AddressDerivation {
         return result.toIntArray()
     }
 
+    /* Bech32 polynomial modular checksum (BIP-173 spec). */
     private fun bech32Polymod(values: IntArray): Int {
         val gen = intArrayOf(0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3)
         var chk = 1
@@ -316,14 +270,15 @@ object AddressDerivation {
         return chk
     }
 
+    /* Expands the human-readable part ("bc"/"tb") for checksum calculation. */
     private fun bech32HrpExpand(hrp: String): IntArray {
         val result = IntArray(hrp.length * 2 + 1)
         for (i in hrp.indices) result[i] = hrp[i].code shr 5
-        // result[hrp.length] = 0 (separator)
         for (i in hrp.indices) result[hrp.length + 1 + i] = hrp[i].code and 31
         return result
     }
 
+    /* Computes the 6-value bech32 checksum for address verification. */
     private fun createBech32Checksum(hrp: String, data: IntArray): IntArray {
         val values = bech32HrpExpand(hrp) + data + intArrayOf(0, 0, 0, 0, 0, 0)
         val polymod = bech32Polymod(values) xor 1

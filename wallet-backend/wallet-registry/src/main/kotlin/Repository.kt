@@ -7,10 +7,11 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 
-class RegistryRepository {
+class Repository {
 
-    private val log = LoggerFactory.getLogger(RegistryRepository::class.java)
+    private val log = LoggerFactory.getLogger(Repository::class.java)
 
+    /* Upsert: creates device if new, updates if exists. Called on every login. */
     fun upsertDevice(req: UpsertDeviceRequest): DeviceResponse = transaction {
         val existing = DevicesTable
             .selectAll()
@@ -41,6 +42,7 @@ class RegistryRepository {
         )
     }
 
+    /* Creates wallet + cosigners + members + derives addresses. Idempotent. */
     fun createWallet(req: CreateWalletRequest): WalletDetail = transaction {
         if (req.type == "MULTI_SIG") {
             require(req.m != null && req.n != null) { "MULTI_SIG requires m and n" }
@@ -71,7 +73,7 @@ class RegistryRepository {
             it[createdAt] = OffsetDateTime.now()
         }
 
-        // cosigners (multisig)
+        // Cosigners: insert into cosigners table (if new) + wallet_cosigners (linking with order)
         req.cosigners.forEach { c ->
             val exists = CosignersTable
                 .selectAll()
@@ -104,13 +106,14 @@ class RegistryRepository {
             }
         }
 
-        // Derive and store receive + change addresses
+        // Derive and store receive + change addresses (default 20 each)
         deriveAndStoreAddresses(req.walletId, req.receiveDescriptor, req.network, "receive")
         deriveAndStoreAddresses(req.walletId, req.changeDescriptor, req.network, "change")
 
         getWallet(req.walletId) ?: error("Wallet insert failed")
     }
 
+    /* Attaches a device as member of an existing wallet. insertIgnore skips duplicates. */
     fun attachMember(walletId: String, deviceId: String, accountIndex: Int = -1, label: String? = null) = transaction {
         WalletMembersTable.insertIgnore {
             it[WalletMembersTable.walletId] = walletId
@@ -121,6 +124,7 @@ class RegistryRepository {
         }
     }
 
+    /* Lists wallets for a device. JOINs wallets + wallet_members. */
     fun listWalletsForDevice(deviceId: String): List<WalletSummary> = transaction {
         val rows = (WalletsTable innerJoin WalletMembersTable)
             .select(
@@ -140,16 +144,15 @@ class RegistryRepository {
         val result = rows.map { row ->
             val memberAccountIndex = row[WalletMembersTable.accountIndex]
 
-            // For multisig: use the member's account_index directly.
-            // -1 means unknown → null (show on all accounts as fallback).
-            // For singlesig: use the wallet's own account_index.
+            // Singlesig: account index from wallets table.
+            // Multisig: account index from wallet_members (which account imported it).
+            // -1 = unknown → null (show on all accounts).
             val resolvedAccountIndex = if (row[WalletsTable.type] == "MULTI_SIG") {
                 if (memberAccountIndex >= 0) memberAccountIndex else null
             } else {
                 row[WalletsTable.accountIndex]
             }
 
-            // Prefer per-member label over global wallet label
             val resolvedLabel = row[WalletMembersTable.label] ?: row[WalletsTable.label]
 
             WalletSummary(
@@ -168,6 +171,7 @@ class RegistryRepository {
         result
     }
 
+    /* Full wallet detail with cosigners and members. Used by psbt-service for PSBT building. */
     fun getWallet(walletId: String): WalletDetail? = transaction {
         val w = WalletsTable
             .selectAll()
@@ -221,11 +225,7 @@ class RegistryRepository {
         )
     }
 
-    // ---- Address derivation & storage ----
-
-    /**
-     * Derives addresses from a descriptor and stores them in wallet_addresses.
-     */
+    /* Derives addresses from a descriptor and stores them in wallet_addresses table. */
     private fun deriveAndStoreAddresses(
         walletId: String,
         descriptor: String,
@@ -257,9 +257,7 @@ class RegistryRepository {
         }
     }
 
-    /**
-     * Returns all stored addresses for a wallet.
-     */
+    /* Returns all stored addresses for a wallet, optionally filtered by type (receive/change). */
     fun getAddresses(
         walletId: String,
         type: String? = null
@@ -284,9 +282,7 @@ class RegistryRepository {
             }
     }
 
-    /**
-     * Returns a single address by wallet, type and index.
-     */
+    /* Returns a single address by wallet, type, and index. */
     fun getAddress(
         walletId: String,
         type: String = "receive",

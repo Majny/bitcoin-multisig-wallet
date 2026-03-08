@@ -47,11 +47,25 @@ CREATE TABLE IF NOT EXISTS wallet_cosigners (
 
 -- ===== wallet_members =====
 CREATE TABLE IF NOT EXISTS wallet_members (
-  wallet_id     TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
-  device_id     TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
-  cosigner_idx  INT,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
-  PRIMARY KEY(wallet_id, device_id)
+  wallet_id       TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
+  device_id       TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  account_index   INT NOT NULL DEFAULT -1,
+  label           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (wallet_id, device_id, account_index)
 );
 
 CREATE INDEX IF NOT EXISTS wallet_members_device_idx ON wallet_members(device_id);
+
+-- ===== wallet_addresses =====
+CREATE TABLE IF NOT EXISTS wallet_addresses (
+  wallet_id       TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
+  address_type    TEXT NOT NULL,           -- 'receive' or 'change'
+  address_index   INT  NOT NULL,           -- BIP-32 child index (0, 1, 2, ...)
+  address         TEXT NOT NULL,           -- derived Bitcoin address (bc1q..., tb1q..., etc.)
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (wallet_id, address_type, address_index)
+);
+
+CREATE INDEX IF NOT EXISTS wallet_addresses_address_idx ON wallet_addresses(address);
+CREATE INDEX IF NOT EXISTS wallet_addresses_wallet_idx  ON wallet_addresses(wallet_id);

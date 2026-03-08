@@ -18,7 +18,7 @@ data class ImportWalletRequest(
     /** Raw output descriptor string (required) */
     val descriptor: String,
 
-    /** Network: "mainnet" or "testnet" (default: "mainnet") */
+    /** Network: "mainnet" or "testnet" */
     val network: String = "mainnet",
 
     /** Optional label for the wallet */

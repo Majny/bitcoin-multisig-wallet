@@ -8,7 +8,7 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-fun Application.configureRegistryRoutes(repo: RegistryRepository) {
+fun Application.configureRoutes(repo: Repository) {
 
     val importer = WalletImporter(repo)
 
@@ -17,11 +17,10 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
 
         route("/registry") {
 
-            /**
+            /*
              * POST /registry/derive-addresses
-             *
              * Derives addresses from a descriptor without creating a wallet.
-             * Used by api-gateway for account discovery (checking blockchain activity).
+             * Called by api-gateway during login for account discovery.
              */
             post("/derive-addresses") {
                 try {
@@ -39,12 +38,22 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 }
             }
 
+            /*
+             * POST /registry/devices
+             * Registers or updates a Trezor device. Called by api-gateway on every login.
+             */
             post("/devices") {
                 val req = call.receive<UpsertDeviceRequest>()
                 val out = repo.upsertDevice(req)
                 call.respond(out)
             }
 
+            /*
+             * POST /registry/wallets
+             * Creates a new wallet (singlesig or multisig) with cosigners, members, and derived addresses.
+             * Idempotent — returns existing wallet if wallet_id already exists.
+             * Called by api-gateway during login (singlesig) or wallet creation.
+             */
             post("/wallets") {
                 try {
                     val req = call.receive<CreateWalletRequest>()
@@ -55,15 +64,12 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 }
             }
 
-            /**
+            /*
              * POST /registry/wallets/import
-             *
-             * Import a wallet from an output descriptor string.
-             * Supports single-sig and multisig descriptors.
-             * Auto-attaches the calling device if its fingerprint matches a cosigner.
-             *
-             * Body: ImportWalletRequest { descriptor, network?, label?, deviceId?, deviceFingerprint? }
-             * Response: ImportResult { success, walletId, isNew, error?, wallet? }
+             * Imports a wallet from an output descriptor string (e.g., from Sparrow Wallet).
+             * Parses descriptor, creates wallet + cosigners, derives addresses.
+             * If wallet already exists, auto-attaches the calling device as member.
+             * Called by api-gateway when user imports a multisig descriptor.
              */
             post("/wallets/import") {
                 val log = application.log
@@ -94,12 +100,22 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 }
             }
 
+            /*
+             * GET /registry/wallets?device_id=xxx
+             * Lists all wallets accessible by the given device.
+             * Called by api-gateway on login and dashboard load.
+             */
             get("/wallets") {
                 val deviceId = call.request.queryParameters["device_id"]
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing device_id"))
                 call.respond(repo.listWalletsForDevice(deviceId))
             }
 
+            /*
+             * GET /registry/wallets/{id}
+             * Returns full wallet detail (cosigners, members, descriptors).
+             * Called by api-gateway and psbt-service.
+             */
             get("/wallets/{id}") {
                 val id = call.parameters["id"]
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
@@ -108,6 +124,11 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 call.respond(w)
             }
 
+            /*
+             * POST /registry/wallets/{id}/members/attach
+             * Attaches a device as a member of an existing wallet.
+             * Called by api-gateway during login for multisig wallets.
+             */
             post("/wallets/{id}/members/attach") {
                 val id = call.parameters["id"]
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
@@ -116,17 +137,15 @@ fun Application.configureRegistryRoutes(repo: RegistryRepository) {
                 call.respondText("ok")
             }
 
-            /**
+            /*
              * GET /registry/wallets/{id}/addresses?type=receive&index=0
-             *
-             * Returns derived addresses for a wallet.
-             * - type: "receive" or "change" (optional, returns both if omitted)
-             * - index: specific address index (optional, returns all if omitted)
+             * Returns pre-derived Bitcoin addresses for a wallet.
+             * Called by api-gateway when frontend needs a receive address.
              */
             get("/wallets/{id}/addresses") {
                 val id = call.parameters["id"]
                     ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
-                val type = call.request.queryParameters["type"]   // "receive" or "change"
+                val type = call.request.queryParameters["type"]
                 val index = call.request.queryParameters["index"]?.toIntOrNull()
 
                 if (index != null) {

@@ -3,6 +3,7 @@ package cz.majny.wallet.registry.schema
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 
+/* Registered Trezor devices. */
 object DevicesTable : Table("devices") {
     val deviceId = text("device_id")
     val fingerprint = text("fingerprint")
@@ -12,11 +13,12 @@ object DevicesTable : Table("devices") {
     override val primaryKey = PrimaryKey(deviceId)
 }
 
+/* Wallets (singlesig and multisig). */
 object WalletsTable : Table("wallets") {
     val walletId = text("wallet_id")
     val network = text("network")
     val type = text("type")              // SINGLE_SIG / MULTI_SIG
-    val scriptType = text("script_type") // WPKH/TR/WSH/SH_WSH...
+    val scriptType = text("script_type") // WPKH / WSH
     val m = integer("m").nullable()
     val n = integer("n").nullable()
     val accountIndex = integer("account_index")
@@ -28,6 +30,7 @@ object WalletsTable : Table("wallets") {
     override val primaryKey = PrimaryKey(walletId)
 }
 
+/* Cosigners — one xpub at a specific derivation path. */
 object CosignersTable : Table("cosigners") {
     val cosignerId = text("cosigner_id")
     val fingerprint = text("fingerprint")
@@ -37,6 +40,7 @@ object CosignersTable : Table("cosigners") {
     override val primaryKey = PrimaryKey(cosignerId)
 }
 
+/* Links cosigners to wallets with their position (idx = 0, 1, 2). */
 object WalletCosignersTable : Table("wallet_cosigners") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
     val idx = integer("idx")
@@ -44,15 +48,17 @@ object WalletCosignersTable : Table("wallet_cosigners") {
     override val primaryKey = PrimaryKey(walletId, idx)
 }
 
+/* Links devices to wallets. account_index tracks which BIP-48 account imported it. */
 object WalletMembersTable : Table("wallet_members") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
     val deviceId = text("device_id").references(DevicesTable.deviceId)
-    val accountIndex = integer("account_index").default(-1)  // -1 = singlesig / unknown
+    val accountIndex = integer("account_index").default(-1)
     val label = text("label").nullable()
     val createdAt = timestampWithTimeZone("created_at")
     override val primaryKey = PrimaryKey(walletId, deviceId, accountIndex)
 }
 
+/* Pre-derived Bitcoin addresses (20 receive + 20 change per wallet). */
 object WalletAddressesTable : Table("wallet_addresses") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
     val addressType = text("address_type")   // "receive" or "change"
