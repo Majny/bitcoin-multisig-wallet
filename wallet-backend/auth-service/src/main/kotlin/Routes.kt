@@ -83,7 +83,6 @@ fun Application.configureAuthRoutes(
                 val access = jwt.issueAccessToken(deviceId, req.fingerprint)
                 val refresh = refreshStore.issue(deviceId, req.fingerprint)
 
-                // TODO: remove wallet
                 call.respond(
                     TrezorLoginResponse(
                         accessToken = access,
@@ -92,14 +91,7 @@ fun Application.configureAuthRoutes(
                             id = "user-$deviceId",
                             displayName = "User",
                             trezorFingerprint = req.fingerprint,
-                            wallets = listOf(
-                                WalletSummarySerializable(
-                                    id = "wallet-1",
-                                    label = "My First Wallet",
-                                    type = "SINGLE_SIG",
-                                    balanceSats = 0L
-                                )
-                            )
+                            wallets = emptyList()
                         )
                     )
                 )

@@ -25,7 +25,7 @@ class RefreshStore(
 
     /**
      * Rotation of refresh token:
-     * - get (deviceId, fp, newRefreshToken)
+     * (deviceId, fp, newRefreshToken)
      */
     fun rotate(oldToken: String): Triple<String, String?, String>? {
         val entry = map[oldToken] ?: return null

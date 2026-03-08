@@ -1,23 +1,37 @@
-# wallet
+# Bitcoin Wallet Backend
 
-This project uses [Gradle](https://gradle.org/).
-To build and run the application, use the *Gradle* tool window by clicking the Gradle icon in the right-hand toolbar,
-or run it directly from the terminal:
+Microservice backend for a Bitcoin wallet with singlesig (P2WPKH) and multisig (P2WSH) support. Uses Trezor hardware wallet for signing.
 
-* Run `./gradlew run` to build and run the application.
-* Run `./gradlew build` to only build the application.
-* Run `./gradlew check` to run all checks, including tests.
-* Run `./gradlew clean` to clean all build outputs.
+See [docs/architecture.md](docs/architecture.md) for full architecture documentation.
 
-Note the usage of the Gradle Wrapper (`./gradlew`).
-This is the suggested way to use Gradle in production projects.
+## Quick Start
 
-[Learn more about the Gradle Wrapper](https://docs.gradle.org/current/userguide/gradle_wrapper.html).
+```bash
+docker-compose up --build
+```
 
-[Learn more about Gradle tasks](https://docs.gradle.org/current/userguide/command_line_interface.html#common_tasks).
+API gateway runs on `http://localhost:8080`.
 
-This project follows the suggested multi-module setup and consists of the `app` and `utils` subprojects.
-The shared build logic was extracted to a convention plugin located in `buildSrc`.
+## Services
 
-This project uses a version catalog (see `gradle/libs.versions.toml`) to declare and version dependencies
-and both a build cache and a configuration cache (see `gradle.properties`).
+| Service | Port | Description |
+|---------|------|-------------|
+| api-gateway | 8080 | Entry point, JWT auth, routing |
+| auth-service | 8081 | JWT token issuance (RS256) |
+| wallet-registry | 8082 | Wallet/address management |
+| explorer-service | 8083 | Balance, transactions, UTXOs |
+| psbt-service | 8085 | PSBT creation, signing, broadcast |
+| blockchain-service | 8086 | Proxy to Blockstream/Mempool APIs |
+| price-service | 8087 | BTC price from CoinGecko |
+| postgres | 5432 | PostgreSQL 16 database |
+
+## Build
+
+```bash
+./gradlew build          # build all modules
+./gradlew :auth-service:run   # run single service locally
+```
+
+## Tech Stack
+
+Kotlin, Ktor, PostgreSQL, Exposed, Flyway, bitcoinj, Docker

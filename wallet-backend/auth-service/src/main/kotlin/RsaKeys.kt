@@ -19,13 +19,6 @@ data class RsaKeyMaterial(
 
 object RsaKeys {
 
-    /**
-     * PRODUCT PHASE
-     * - JWT_RSA_PRIVATE_PEM and JWT_RSA_PUBLIC_PEM via ENV
-     *
-     * DEV PHASE
-     * JWT_DEV_ALLOW_GENERATE_KEYS=true
-     */
     fun fromEnvOrGenerate(): RsaKeyMaterial {
         val kid = System.getenv("JWT_KID") ?: "dev-kid"
         val privPem = System.getenv("JWT_RSA_PRIVATE_PEM")
