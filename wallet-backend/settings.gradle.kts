@@ -25,8 +25,6 @@ plugins {
 
 rootProject.name = "wallet"
 
-include(":app")
-include(":utils")
 include(":api-gateway")
 include(":auth-service")
 
