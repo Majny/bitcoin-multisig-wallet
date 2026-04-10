@@ -31,10 +31,35 @@ object TrezorParamsBuilder {
     ): TrezorConnectParams? {
         val coin = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin")) "Bitcoin" else "Testnet"
 
-        // Build reference transactions (raw tx hex for Trezor to verify input amounts)
+        // Build reference transactions in structured format for Trezor Connect.
+        // Trezor Connect deeplink does NOT support tx_hex — needs parsed fields.
         val refTxs = utxos.mapNotNull { utxo ->
             val hex = utxo.rawTxHex ?: return@mapNotNull null
-            TrezorConnectRefTx(hash = utxo.txid, tx_hex = hex)
+            try {
+                val parsed = PsbtEncoding.parseRawTransaction(hex)
+                TrezorConnectRefTx(
+                    hash = utxo.txid,
+                    version = parsed.version,
+                    lock_time = parsed.lockTime,
+                    inputs = parsed.inputs.map { inp ->
+                        TrezorConnectRefTxInput(
+                            prev_hash = inp.prevHash,
+                            prev_index = inp.prevIndex,
+                            script_sig = inp.scriptSig,
+                            sequence = inp.sequence
+                        )
+                    },
+                    bin_outputs = parsed.outputs.map { out ->
+                        TrezorConnectRefTxBinOutput(
+                            amount = out.amount,
+                            script_pubkey = out.scriptPubKey
+                        )
+                    }
+                )
+            } catch (e: Exception) {
+                log.warn("Failed to parse raw tx {} for refTx: {}", utxo.txid, e.message)
+                null
+            }
         }.distinctBy { it.hash }.ifEmpty { null }
 
         if (refTxs == null) {

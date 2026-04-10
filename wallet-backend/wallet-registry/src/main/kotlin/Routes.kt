@@ -25,6 +25,10 @@ fun Application.configureRoutes(repo: Repository) {
             post("/derive-addresses") {
                 try {
                     val req = call.receive<DeriveAddressesRequest>()
+                    if (req.count < 1 || req.count > 100) {
+                        call.respond(HttpStatusCode.BadRequest, ErrorResponse("count must be between 1 and 100, got ${req.count}"))
+                        return@post
+                    }
                     val derived = AddressDerivation.deriveAddresses(
                         descriptor = req.descriptor,
                         network = req.network,
@@ -36,16 +40,6 @@ fun Application.configureRoutes(repo: Repository) {
                 } catch (e: Exception) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "derivation failed"))
                 }
-            }
-
-            /*
-             * POST /registry/devices
-             * Registers or updates a Trezor device. Called by api-gateway on every login.
-             */
-            post("/devices") {
-                val req = call.receive<UpsertDeviceRequest>()
-                val out = repo.upsertDevice(req)
-                call.respond(out)
             }
 
             /*
@@ -61,6 +55,11 @@ fun Application.configureRoutes(repo: Repository) {
                     call.respond(created)
                 } catch (e: IllegalArgumentException) {
                     call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "bad request"))
+                } catch (e: UnsupportedOperationException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "unsupported operation"))
+                } catch (e: Exception) {
+                    application.log.error("Failed to create wallet: ${e.message}", e)
+                    call.respond(HttpStatusCode.InternalServerError, ErrorResponse(e.message ?: "internal error"))
                 }
             }
 

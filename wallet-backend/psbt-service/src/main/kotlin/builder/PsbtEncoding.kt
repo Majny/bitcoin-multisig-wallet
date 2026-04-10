@@ -60,10 +60,13 @@ object PsbtEncoding {
 
     /* Converts a hex string to a byte array. */
     fun hexToBytes(hex: String): ByteArray {
+        require(hex.length % 2 == 0) { "Hex string must have even length, got ${hex.length}" }
         val data = ByteArray(hex.length / 2)
         for (i in data.indices) {
-            data[i] = ((Character.digit(hex[2 * i], 16) shl 4) +
-                    Character.digit(hex[2 * i + 1], 16)).toByte()
+            val hi = Character.digit(hex[2 * i], 16)
+            val lo = Character.digit(hex[2 * i + 1], 16)
+            require(hi >= 0 && lo >= 0) { "Invalid hex character at position ${2 * i}" }
+            data[i] = ((hi shl 4) + lo).toByte()
         }
         return data
     }
@@ -95,9 +98,21 @@ object PsbtEncoding {
             val decoded = bech32Decode(address)
             byteArrayOf(0x51, 0x20) + decoded  // P2TR: OP_1 <32 bytes>
         }
+        // P2PKH: mainnet (1...) or testnet (m.../n...)
+        address.startsWith("1") || address.startsWith("m") || address.startsWith("n") -> {
+            val hash = base58CheckDecode(address)
+            // OP_DUP OP_HASH160 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG
+            byteArrayOf(0x76.toByte(), 0xa9.toByte(), 0x14) + hash +
+                    byteArrayOf(0x88.toByte(), 0xac.toByte())
+        }
+        // P2SH: mainnet (3...) or testnet (2...)
+        address.startsWith("3") || address.startsWith("2") -> {
+            val hash = base58CheckDecode(address)
+            // OP_HASH160 <20 bytes> OP_EQUAL
+            byteArrayOf(0xa9.toByte(), 0x14) + hash + byteArrayOf(0x87.toByte())
+        }
         else -> {
-            log.warn("Unknown address format: {}", address)
-            ByteArray(0)
+            throw IllegalArgumentException("Unsupported address format: $address")
         }
     }
 
@@ -169,10 +184,43 @@ object PsbtEncoding {
     /* Decodes a bech32/bech32m address to its witness program bytes. */
     fun bech32Decode(address: String): ByteArray {
         val charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
-        val hrpEnd = address.lastIndexOf('1')
-        val data = address.substring(hrpEnd + 1).dropLast(6).drop(1)
-        val values = data.map { charset.indexOf(it) }
+        val lower = address.lowercase()
+        val hrpEnd = lower.lastIndexOf('1')
+        require(hrpEnd >= 1) { "Invalid bech32 address: no separator" }
+        val dataPart = lower.substring(hrpEnd + 1)
+        require(dataPart.length >= 7) { "Invalid bech32 address: data part too short" }
+        // Drop witness version (first char) and checksum (last 6 chars)
+        val data = dataPart.drop(1).dropLast(6)
+        val values = data.map { c ->
+            val idx = charset.indexOf(c)
+            require(idx >= 0) { "Invalid bech32 character: '$c' in address $address" }
+            idx
+        }
         return convertBits(values, 5, 8)
+    }
+
+    // ========== Base58Check Decoding ==========
+
+    private const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+
+    /* Decodes a Base58Check-encoded address and returns the 20-byte payload hash.
+     * Strips the version byte (first) and checksum (last 4 bytes). */
+    fun base58CheckDecode(address: String): ByteArray {
+        var num = java.math.BigInteger.ZERO
+        val base = java.math.BigInteger.valueOf(58)
+        for (c in address) {
+            val digit = BASE58_ALPHABET.indexOf(c)
+            require(digit >= 0) { "Invalid Base58 character: '$c' in address $address" }
+            num = num.multiply(base).add(java.math.BigInteger.valueOf(digit.toLong()))
+        }
+        // Convert to 25 bytes (1 version + 20 payload + 4 checksum)
+        val bytes = num.toByteArray()
+        // BigInteger may add a leading zero byte for positive sign
+        val padded = if (bytes.size < 25) ByteArray(25 - bytes.size) + bytes
+                     else if (bytes.size > 25) bytes.takeLast(25).toByteArray()
+                     else bytes
+        // Return bytes 1..20 (skip version byte, drop 4-byte checksum)
+        return padded.sliceArray(1..20)
     }
 
     /* Converts between bit groups (e.g. 5-bit bech32 values to 8-bit bytes). */
@@ -190,6 +238,108 @@ object PsbtEncoding {
             }
         }
         return result.toByteArray()
+    }
+
+    // ========== Raw Transaction Parsing ==========
+
+    data class ParsedRawTx(
+        val version: Int,
+        val inputs: List<ParsedTxInput>,
+        val outputs: List<ParsedTxOutput>,
+        val lockTime: Int
+    )
+
+    data class ParsedTxInput(
+        val prevHash: String,   // txid hex (big-endian display order)
+        val prevIndex: Long,
+        val scriptSig: String,  // hex
+        val sequence: Long
+    )
+
+    data class ParsedTxOutput(
+        val amount: Long,
+        val scriptPubKey: String // hex
+    )
+
+    /*
+     * Parses a raw Bitcoin transaction hex (segwit or legacy) into structured fields.
+     * For segwit transactions, skips the witness marker/flag and witness data.
+     * Used to build Trezor Connect refTxs in structured format.
+     */
+    fun parseRawTransaction(hex: String): ParsedRawTx {
+        val data = hexToBytes(hex)
+        var pos = 0
+
+        // Version (4 bytes LE)
+        val version = readUint32LE(data, pos).toInt()
+        pos += 4
+
+        // Detect segwit marker (0x00 0x01)
+        val isSegwit = data.size > pos + 1 && data[pos] == 0x00.toByte() && data[pos + 1] == 0x01.toByte()
+        if (isSegwit) pos += 2
+
+        // Inputs
+        val (inputCount, p1) = readCompactSize(data, pos)
+        pos = p1
+        val inputs = mutableListOf<ParsedTxInput>()
+        for (i in 0 until inputCount.toInt()) {
+            // prev_hash (32 bytes, stored LE in tx, display as BE)
+            val prevHashBytes = data.sliceArray(pos until pos + 32).reversedArray()
+            val prevHash = bytesToHex(prevHashBytes)
+            pos += 32
+
+            val prevIndex = readUint32LE(data, pos)
+            pos += 4
+
+            val (scriptLen, p2) = readCompactSize(data, pos)
+            pos = p2
+            val scriptSig = bytesToHex(data.sliceArray(pos until pos + scriptLen.toInt()))
+            pos += scriptLen.toInt()
+
+            val sequence = readUint32LE(data, pos)
+            pos += 4
+
+            inputs.add(ParsedTxInput(prevHash, prevIndex, scriptSig, sequence))
+        }
+
+        // Outputs
+        val (outputCount, p3) = readCompactSize(data, pos)
+        pos = p3
+        val outputs = mutableListOf<ParsedTxOutput>()
+        for (i in 0 until outputCount.toInt()) {
+            val amount = readUint64LE(data, pos)
+            pos += 8
+
+            val (scriptLen, p4) = readCompactSize(data, pos)
+            pos = p4
+            val scriptPubKey = bytesToHex(data.sliceArray(pos until pos + scriptLen.toInt()))
+            pos += scriptLen.toInt()
+
+            outputs.add(ParsedTxOutput(amount, scriptPubKey))
+        }
+
+        // Skip witness data if segwit (we don't need it for refTxs)
+        // Lock time is at the very end of the raw tx
+        val lockTime = readUint32LE(data, data.size - 4).toInt()
+
+        return ParsedRawTx(version, inputs, outputs, lockTime)
+    }
+
+    /* Reads a uint32 (4 bytes LE) as unsigned Long. */
+    private fun readUint32LE(data: ByteArray, offset: Int): Long {
+        return (data[offset].toLong() and 0xFF) or
+                ((data[offset + 1].toLong() and 0xFF) shl 8) or
+                ((data[offset + 2].toLong() and 0xFF) shl 16) or
+                ((data[offset + 3].toLong() and 0xFF) shl 24)
+    }
+
+    /* Reads a uint64 (8 bytes LE) as Long. */
+    private fun readUint64LE(data: ByteArray, offset: Int): Long {
+        var v = 0L
+        for (i in 0 until 8) {
+            v = v or ((data[offset + i].toLong() and 0xFF) shl (i * 8))
+        }
+        return v
     }
 
     // ========== PSBT Parsing (BIP-174) ==========

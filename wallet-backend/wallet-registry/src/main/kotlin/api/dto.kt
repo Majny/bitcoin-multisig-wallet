@@ -3,22 +3,6 @@ package cz.majny.wallet.registry.api
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class UpsertDeviceRequest(
-    val deviceId: String,
-    val fingerprint: String,
-    val model: String? = null,
-    val label: String? = null
-)
-
-@Serializable
-data class DeviceResponse(
-    val deviceId: String,
-    val fingerprint: String,
-    val model: String? = null,
-    val label: String? = null
-)
-
-@Serializable
 data class CreateWalletRequest(
     val walletId: String,
     val network: String,

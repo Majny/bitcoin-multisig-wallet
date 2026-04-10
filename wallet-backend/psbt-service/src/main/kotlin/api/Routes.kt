@@ -41,6 +41,35 @@ fun Route.psbtRoutes(
             val request = appCall.receive<CreatePsbtRequest>()
             log.info("Creating PSBT for wallet: {}", request.walletId)
 
+            // Input validation
+            if (request.feeRate <= 0 || request.feeRate.isNaN() || request.feeRate.isInfinite()) {
+                appCall.respond(HttpStatusCode.BadRequest,
+                    mapOf("error" to "Invalid fee rate: ${request.feeRate}. Must be a positive number."))
+                return@post
+            }
+            if (request.outputs.isEmpty()) {
+                appCall.respond(HttpStatusCode.BadRequest,
+                    mapOf("error" to "At least one output is required."))
+                return@post
+            }
+            for (output in request.outputs) {
+                if (output.amountSats <= 0) {
+                    appCall.respond(HttpStatusCode.BadRequest,
+                        mapOf("error" to "Output amount must be positive, got ${output.amountSats} for ${output.address}"))
+                    return@post
+                }
+                if (output.amountSats < 546) {
+                    appCall.respond(HttpStatusCode.BadRequest,
+                        mapOf("error" to "Output amount ${output.amountSats} sats for ${output.address} is below dust limit (546 sats)"))
+                    return@post
+                }
+                if (output.address.isBlank()) {
+                    appCall.respond(HttpStatusCode.BadRequest,
+                        mapOf("error" to "Output address must not be blank."))
+                    return@post
+                }
+            }
+
             try {
                 // 1. Fetch wallet detail from wallet-registry
                 val wallet = registryClient.getWallet(request.walletId)
@@ -63,7 +92,7 @@ fun Route.psbtRoutes(
                 } else {
                     // Auto selection — largest-first, fee calculated per wallet type
                     val totalNeeded = request.outputs.sumOf { it.amountSats }
-                    autoSelectUtxos(wallet, totalNeeded, request.feeRate, blockchainClient, registryClient, reservedUtxos)
+                    autoSelectUtxos(wallet, totalNeeded, request.feeRate, request.outputs.size, blockchainClient, registryClient, reservedUtxos)
                 }
 
                 if (utxos.isEmpty()) {
@@ -289,9 +318,6 @@ fun Route.psbtRoutes(
                 return@post
             }
 
-            val newSigCount = existing.currentSigs + 1
-            val newStatus = if (newSigCount >= existing.requiredSigs) "signed" else "pending"
-
             // Get signer's root xpub to find their position in BIP-67 sorted pubkeys
             val signerXpub = try {
                 val sorted = registryClient.getWallet(existing.walletId).cosigners.sortedBy { it.idx }
@@ -338,16 +364,14 @@ fun Route.psbtRoutes(
                 params.copy(inputs = updatedInputs)
             }
 
-            // Store serializedTx when PSBT is fully signed (for later broadcast from another account)
-            val storeTx = if (newStatus == "signed" && request.serializedTx != null) request.serializedTx else null
-
-            repository.updatePsbt(
+            // Atomic increment of currentSigs + update in single DB transaction
+            // Prevents race condition when two cosigners sign concurrently
+            val (newSigCount, newStatus) = repository.atomicSignAndUpdate(
                 id = uuid,
                 psbtBase64 = existing.psbtBase64,
-                currentSigs = newSigCount,
-                status = newStatus,
+                requiredSigs = existing.requiredSigs,
                 trezorConnectParams = updatedParams,
-                serializedTx = storeTx
+                serializedTx = if (request.serializedTx != null) request.serializedTx else null
             )
 
             repository.addSignature(
@@ -416,6 +440,15 @@ fun Route.psbtRoutes(
             val existing = repository.findById(uuid)
             if (existing == null) {
                 appCall.respond(HttpStatusCode.NotFound, mapOf("error" to "PSBT not found"))
+                return@post
+            }
+
+            // Allow broadcast-raw from "pending" for singlesig: Trezor returns a complete
+            // serialized tx, so no backend sign step ever runs to update status.
+            // For multisig with missing signatures, the blockchain itself will reject.
+            if (existing.status == "broadcast") {
+                appCall.respond(HttpStatusCode.BadRequest,
+                    mapOf("error" to "PSBT already broadcast"))
                 return@post
             }
 
@@ -570,6 +603,7 @@ private suspend fun autoSelectUtxos(
     wallet: WalletDetailDto,
     targetAmount: Long,
     feeRate: Double,
+    recipientOutputCount: Int = 1,
     blockchainClient: BlockchainClient,
     registryClient: RegistryClient,
     reservedUtxos: Set<String> = emptySet()
@@ -597,7 +631,7 @@ private suspend fun autoSelectUtxos(
     val isMultisig = wallet.type == "MULTI_SIG"
     val m = wallet.m ?: 1
     val n = wallet.n ?: 1
-    val perInputVsize = if (isMultisig) (57 + 73 * m + 34 * n) else 68
+    val perInputVsize = if (isMultisig) (41 + (5 + 73 * m + 34 * n) / 4) else 68
 
     val selected = mutableListOf<SelectedUtxo>()
     var totalSelected = 0L
@@ -615,8 +649,9 @@ private suspend fun autoSelectUtxos(
         ))
         totalSelected += rich.utxo.value
 
-        // Estimate fee for current input count (2 outputs: recipient + change)
-        val estimatedFee = (perInputVsize * selected.size + 31 * 2 + 10) * feeRate
+        // Estimate fee: recipient outputs + 1 change output
+        val outputCount = recipientOutputCount + 1
+        val estimatedFee = (perInputVsize * selected.size + 31 * outputCount + 10) * feeRate
 
         if (totalSelected >= targetAmount + estimatedFee) {
             break

@@ -54,7 +54,8 @@ data class RefreshTokenResponse(
 fun Application.configureAuthRoutes(
     jwt: JwtIssuer,
     keys: RsaKeyMaterial,
-    refreshStore: RefreshStore
+    refreshStore: RefreshStore,
+    deviceRepo: DeviceRepository
 ) {
     routing {
         get("/health") { call.respondText("ok") }
@@ -95,6 +96,24 @@ fun Application.configureAuthRoutes(
                         )
                     )
                 )
+            }
+
+            post("/device") {
+                val req = call.receive<UpsertDeviceRequest>()
+                val out = deviceRepo.upsertDevice(req)
+                call.respond(out)
+            }
+
+            get("/device/{id}") {
+                val id = call.parameters["id"] ?: return@get call.respond(
+                    HttpStatusCode.BadRequest, mapOf("error" to "missing device id")
+                )
+                val device = deviceRepo.getDevice(id)
+                if (device != null) {
+                    call.respond(device)
+                } else {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "device not found"))
+                }
             }
 
             post("/token/refresh") {

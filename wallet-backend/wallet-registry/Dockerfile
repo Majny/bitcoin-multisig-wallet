@@ -10,12 +10,10 @@ COPY gradle ./gradle
 COPY buildSrc ./buildSrc
 
 COPY wallet-registry/build.gradle.kts wallet-registry/
-COPY utils/build.gradle.kts utils/
 
 RUN chmod +x gradlew && ./gradlew :wallet-registry:dependencies --no-daemon || true
 
 COPY wallet-registry/src wallet-registry/src
-COPY utils/src utils/src
 
 RUN ./gradlew :wallet-registry:installDist --no-daemon
 

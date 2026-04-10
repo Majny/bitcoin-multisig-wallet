@@ -3,16 +3,6 @@ package cz.majny.wallet.registry.schema
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 
-/* Registered Trezor devices. */
-object DevicesTable : Table("devices") {
-    val deviceId = text("device_id")
-    val fingerprint = text("fingerprint")
-    val model = text("model").nullable()
-    val label = text("label").nullable()
-    val createdAt = timestampWithTimeZone("created_at")
-    override val primaryKey = PrimaryKey(deviceId)
-}
-
 /* Wallets (singlesig and multisig). */
 object WalletsTable : Table("wallets") {
     val walletId = text("wallet_id")
@@ -51,7 +41,7 @@ object WalletCosignersTable : Table("wallet_cosigners") {
 /* Links devices to wallets. account_index tracks which BIP-48 account imported it. */
 object WalletMembersTable : Table("wallet_members") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
-    val deviceId = text("device_id").references(DevicesTable.deviceId)
+    val deviceId = text("device_id")
     val accountIndex = integer("account_index").default(-1)
     val label = text("label").nullable()
     val createdAt = timestampWithTimeZone("created_at")

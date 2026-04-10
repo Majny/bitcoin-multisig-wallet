@@ -20,24 +20,29 @@ class RefreshStore(
         val token = UUID.randomUUID().toString()
         val exp = Instant.now().epochSecond + ttlSeconds
         map[token] = RefreshEntry(deviceId, fingerprint, exp)
+
+        // Periodic cleanup of expired tokens to prevent memory leak
+        if (map.size > 1000) {
+            val now = Instant.now().epochSecond
+            map.entries.removeIf { it.value.expiresAtEpochSec <= now }
+        }
+
         return token
     }
 
     /**
      * Rotation of refresh token:
      * (deviceId, fp, newRefreshToken)
+     * Uses atomic remove to prevent race conditions on concurrent refresh.
      */
     fun rotate(oldToken: String): Triple<String, String?, String>? {
-        val entry = map[oldToken] ?: return null
+        // Atomic remove — only one concurrent caller gets the entry
+        val entry = map.remove(oldToken) ?: return null
 
         val now = Instant.now().epochSecond
         if (entry.expiresAtEpochSec <= now) {
-            map.remove(oldToken)
             return null
         }
-
-        // invalidate old
-        map.remove(oldToken)
 
         // issue new
         val newToken = issue(entry.deviceId, entry.fingerprint)

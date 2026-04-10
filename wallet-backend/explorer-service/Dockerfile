@@ -10,12 +10,10 @@ COPY gradle ./gradle
 COPY buildSrc ./buildSrc
 
 COPY explorer-service/build.gradle.kts explorer-service/
-COPY utils/build.gradle.kts utils/
 
 RUN chmod +x gradlew && ./gradlew :explorer-service:dependencies --no-daemon || true
 
 COPY explorer-service/src explorer-service/src
-COPY utils/src utils/src
 
 RUN ./gradlew :explorer-service:installDist --no-daemon
 

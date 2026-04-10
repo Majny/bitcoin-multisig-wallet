@@ -1,13 +1,3 @@
--- ===== devices =====
-CREATE TABLE IF NOT EXISTS devices (
-  device_id        TEXT PRIMARY KEY,
-  fingerprint      TEXT NOT NULL,
-  model            TEXT,
-  label            TEXT,
-  created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  UNIQUE(fingerprint)
-);
-
 -- ===== wallets =====
 CREATE TABLE IF NOT EXISTS wallets (
   wallet_id              TEXT PRIMARY KEY,
@@ -48,7 +38,7 @@ CREATE TABLE IF NOT EXISTS wallet_cosigners (
 -- ===== wallet_members =====
 CREATE TABLE IF NOT EXISTS wallet_members (
   wallet_id       TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
-  device_id       TEXT NOT NULL REFERENCES devices(device_id) ON DELETE CASCADE,
+  device_id       TEXT NOT NULL,
   account_index   INT NOT NULL DEFAULT -1,
   label           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),

@@ -173,14 +173,31 @@ data class TrezorConnectOutput(
 )
 
 /*
- * Reference transaction for Trezor Connect.
- * Trezor firmware needs full previous transactions to verify input amounts.
- * The raw hex is provided via the tx_hex field.
+ * Reference transaction for Trezor Connect (structured format).
+ * Trezor Connect deeplink does NOT support raw tx_hex — it needs parsed fields:
+ * version, inputs (with script_sig), bin_outputs (with amount + script_pubkey), lock_time.
  */
 @Serializable
 data class TrezorConnectRefTx(
     val hash: String,
-    val tx_hex: String
+    val version: Int,
+    val lock_time: Int,
+    val inputs: List<TrezorConnectRefTxInput>,
+    val bin_outputs: List<TrezorConnectRefTxBinOutput>
+)
+
+@Serializable
+data class TrezorConnectRefTxInput(
+    val prev_hash: String,
+    val prev_index: Long,
+    val script_sig: String,
+    val sequence: Long
+)
+
+@Serializable
+data class TrezorConnectRefTxBinOutput(
+    val amount: Long,
+    val script_pubkey: String
 )
 
 /* Complete Trezor Connect signTransaction parameters. */

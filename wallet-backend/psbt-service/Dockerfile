@@ -12,14 +12,12 @@ COPY buildSrc ./buildSrc
 
 # Kopíruj modul dependencies
 COPY psbt-service/build.gradle.kts psbt-service/
-COPY utils/build.gradle.kts utils/
 
 # Stáhni závislosti (cache layer)
 RUN chmod +x gradlew && ./gradlew :psbt-service:dependencies --no-daemon || true
 
 # Kopíruj zdrojový kód
 COPY psbt-service/src psbt-service/src
-COPY utils/src utils/src
 
 # Builduj
 RUN ./gradlew :psbt-service:installDist --no-daemon
@@ -39,8 +37,8 @@ COPY --from=builder /app/psbt-service/build/install/psbt-service ./
 ENV DATABASE_URL=jdbc:postgresql://localhost:5432/wallet_psbt \
     DATABASE_USER=wallet \
     DATABASE_PASSWORD=wallet \
-    BLOCKCHAIN_SERVICE_URL=http://localhost:8083 \
-    REGISTRY_SERVICE_URL=http://localhost:8082 \
+    BLOCKCHAIN_SERVICE_URL=http://localhost:8086 \
+    REGISTRY_URL=http://localhost:8082 \
     PORT=8085
 
 # Exponuj port

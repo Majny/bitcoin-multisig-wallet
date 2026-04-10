@@ -10,12 +10,10 @@ COPY gradle ./gradle
 COPY buildSrc ./buildSrc
 
 COPY price-service/build.gradle.kts price-service/
-COPY utils/build.gradle.kts utils/
 
 RUN chmod +x gradlew && ./gradlew :price-service:dependencies --no-daemon || true
 
 COPY price-service/src price-service/src
-COPY utils/src utils/src
 
 RUN ./gradlew :price-service:installDist --no-daemon
 

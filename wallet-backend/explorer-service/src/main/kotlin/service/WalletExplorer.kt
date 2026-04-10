@@ -262,14 +262,12 @@ class WalletExplorer(
 
         val network = detectNetwork(receiveAddresses)
 
-        // Paralelně zjisti aktivitu
+        // Paralelně zjisti aktivitu.
+        // IMPORTANT: do NOT swallow exceptions here — returning false on error
+        // would cause address reuse (privacy violation). Let errors propagate.
         val withActivity = receiveAddresses.map { addr ->
             async {
-                val hasActivity = try {
-                    blockchain.hasActivity(addr.address, network)
-                } catch (e: Exception) {
-                    false
-                }
+                val hasActivity = blockchain.hasActivity(addr.address, network)
                 addr to hasActivity
             }
         }.awaitAll()

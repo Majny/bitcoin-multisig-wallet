@@ -105,13 +105,15 @@ object PsbtBuilder {
      *
      * Singlesig P2WPKH input (68 vB):
      *   Non-witness: prevout_hash(32B) + prevout_index(4B) + empty_scriptSig(1B) + sequence(4B) = 41B * 4 = 164 wu
-     *   Witness: witness_count(1B) + sig_len(1B) + DER_signature(72B) + pubkey_len(1B) + compressed_pubkey(33B) = 108B * 1 = 108 wu
+     *   Witness: witness_count(1B) + sig_len(1B) + DER_signature(72B) + pubkey_len(1B) + compressed_pubkey(33B) = 108 wu
      *   Total: (164 + 108) / 4 = 68 vB
      *
-     * Multisig P2WSH input (57 + 73*M + 34*N vB):
+     * Multisig P2WSH input:
      *   Non-witness: same 41B * 4 = 164 wu
-     *   Witness: OP_0(1B) + M * (sig_len + DER_sig ≈ 73B) + witness_script(OP_M + N * 34B_pubkey + OP_N + OP_CHECKMULTISIG)
-     *   Example 2-of-3: 57 + 73*2 + 34*3 = 305 vB per input
+     *   Witness: OP_0(1B) + M * (push + DER_sig ≈ 73B) + script_push(1B) + witness_script(3 + 34*N)
+     *   Witness bytes = 1 + 73*M + 1 + 3 + 34*N = 5 + 73*M + 34*N
+     *   vsize = (164 + 5 + 73*M + 34*N) / 4 = 41 + (5 + 73*M + 34*N) / 4
+     *   Example 2-of-3: 41 + (5 + 146 + 102)/4 = 41 + 63 = 104 vB per input
      */
     fun estimateVsize(
         inputCount: Int,
@@ -123,7 +125,9 @@ object PsbtBuilder {
         val overhead = 10
         val outputSize = outputCount * 31
         val inputSize = if (isMultisig) {
-            inputCount * (57 + 73 * m + 34 * n)
+            // vsize = (non_witness_weight + witness_bytes) / 4
+            // non_witness = 41 bytes = 164 WU, witness = 5 + 73*M + 34*N bytes (1 WU each)
+            inputCount * (41 + (5 + 73 * m + 34 * n) / 4)
         } else {
             inputCount * 68
         }

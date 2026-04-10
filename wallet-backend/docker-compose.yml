@@ -96,8 +96,12 @@ services:
         CdOmxrzVMPQzhDy9FRGJmje6Cm5YWjAclDqOPP4yc1rhjjz6PokMpPoPga68O3rE
         MwIDAQAB
         -----END PUBLIC KEY-----
+      AUTH_DB_URL: jdbc:postgresql://postgres:5432/wallet_auth
+      AUTH_DB_USER: wallet
+      AUTH_DB_PASSWORD: wallet
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
 
   wallet-registry:

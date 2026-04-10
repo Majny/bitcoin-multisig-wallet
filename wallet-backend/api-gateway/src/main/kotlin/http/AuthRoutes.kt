@@ -19,7 +19,7 @@ fun Route.authRoutes() {
 
         val deviceId = JwtClaimExtractor.deviceIdFromJwt(upstream.accessToken)
 
-        call.application.deps.registry.upsertDevice(
+        call.application.deps.auth.upsertDevice(
             UpsertDeviceRequest(
                 deviceId = deviceId,
                 fingerprint = req.fingerprint,
@@ -37,7 +37,12 @@ fun Route.authRoutes() {
             emptyList()
         }
 
-        // 2) BIP-44 account discovery: scan accounts sequentially, stop at first gap
+        // 2) BIP-44 account discovery: scan accounts sequentially, stop at first gap.
+        //
+        // Network errors MUST NOT fail the whole login — discovery is best-effort.
+        // If mempool.space blinks, we log and skip to the next account. The user
+        // still gets a valid session; any missing wallets can be recovered via a
+        // refresh once the network is stable again.
         for (account in accountsToScan) {
             try {
                 val walletCreate = buildSingleSigWalletCreate(
@@ -76,7 +81,10 @@ fun Route.authRoutes() {
                     break
                 }
             } catch (e: Exception) {
-                log.error("Failed to scan account {}: {}", account.derivationPath, e.message)
+                // Network error or upstream failure — log and skip. Do not break,
+                // do not propagate: a Connection reset on one account should not
+                // stop the user from logging in.
+                log.warn("Account {} scan failed ({}), skipping", account.derivationPath, e.message)
             }
         }
 

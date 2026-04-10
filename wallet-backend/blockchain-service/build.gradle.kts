@@ -18,8 +18,10 @@ dependencies {
     implementation("io.ktor:ktor-server-call-logging-jvm:3.0.0")
 
     // --- Ktor client (for Mempool.space API) ---
+    // OkHttp engine: CIO engine fails with Connection reset against mempool.space/testnet4
+    // (likely a TLS/HTTP2 handshake incompatibility in CIO). OkHttp handles it correctly.
     implementation("io.ktor:ktor-client-core:3.0.0")
-    implementation("io.ktor:ktor-client-cio:3.0.0")
+    implementation("io.ktor:ktor-client-okhttp:3.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
     implementation("io.ktor:ktor-client-logging:3.0.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")

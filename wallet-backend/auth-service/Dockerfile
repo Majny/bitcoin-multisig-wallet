@@ -10,12 +10,10 @@ COPY gradle ./gradle
 COPY buildSrc ./buildSrc
 
 COPY auth-service/build.gradle.kts auth-service/
-COPY utils/build.gradle.kts utils/
 
 RUN chmod +x gradlew && ./gradlew :auth-service:dependencies --no-daemon || true
 
 COPY auth-service/src auth-service/src
-COPY utils/src utils/src
 
 RUN ./gradlew :auth-service:installDist --no-daemon
 

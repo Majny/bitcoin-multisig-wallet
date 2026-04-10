@@ -8,6 +8,10 @@ import io.ktor.server.plugins.contentnegotiation.*
 import kotlinx.serialization.json.Json
 
 fun main() {
+    val dbCfg = Db.loadConfig()
+    Db.init(dbCfg)
+
+    val deviceRepo = DeviceRepository()
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8081
 
     embeddedServer(Netty, host = "0.0.0.0", port = port) {
@@ -40,6 +44,6 @@ fun main() {
 
         val refreshStore = RefreshStore(ttlSeconds = refreshTtl)
 
-        configureAuthRoutes(jwt, keys, refreshStore)
+        configureAuthRoutes(jwt, keys, refreshStore, deviceRepo)
     }.start(wait = true)
 }

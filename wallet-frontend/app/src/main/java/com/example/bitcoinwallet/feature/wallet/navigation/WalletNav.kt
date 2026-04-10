@@ -181,12 +181,15 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
 
             // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný výsledek,
             // včetně případu kdy activity přežila přes onNewIntent (FLAG_SINGLE_TOP).
+            // Nekontrolujeme awaitingTrezor — pokud signed data přijde, vždy ho zpracujeme.
+            // Předchozí gate na awaitingTrezor způsoboval race condition: 3s timeout resetoval
+            // stav dřív než user stihl podepsat na Trezoru (typicky 10-30s).
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
             val pendingSignType by SessionStore.pendingSignType.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
                 val signedData = pendingSignedPsbt
                 val signType = pendingSignType
-                if (signedData != null && signType != null && state.awaitingTrezor) {
+                if (signedData != null && signType != null) {
                     SessionStore.setPendingSignedPsbt(null)
                     SessionStore.setPendingSignType(null)
                     viewModel.onTrezorResult(signedData, signType) {}
@@ -194,15 +197,12 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             }
 
             // Reset Trezor state if user returns without signing (cancel/back).
-            // When awaitingTrezor is true but no result arrives after 2s, reset.
-            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            // 120s timeout: covers even slow Trezor interactions (firmware update prompts, etc.)
             LaunchedEffect(state.awaitingTrezor) {
                 if (state.awaitingTrezor) {
-                    // Wait for lifecycle resume (user returned from Trezor app)
-                    kotlinx.coroutines.delay(3000L)
-                    // If still awaiting and no result arrived, user likely cancelled
+                    kotlinx.coroutines.delay(120_000L)
                     if (SessionStore.pendingSignedPsbt.value == null && viewModel.uiState.value.awaitingTrezor) {
-                        Log.d("WalletNav", "Trezor sign timeout/cancel — resetting awaitingTrezor")
+                        Log.d("WalletNav", "Trezor sign timeout — resetting awaitingTrezor")
                         viewModel.resetTrezorState()
                     }
                 }

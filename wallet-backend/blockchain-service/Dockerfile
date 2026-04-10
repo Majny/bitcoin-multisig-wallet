@@ -10,12 +10,10 @@ COPY gradle ./gradle
 COPY buildSrc ./buildSrc
 
 COPY blockchain-service/build.gradle.kts blockchain-service/
-COPY utils/build.gradle.kts utils/
 
 RUN chmod +x gradlew && ./gradlew :blockchain-service:dependencies --no-daemon || true
 
 COPY blockchain-service/src blockchain-service/src
-COPY utils/src utils/src
 
 RUN ./gradlew :blockchain-service:installDist --no-daemon
 
@@ -30,7 +28,8 @@ WORKDIR /app
 COPY --from=builder /app/blockchain-service/build/install/blockchain-service ./
 
 ENV PORT=8086 \
-    MEMPOOL_BASE_URL=https://mempool.space/api
+    MAINNET_MEMPOOL_URL=https://blockstream.info/api \
+    TESTNET_MEMPOOL_URL=https://mempool.space/testnet4/api
 
 EXPOSE 8086
 

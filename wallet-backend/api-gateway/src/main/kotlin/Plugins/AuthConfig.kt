@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit
 
 fun Application.configureAuth(cfg: AppConfig) {
     val jwkProvider = JwkProviderBuilder(URL(cfg.jwksUrl))
-        .cached(10, 24, TimeUnit.HOURS)
+        .cached(10, 1, TimeUnit.HOURS)
         .rateLimited(10, 1, TimeUnit.MINUTES)
         .build()
 

@@ -34,7 +34,7 @@ class JwtIssuer(
             .withClaim("device_id", deviceId)
 
         if (!fingerprint.isNullOrBlank()) {
-            builder.withClaim("fp", fingerprint)
+            builder.withClaim("fingerprint", fingerprint)
         }
 
         return builder.sign(alg)

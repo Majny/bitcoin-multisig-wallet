@@ -12,8 +12,6 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 
 interface RegistryClient {
-    suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse
-
     suspend fun createWallet(req: CreateWalletRequest): WalletDetail
 
     suspend fun getWallet(walletId: String): WalletDetail
@@ -43,13 +41,6 @@ class RegistryClientImpl(
         requireNotNull(http) {
             "RegistryClientImpl is not attached. Call deps.attachHttpClients(application) first."
         }
-
-    override suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse {
-        return client().post("$baseUrl/registry/devices") {
-            contentType(ContentType.Application.Json)
-            setBody(req)
-        }.body()
-    }
 
     override suspend fun createWallet(req: CreateWalletRequest): WalletDetail {
         return client().post("$baseUrl/registry/wallets") {

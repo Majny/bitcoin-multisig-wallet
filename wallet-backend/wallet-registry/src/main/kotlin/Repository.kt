@@ -11,41 +11,17 @@ class Repository {
 
     private val log = LoggerFactory.getLogger(Repository::class.java)
 
-    /* Upsert: creates device if new, updates if exists. Called on every login. */
-    fun upsertDevice(req: UpsertDeviceRequest): DeviceResponse = transaction {
-        val existing = DevicesTable
-            .selectAll()
-            .where { DevicesTable.deviceId eq req.deviceId }
-            .singleOrNull()
-
-        if (existing == null) {
-            DevicesTable.insert {
-                it[deviceId] = req.deviceId
-                it[fingerprint] = req.fingerprint
-                it[model] = req.model
-                it[label] = req.label
-                it[createdAt] = OffsetDateTime.now()
-            }
-        } else {
-            DevicesTable.update({ DevicesTable.deviceId eq req.deviceId }) {
-                it[fingerprint] = req.fingerprint
-                it[model] = req.model
-                it[label] = req.label
-            }
-        }
-
-        DeviceResponse(
-            deviceId = req.deviceId,
-            fingerprint = req.fingerprint,
-            model = req.model,
-            label = req.label
-        )
-    }
-
     /* Creates wallet + cosigners + members + derives addresses. Idempotent. */
     fun createWallet(req: CreateWalletRequest): WalletDetail = transaction {
+        require(req.walletId.isNotBlank()) { "walletId must not be blank" }
+        require(req.network in listOf("mainnet", "testnet")) { "network must be 'mainnet' or 'testnet', got '${req.network}'" }
+        require(req.type in listOf("SINGLE_SIG", "MULTI_SIG")) { "type must be 'SINGLE_SIG' or 'MULTI_SIG', got '${req.type}'" }
+        require(req.receiveDescriptor.isNotBlank()) { "receiveDescriptor must not be blank" }
+        require(req.changeDescriptor.isNotBlank()) { "changeDescriptor must not be blank" }
         if (req.type == "MULTI_SIG") {
             require(req.m != null && req.n != null) { "MULTI_SIG requires m and n" }
+            require(req.m >= 1 && req.m <= req.n) { "MULTI_SIG requires 1 <= m (${ req.m}) <= n (${req.n})" }
+            require(req.n <= 15) { "MULTI_SIG n (${req.n}) exceeds maximum of 15" }
             require(req.cosigners.isNotEmpty()) { "MULTI_SIG requires cosigners" }
         }
 
@@ -234,27 +210,25 @@ class Repository {
         count: Int = AddressDerivation.DEFAULT_GAP_LIMIT
     ) {
         val chain = if (type == "receive") 0 else 1
-        try {
-            val addresses = AddressDerivation.deriveAddresses(
-                descriptor = descriptor,
-                network = network,
-                chain = chain,
-                fromIndex = 0,
-                count = count
-            )
-            addresses.forEach { derived ->
-                WalletAddressesTable.insertIgnore {
-                    it[WalletAddressesTable.walletId] = walletId
-                    it[addressType] = type
-                    it[addressIndex] = derived.index
-                    it[address] = derived.address
-                    it[createdAt] = OffsetDateTime.now()
-                }
+        // No try-catch: let derivation failures propagate so the wallet creation
+        // transaction rolls back. A wallet without addresses is useless.
+        val addresses = AddressDerivation.deriveAddresses(
+            descriptor = descriptor,
+            network = network,
+            chain = chain,
+            fromIndex = 0,
+            count = count
+        )
+        addresses.forEach { derived ->
+            WalletAddressesTable.insertIgnore {
+                it[WalletAddressesTable.walletId] = walletId
+                it[addressType] = type
+                it[addressIndex] = derived.index
+                it[address] = derived.address
+                it[createdAt] = OffsetDateTime.now()
             }
-            log.info("Derived {} {} addresses for wallet {}", addresses.size, type, walletId)
-        } catch (e: Exception) {
-            log.error("Failed to derive {} addresses for wallet {}: {}", type, walletId, e.message, e)
         }
+        log.info("Derived {} {} addresses for wallet {}", addresses.size, type, walletId)
     }
 
     /* Returns all stored addresses for a wallet, optionally filtered by type (receive/change). */

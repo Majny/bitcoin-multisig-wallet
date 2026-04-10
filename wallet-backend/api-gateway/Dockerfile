@@ -10,12 +10,10 @@ COPY gradle ./gradle
 COPY buildSrc ./buildSrc
 
 COPY api-gateway/build.gradle.kts api-gateway/
-COPY utils/build.gradle.kts utils/
 
 RUN chmod +x gradlew && ./gradlew :api-gateway:dependencies --no-daemon || true
 
 COPY api-gateway/src api-gateway/src
-COPY utils/src utils/src
 
 RUN ./gradlew :api-gateway:installDist --no-daemon
 

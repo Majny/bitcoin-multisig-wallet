@@ -2,6 +2,8 @@ package cz.majny.wallet.blockchain.client
 
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.network.sockets.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
@@ -9,6 +11,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
+import org.slf4j.LoggerFactory
+import java.io.IOException
 
 /**
  * Client for Mempool.space public API.
@@ -179,25 +183,58 @@ class MempoolClientImpl(
     private val client: HttpClient
 ) : MempoolClient {
 
+    private val log = LoggerFactory.getLogger(MempoolClientImpl::class.java)
+
     // 5 concurrent requests keeps Blockstream happy (no rate-limiting).
     // Higher concurrency causes 429s and hung connections that add 30+ s.
     private val rateLimiter = Semaphore(5)
 
     /**
-     * Executes a GET request with one retry on 429 Too Many Requests or request timeout.
+     * Executes a GET request with one retry on transient failures:
+     *   - 429 Too Many Requests
+     *   - HTTP request timeout
+     *   - Connection reset / socket timeout / generic IO error
+     *
      * The delay is outside withPermit so other queued requests can proceed during the wait.
      * Only 1 retry: if the IP is in a penalty box, retrying many times just
      * keeps the queue backed up for 20+ seconds — better to fail fast.
+     *
+     * Note: catching IOException on the first attempt is critical for account
+     * discovery — otherwise a single connection reset would be silently treated
+     * as "no activity" and the BIP-44 gap limit would stop discovery prematurely.
      */
     private suspend fun getChecked(url: String): HttpResponse {
         val first = try {
             rateLimiter.withPermit { client.get(url) }
-        } catch (e: io.ktor.client.plugins.HttpRequestTimeoutException) {
-            null  // timeout on first attempt — retry below
+        } catch (e: HttpRequestTimeoutException) {
+            log.warn("Mempool request timeout on first attempt, will retry: {}", url)
+            null
+        } catch (e: ConnectTimeoutException) {
+            log.warn("Mempool connect timeout on first attempt, will retry: {}", url)
+            null
+        } catch (e: SocketTimeoutException) {
+            log.warn("Mempool socket timeout on first attempt, will retry: {}", url)
+            null
+        } catch (e: IOException) {
+            // Connection reset, broken pipe, etc. — transport-level failures
+            log.warn("Mempool IO error on first attempt ({}), will retry: {}", e.message, url)
+            null
         }
-        if (first != null && first.status != HttpStatusCode.TooManyRequests) return first
+        if (first != null && first.status != HttpStatusCode.TooManyRequests) {
+            if (!first.status.isSuccess()) {
+                throw RuntimeException("Mempool API error ${first.status.value} for: $url")
+            }
+            return first
+        }
         delay(1000L)
-        return rateLimiter.withPermit { client.get(url) }
+        val retry = rateLimiter.withPermit { client.get(url) }
+        if (retry.status == HttpStatusCode.TooManyRequests) {
+            throw RuntimeException("Mempool API rate limit exceeded after retry for: $url")
+        }
+        if (!retry.status.isSuccess()) {
+            throw RuntimeException("Mempool API error ${retry.status.value} after retry for: $url")
+        }
+        return retry
     }
 
     override suspend fun getAddressInfo(address: String): AddressInfo =
@@ -212,7 +249,7 @@ class MempoolClientImpl(
     override suspend fun getFeeEstimates(): FeeEstimates {
         // Blockstream Esplora: GET /fee-estimates
         // Returns {"1": 10.0, "3": 7.0, "6": 5.0, ...} — key = confirmation target in blocks
-        val fees: Map<String, Double> = client.get("$baseUrl/fee-estimates").body()
+        val fees: Map<String, Double> = getChecked("$baseUrl/fee-estimates").body()
         fun pick(target: Int): Int {
             val exact = fees[target.toString()]
             if (exact != null) return exact.toInt().coerceAtLeast(1)
@@ -233,7 +270,7 @@ class MempoolClientImpl(
     }
 
     override suspend fun getTransaction(txid: String): MempoolTransaction {
-        return client.get("$baseUrl/tx/$txid").body()
+        return getChecked("$baseUrl/tx/$txid").body()
     }
 
     override suspend fun broadcastTransaction(hex: String): String {
@@ -248,18 +285,21 @@ class MempoolClientImpl(
     }
 
     override suspend fun hasActivity(address: String): Boolean {
-        return try {
-            val info = getAddressInfo(address)
-            info.txCount > 0
-        } catch (e: Exception) {
-            false
-        }
+        // Don't swallow errors — caller needs to know if blockchain is unreachable
+        // to avoid false-negative account discovery
+        val info = getAddressInfo(address)
+        return info.txCount > 0
     }
 
     override suspend fun getTipHeight(): Int {
         // Mempool.space vrací číslo jako plain text, ne JSON
-        val response: HttpResponse = client.get("$baseUrl/blocks/tip/height")
-        return response.bodyAsText().trim().toInt()
+        val response: HttpResponse = getChecked("$baseUrl/blocks/tip/height")
+        val text = response.bodyAsText().trim()
+        return try {
+            text.toInt()
+        } catch (e: NumberFormatException) {
+            throw RuntimeException("Invalid tip height response: '$text'")
+        }
     }
 
     override suspend fun getRawTransaction(txid: String): String {

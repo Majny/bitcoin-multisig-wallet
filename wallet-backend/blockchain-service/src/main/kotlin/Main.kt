@@ -4,7 +4,7 @@ import cz.majny.wallet.blockchain.client.MempoolClientImpl
 import cz.majny.wallet.blockchain.config.AppConfig
 import cz.majny.wallet.blockchain.http.blockchainRoutes
 import io.ktor.client.*
-import io.ktor.client.engine.cio.*
+import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation as ClientContentNegotiation
 import io.ktor.client.plugins.logging.*
@@ -25,7 +25,7 @@ fun main() {
     val cfg = AppConfig.fromEnv()
     
     // Create HTTP client for Mempool.space API
-    val httpClient = HttpClient(CIO) {
+    val httpClient = HttpClient(OkHttp) {
         install(ClientContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true

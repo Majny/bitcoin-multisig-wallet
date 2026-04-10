@@ -2,8 +2,10 @@ package cz.majny.wallet.gateway.http
 
 import cz.majny.wallet.gateway.deps
 import cz.majny.wallet.gateway.dto.*
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -11,9 +13,22 @@ import io.ktor.server.routing.*
 fun Route.psbtRoutes() {
     authenticate("auth-jwt") {
         route("/psbt") {
-            // POST /psbt - vytvoří nové PSBT
+            // POST /psbt - vytvoří nové PSBT (ownership checked via walletId in request)
             post {
+                val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
+                val deviceId = principal.payload.getClaim("device_id").asString()
                 val req = call.receive<CreatePsbtRequest>()
+                // Verify wallet ownership
+                try {
+                    val wallet = call.application.deps.registry.getWallet(req.walletId)
+                    if (wallet.members.none { it.deviceId == deviceId }) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Access denied to wallet ${req.walletId}"))
+                        return@post
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Wallet not found"))
+                    return@post
+                }
                 val resp = call.application.deps.psbt.create(req)
                 call.respond(resp)
             }
@@ -27,7 +42,20 @@ fun Route.psbtRoutes() {
             
             // GET /psbt/wallet/{walletId} - seznam PSBT pro wallet
             get("/wallet/{walletId}") {
+                val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
+                val deviceId = principal.payload.getClaim("device_id").asString()
                 val walletId = call.parameters["walletId"] ?: error("walletId missing")
+                // Verify wallet ownership
+                try {
+                    val wallet = call.application.deps.registry.getWallet(walletId)
+                    if (wallet.members.none { it.deviceId == deviceId }) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Access denied"))
+                        return@get
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Wallet not found"))
+                    return@get
+                }
                 val status = call.request.queryParameters["status"]
                 val resp = call.application.deps.psbt.getByWallet(walletId, status)
                 call.respond(resp)

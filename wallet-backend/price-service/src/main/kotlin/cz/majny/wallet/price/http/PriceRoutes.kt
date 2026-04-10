@@ -28,7 +28,7 @@ fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
          * Response: BitcoinPrices
          */
         get {
-            val currenciesParam = call.parameters["currencies"] ?: "czk,usd,eur"
+            val currenciesParam = call.request.queryParameters["currencies"] ?: "czk,usd,eur"
             val currencies = currenciesParam.split(",").map { it.trim().lowercase() }
             
             val prices = coinGeckoClient.getBitcoinPrices(currencies)
@@ -46,13 +46,13 @@ fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
          * Response: ConversionResult
          */
         get("/convert") {
-            val sats = call.parameters["sats"]?.toLongOrNull()
+            val sats = call.request.queryParameters["sats"]?.toLongOrNull()
             if (sats == null) {
                 call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing or invalid 'sats' parameter"))
                 return@get
             }
-            
-            val currency = call.parameters["currency"]?.lowercase() ?: "czk"
+
+            val currency = call.request.queryParameters["currency"]?.lowercase() ?: "czk"
             val fiatValue = coinGeckoClient.convertSatsToFiat(sats, currency)
             
             if (fiatValue == null) {

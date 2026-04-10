@@ -32,11 +32,21 @@ class BlockchainClient(
      * Souběžné requesty na stejnou adresu jsou deduplikovány — druhý čeká
      * na výsledek prvního místo toho, aby spustil vlastní HTTP request.
      */
+    private companion object {
+        const val CACHE_TTL = 60_000L
+    }
+
     suspend fun getAddressInfo(address: String, network: String = "mainnet"): AddressInfo {
         val cacheKey = "$network:$address"
         val now = System.currentTimeMillis()
+
+        // Evict stale entries to prevent unbounded memory growth
+        if (addressInfoCache.size > 10_000) {
+            addressInfoCache.entries.removeIf { now - it.value.first > CACHE_TTL }
+        }
+
         val cached = addressInfoCache[cacheKey]
-        if (cached != null && now - cached.first < 60_000L) return cached.second
+        if (cached != null && now - cached.first < CACHE_TTL) return cached.second
 
         val newDeferred = CompletableDeferred<AddressInfo>()
         val existing = pendingInfoRequests.putIfAbsent(cacheKey, newDeferred)
@@ -91,9 +101,13 @@ class BlockchainClient(
      * Zjistí, zda adresa má aktivitu (pro gap limit).
      */
     suspend fun hasActivity(address: String, network: String = "mainnet"): Boolean {
-        val resp: HasActivityResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/has-activity") {
+        val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/has-activity") {
             parameter("network", network)
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw Exception("blockchain-service error ${response.status.value} for $address/has-activity")
+        }
+        val resp: HasActivityResponse = response.body()
         return resp.hasActivity
     }
 
@@ -114,9 +128,13 @@ class BlockchainClient(
      * Vrátí doporučené fee rates.
      */
     suspend fun getFeeEstimates(network: String = "mainnet"): FeeEstimates {
-        return client.get("$baseUrl/api/v1/blockchain/fees") {
+        val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/fees") {
             parameter("network", network)
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw Exception("blockchain-service error ${response.status.value} for fees")
+        }
+        return response.body()
     }
 
     /**
@@ -124,9 +142,13 @@ class BlockchainClient(
      * Používá se pro výpočet reálného počtu konfirmací.
      */
     suspend fun getTipHeight(network: String = "mainnet"): Int {
-        val resp: TipHeightResponse = client.get("$baseUrl/api/v1/blockchain/tip/height") {
+        val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/tip/height") {
             parameter("network", network)
-        }.body()
+        }
+        if (!response.status.isSuccess()) {
+            throw Exception("blockchain-service error ${response.status.value} for tip/height")
+        }
+        val resp: TipHeightResponse = response.body()
         return resp.height
     }
 }

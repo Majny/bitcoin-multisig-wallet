@@ -12,7 +12,7 @@ import kotlinx.serialization.Serializable
  * Routes for blockchain data via Mempool.space API.
  */
 fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
-    fun clientFor(network: String?) = if (network == "testnet") testnet else mainnet
+    fun clientFor(network: String?) = if (network?.lowercase() == "testnet") testnet else mainnet
 
     route("/api/v1/blockchain") {
 

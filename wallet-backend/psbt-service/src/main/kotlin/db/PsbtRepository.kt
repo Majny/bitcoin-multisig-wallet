@@ -98,6 +98,50 @@ class PsbtRepository {
         }
     }
 
+    /**
+     * Atomically increments currentSigs and updates PSBT in a single transaction.
+     * Returns the new sig count. Uses SQL-level increment to prevent race conditions
+     * when two cosigners sign concurrently.
+     */
+    fun atomicSignAndUpdate(
+        id: UUID,
+        psbtBase64: String,
+        requiredSigs: Int,
+        trezorConnectParams: TrezorConnectParams? = null,
+        serializedTx: String? = null
+    ): Pair<Int, String> = transaction {
+        // Atomic increment: current_sigs = current_sigs + 1
+        PsbtsTable.update({ PsbtsTable.id eq id }) {
+            with(SqlExpressionBuilder) {
+                it.update(PsbtsTable.currentSigs, PsbtsTable.currentSigs + 1)
+            }
+            it[PsbtsTable.psbtBase64] = psbtBase64
+            it[updatedAt] = OffsetDateTime.now()
+            if (trezorConnectParams != null) {
+                it[PsbtsTable.trezorConnectParams] = json.encodeToString(
+                    TrezorConnectParams.serializer(), trezorConnectParams.copy(refTxs = null)
+                )
+            }
+            if (serializedTx != null) {
+                it[PsbtsTable.serializedTx] = serializedTx
+            }
+        }
+
+        // Read back the new value and determine status
+        val row = PsbtsTable.selectAll().where { PsbtsTable.id eq id }.single()
+        val newSigs = row[PsbtsTable.currentSigs]
+        val newStatus = if (newSigs >= requiredSigs) "signed" else "pending"
+
+        // Update status based on new sig count
+        if (newStatus != row[PsbtsTable.status]) {
+            PsbtsTable.update({ PsbtsTable.id eq id }) {
+                it[status] = newStatus
+            }
+        }
+
+        newSigs to newStatus
+    }
+
     /* Records a signature from a cosigner (device fingerprint + cosigner index). */
     fun addSignature(
         psbtId: UUID,
