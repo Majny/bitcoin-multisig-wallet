@@ -38,14 +38,22 @@ fun ImportWalletScreen(
     onImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             result.data?.data?.let { uri ->
-                // Read file content — done in the composable context for simplicity
-                // The caller should handle this via onFileContent callback
+                try {
+                    val content = context.contentResolver.openInputStream(uri)
+                        ?.bufferedReader()?.use { it.readText() }
+                    if (!content.isNullOrBlank()) {
+                        onFileContent(content.trim())
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("ImportWallet", "Failed to read file: ${e.message}", e)
+                }
             }
         }
     }

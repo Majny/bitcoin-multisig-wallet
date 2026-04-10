@@ -110,7 +110,7 @@ private fun SummaryLine(label: String, value: String) {
 
 private fun formatBtcFull(sats: Long): String {
     val btc = sats / 100_000_000.0
-    return String.format("%.8f BTC", btc)
+    return String.format(java.util.Locale.US, "%.8f BTC", btc)
 }
 
 // ===== Preview =====

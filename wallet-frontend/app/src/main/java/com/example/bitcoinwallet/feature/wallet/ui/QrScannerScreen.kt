@@ -94,7 +94,11 @@ fun QrScannerScreen(
                                         val result = decodeQrFromProxy(imageProxy)
                                         if (result != null && scannedRef.compareAndSet(false, true)) {
                                             Log.d(TAG, "QR scanned: $result")
-                                            onResult(result)
+                                            // Strip BIP-21 URI scheme (bitcoin:addr?params)
+                                            val cleanResult = if (result.startsWith("bitcoin:", ignoreCase = true)) {
+                                                result.substringAfter(":").split("?").first().trim()
+                                            } else result
+                                            onResult(cleanResult)
                                         }
                                     }
                                     imageProxy.close()

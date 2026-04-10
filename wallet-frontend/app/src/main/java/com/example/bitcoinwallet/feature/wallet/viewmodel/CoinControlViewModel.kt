@@ -38,7 +38,7 @@ data class SelectableUtxo(
     val key: String get() = "$txid:$vout"
     val valueBtc: Double get() = valueSats / 100_000_000.0
 
-    fun formatBtc(): String = String.format("%.8f BTC", valueBtc)
+    fun formatBtc(): String = String.format(java.util.Locale.US, "%.8f BTC", valueBtc)
 
     fun shortAddress(): String =
         if (address.length > 16) "${address.take(12)}..." else address
@@ -60,7 +60,7 @@ data class CoinControlUiState(
 
     fun formatSelectedBtc(): String =
         if (selectedSats == 0L) "0 BTC"
-        else String.format("%.8f BTC", selectedBtc)
+        else String.format(java.util.Locale.US, "%.8f BTC", selectedBtc)
 }
 
 /**

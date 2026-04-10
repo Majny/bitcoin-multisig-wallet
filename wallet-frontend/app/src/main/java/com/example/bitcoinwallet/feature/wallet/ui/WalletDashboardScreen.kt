@@ -212,7 +212,7 @@ private fun TransactionItem(
     val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
     val typeText = if (transaction.type == TransactionType.RECEIVED) "Received" else "Sent"
     val amountBtc = transaction.amount / 100_000_000.0
-    val amountText = String.format("%.8f BTC", amountBtc)
+    val amountText = String.format(java.util.Locale.US, "%.8f BTC", amountBtc)
     val typeColor = if (transaction.type == TransactionType.RECEIVED) ReceiveGreen else TextSecondary
 
     Row(

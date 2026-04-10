@@ -193,6 +193,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 }
             }
 
+            // Reset Trezor state if user returns without signing (cancel/back).
+            // When awaitingTrezor is true but no result arrives after 2s, reset.
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            LaunchedEffect(state.awaitingTrezor) {
+                if (state.awaitingTrezor) {
+                    // Wait for lifecycle resume (user returned from Trezor app)
+                    kotlinx.coroutines.delay(3000L)
+                    // If still awaiting and no result arrived, user likely cancelled
+                    if (SessionStore.pendingSignedPsbt.value == null && viewModel.uiState.value.awaitingTrezor) {
+                        Log.d("WalletNav", "Trezor sign timeout/cancel — resetting awaitingTrezor")
+                        viewModel.resetTrezorState()
+                    }
+                }
+            }
+
             // Navigate to success screen when broadcast completes.
             // Separate LaunchedEffect avoids lifecycle issues from navigating inside
             // a viewModelScope callback that may fire before the composable is RESUMED.
@@ -228,7 +243,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                             }
                         }
                     ) { psbtBase64, trezorParams ->
-                        if (trezorParams != null) {
+                        val launched = if (trezorParams != null) {
                             // Singlesig: use structured Trezor Connect params
                             Log.d("WalletNav", "Opening Trezor with STRUCTURED params: coin=${trezorParams.coin}, inputs=${trezorParams.inputs.size}, outputs=${trezorParams.outputs.size}, version=${trezorParams.version}, locktime=${trezorParams.locktime}")
                             trezorLauncher.openSignTransactionStructured(context, trezorParams)
@@ -236,6 +251,10 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                             // Fallback: raw PSBT (multisig or no params)
                             Log.d("WalletNav", "Opening Trezor with raw PSBT fallback, network=$walletNetwork, psbt length=${psbtBase64.length}")
                             trezorLauncher.openSignTransaction(context, psbtBase64, walletNetwork)
+                        }
+                        if (!launched) {
+                            Log.e("WalletNav", "Failed to launch Trezor Suite — app may not be installed")
+                            viewModel.resetTrezorState()
                         }
                     }
                 }

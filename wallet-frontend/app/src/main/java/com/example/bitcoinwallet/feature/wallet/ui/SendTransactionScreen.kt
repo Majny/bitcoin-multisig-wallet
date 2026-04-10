@@ -447,7 +447,7 @@ private fun SummaryRow(
 
 private fun formatBtc(sats: Long): String {
     val btc = sats / 100_000_000.0
-    return String.format("%.8f BTC", btc)
+    return String.format(java.util.Locale.US, "%.8f BTC", btc)
 }
 
 private fun formatFee(sats: Long, rateSatVb: Double): String {

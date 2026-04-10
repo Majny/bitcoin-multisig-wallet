@@ -57,13 +57,26 @@ class ReceiveBtcViewModel : ViewModel() {
 
                 // Build derivation path for "Show on Trezor" verification
                 val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
-                val purpose = when (wallet?.scriptType?.uppercase()) {
-                    "P2TR", "TAPROOT" -> 86
-                    "P2SH-P2WPKH", "NESTED_SEGWIT" -> 49
-                    else -> 84  // P2WPKH default
-                }
                 val coinType = if (wallet?.network == "testnet") 1 else 0
-                val derivationPath = "m/$purpose'/$coinType'/0'/0/${dto.index}"
+                val accountIndex = SessionStore.activeAccountIndex ?: wallet?.accountIndex ?: 0
+                val isMultisig = wallet?.type == com.example.bitcoinwallet.core.signer.WalletType.MULTI_SIG
+                val derivationPath = if (isMultisig) {
+                    // BIP-48: m/48'/coinType'/account'/scriptType'/chain/index
+                    // scriptType: 1=P2SH-P2WSH, 2=P2WSH
+                    val scriptTypeNum = when (wallet?.scriptType?.uppercase()) {
+                        "P2SH_P2WSH", "SH_WSH" -> 1
+                        else -> 2  // P2WSH default for multisig
+                    }
+                    "m/48'/$coinType'/$accountIndex'/$scriptTypeNum'/0/${dto.index}"
+                } else {
+                    // BIP-84/49/86: m/purpose'/coinType'/account'/chain/index
+                    val purpose = when (wallet?.scriptType?.uppercase()) {
+                        "P2TR", "TAPROOT", "TR" -> 86
+                        "P2SH-P2WPKH", "NESTED_SEGWIT" -> 49
+                        else -> 84  // P2WPKH default
+                    }
+                    "m/$purpose'/$coinType'/$accountIndex'/0/${dto.index}"
+                }
 
                 val qr = generateQrBitmap("bitcoin:${dto.address}", size = 512)
 

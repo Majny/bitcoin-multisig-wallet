@@ -207,11 +207,13 @@ class PsbtDetailViewModel : ViewModel() {
                 if (trezorSigs != null && trezorSigs.isNotEmpty()) {
                     val signerAccountIdx = SessionStore.activeAccountIndex
                     Log.d(TAG, "Submitting ${trezorSigs.size} Trezor signatures, signerAccountIndex=$signerAccountIdx")
+                    // cosignerIndex is resolved server-side via signerAccountIndex,
+                    // but we send activeAccountIndex as fallback for consistency
                     val result = WalletApi.client.signTrezor(
                         psbtId = psbtId,
                         accessToken = accessToken,
                         signatures = trezorSigs,
-                        cosignerIndex = 0,
+                        cosignerIndex = signerAccountIdx ?: 0,
                         fingerprint = fingerprint,
                         serializedTx = serializedTxHex,
                         signerAccountIndex = signerAccountIdx

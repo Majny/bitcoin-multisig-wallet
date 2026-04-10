@@ -504,7 +504,24 @@ data class TrezorConnectOutputDto(
 @Serializable
 data class TrezorConnectRefTxDto(
     val hash: String,
-    val tx_hex: String
+    val version: Int,
+    val lock_time: Int,
+    val inputs: List<TrezorConnectRefTxInputDto>,
+    val bin_outputs: List<TrezorConnectRefTxBinOutputDto>
+)
+
+@Serializable
+data class TrezorConnectRefTxInputDto(
+    val prev_hash: String,
+    val prev_index: Long,
+    val script_sig: String,
+    val sequence: Long
+)
+
+@Serializable
+data class TrezorConnectRefTxBinOutputDto(
+    val amount: Long,
+    val script_pubkey: String
 )
 
 @Serializable

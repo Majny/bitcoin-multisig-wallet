@@ -36,7 +36,7 @@ fun TrezorConnectScreen(
             .padding(horizontal = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.height(48.dp))
 
         Text(
             text = "Bitcoin Wallet",
@@ -44,7 +44,7 @@ fun TrezorConnectScreen(
             color = TextPrimary
         )
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.weight(0.35f))
 
         Icon(
             imageVector = Icons.Default.Lock,
@@ -77,7 +77,7 @@ fun TrezorConnectScreen(
             onNetworkSelected = { selectedNetwork = it }
         )
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.weight(0.8f))
 
         Button(
             onClick = { onConnect(selectedNetwork) },

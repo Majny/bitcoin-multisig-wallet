@@ -155,6 +155,18 @@ class SendTransactionViewModel : ViewModel() {
 
     // ========== User Actions ==========
 
+    /**
+     * Resets Trezor-related state when signing is cancelled or times out.
+     * Call this when user returns from Trezor without a result.
+     */
+    fun resetTrezorState() {
+        _uiState.value = _uiState.value.copy(
+            awaitingTrezor = false,
+            isSending = false,
+            error = null
+        )
+    }
+
     fun onRecipientChanged(address: String) {
         _uiState.value = _uiState.value.copy(
             recipientAddress = address.trim(),
@@ -479,19 +491,19 @@ class SendTransactionViewModel : ViewModel() {
 
     private fun recalculate() {
         val state = _uiState.value
-        val btcAmount = state.amountBtc.toDoubleOrNull() ?: 0.0
-        val amountSats = (btcAmount * 100_000_000).toLong()
+        val btcAmount = state.amountBtc.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+        val amountSats = btcAmount.multiply(java.math.BigDecimal("100000000")).toLong()
 
         // Odhad vsize pro 1 vstup, 2 výstupy (stejný vzorec jako backend PsbtBuilder):
         //   overhead = 10, output = 31 * 2 = 62
         //   P2WPKH (singlesig) vstup: 68 vB  → celkem 140
-        //   P2WSH m-of-n vstup: (57 + 73*m + 34*n) vB
+        //   P2WSH m-of-n vstup: 41 + (5 + 73*m + 34*n)/4 vB (with SegWit witness discount)
         val walletId = SessionStore.activeWalletId
         val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
         val inputVsize = if (wallet?.type == WalletType.MULTI_SIG) {
             val m = wallet.m ?: 2
             val n = wallet.n ?: 3
-            57 + 73 * m + 34 * n
+            41 + (5 + 73 * m + 34 * n) / 4
         } else {
             68
         }
@@ -561,14 +573,14 @@ class SendTransactionViewModel : ViewModel() {
             val selectedTotal = state.selectedUtxos.sumOf { it.valueSats }
             if (selectedTotal < state.totalSats) {
                 val shortfall = state.totalSats - selectedTotal
-                val shortfallBtc = String.format("%.8f", shortfall / 100_000_000.0)
+                val shortfallBtc = String.format(java.util.Locale.US, "%.8f", shortfall / 100_000_000.0)
                 _uiState.value = _uiState.value.copy(
                     amountError = "Selected UTXOs insufficient (short $shortfallBtc BTC)"
                 )
                 hasError = true
             }
         } else if (state.autoSelect && state.reservedSats > 0 && state.totalSats > state.balanceSats - state.reservedSats) {
-            val reservedBtc = String.format("%.8f", state.reservedSats / 100_000_000.0)
+            val reservedBtc = String.format(java.util.Locale.US, "%.8f", state.reservedSats / 100_000_000.0)
             _uiState.value = _uiState.value.copy(
                 amountError = "Insufficient available funds. $reservedBtc BTC is reserved in pending transactions."
             )
@@ -582,13 +594,15 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     private fun isValidBitcoinAddress(address: String): Boolean {
-        // Basic validation: mainnet/testnet/signet address formats
-        return address.startsWith("bc1") ||
-                address.startsWith("tb1") ||
-                address.startsWith("1") ||
-                address.startsWith("3") ||
-                address.startsWith("m") ||
-                address.startsWith("n") ||
-                address.startsWith("2")
+        // Bech32/Bech32m: bc1... (mainnet) or tb1... (testnet), 42-62 chars
+        if (address.startsWith("bc1") || address.startsWith("tb1")) {
+            return address.length in 42..62 && address.lowercase().all { it.isLetterOrDigit() }
+        }
+        // Legacy P2PKH/P2SH: 25-34 chars, starts with 1/3 (mainnet) or m/n/2 (testnet)
+        if (address.startsWith("1") || address.startsWith("3") ||
+            address.startsWith("m") || address.startsWith("n") || address.startsWith("2")) {
+            return address.length in 25..34 && address.all { it.isLetterOrDigit() }
+        }
+        return false
     }
 }

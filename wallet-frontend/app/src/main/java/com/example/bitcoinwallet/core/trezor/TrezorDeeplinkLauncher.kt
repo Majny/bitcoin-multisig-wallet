@@ -140,13 +140,35 @@ class TrezorDeeplinkLauncher(
             }
             put("outputs", outputsArray)
 
-            // Include refTxs — Trezor Suite Mobile may not have testnet4 blockbook backend
+            // Include refTxs in structured format — Trezor Connect deeplink
+            // does NOT support tx_hex, needs parsed version/inputs/bin_outputs/lock_time.
             if (params.refTxs != null && params.refTxs.isNotEmpty()) {
                 val refTxsArray = JSONArray()
                 for (rtx in params.refTxs) {
                     refTxsArray.put(JSONObject().apply {
                         put("hash", rtx.hash)
-                        put("tx_hex", rtx.tx_hex)
+                        put("version", rtx.version)
+                        put("lock_time", rtx.lock_time)
+
+                        val inputsArr = JSONArray()
+                        for (inp in rtx.inputs) {
+                            inputsArr.put(JSONObject().apply {
+                                put("prev_hash", inp.prev_hash)
+                                put("prev_index", inp.prev_index)
+                                put("script_sig", inp.script_sig)
+                                put("sequence", inp.sequence)
+                            })
+                        }
+                        put("inputs", inputsArr)
+
+                        val outputsArr = JSONArray()
+                        for (out in rtx.bin_outputs) {
+                            outputsArr.put(JSONObject().apply {
+                                put("amount", out.amount)
+                                put("script_pubkey", out.script_pubkey)
+                            })
+                        }
+                        put("bin_outputs", outputsArr)
                     })
                 }
                 put("refTxs", refTxsArray)
