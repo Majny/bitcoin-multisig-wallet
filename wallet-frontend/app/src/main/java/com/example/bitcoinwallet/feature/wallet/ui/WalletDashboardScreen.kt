@@ -150,7 +150,7 @@ private fun TransactionHistorySection(
     ) {
         // Section header
         Text(
-            text = "Transaction",
+            text = "Transactions",
             color = TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
@@ -208,8 +208,7 @@ private fun TransactionItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dateFormatter = DateTimeFormatter.ofPattern("MMM dd")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    val dateTimeFormatter = DateTimeFormatter.ofPattern("MMM dd, HH:mm")
     val typeText = if (transaction.type == TransactionType.RECEIVED) "Received" else "Sent"
     val amountBtc = transaction.amount / 100_000_000.0
     val amountText = String.format(java.util.Locale.US, "%.8f BTC", amountBtc)
@@ -219,26 +218,27 @@ private fun TransactionItem(
         modifier = modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Date + Time
-        Column(modifier = Modifier.width(56.dp)) {
+        // Left: type + date
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = transaction.dateTime.format(dateFormatter),
-                color = TextMuted,
-                fontSize = 14.sp
+                text = typeText,
+                color = typeColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
-                text = transaction.dateTime.format(timeFormatter),
+                text = transaction.dateTime.format(dateTimeFormatter),
                 color = TextMuted,
-                fontSize = 11.sp
+                fontSize = 12.sp
             )
         }
 
-        // Type + Amount
+        // Right: amount
         Text(
-            text = "$typeText $amountText",
+            text = amountText,
             color = typeColor,
             fontSize = 14.sp
         )

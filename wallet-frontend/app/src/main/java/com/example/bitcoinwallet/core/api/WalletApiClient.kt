@@ -10,6 +10,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -248,6 +249,18 @@ class WalletApiClient(
         return client.get("$baseUrl/psbt/$psbtId/signers") {
             header("Authorization", "Bearer $accessToken")
         }.body()
+    }
+
+    /**
+     * PUT /api/v1/wallets/{walletId}/cosigners/{idx}/label
+     * Updates the display label for a cosigner.
+     */
+    suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String, accessToken: String) {
+        client.put("$baseUrl/wallets/$walletId/cosigners/$cosignerIdx/label") {
+            header("Authorization", "Bearer $accessToken")
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("label" to label))
+        }
     }
 
     // ============ Price Endpoints ============
@@ -617,7 +630,8 @@ data class SignerDetailDto(
     val xpub: String? = null,
     val signed: Boolean,
     val deviceId: String? = null,
-    val signedAt: String? = null
+    val signedAt: String? = null,
+    val label: String? = null
 )
 
 // ============ Wallet Management DTOs ============
@@ -633,7 +647,8 @@ data class MultisigWalletSummaryDto(
     val scriptType: String = "",
     val m: Int? = null,
     val n: Int? = null,
-    val accountIndex: Int? = null
+    val accountIndex: Int? = null,
+    val cosignerAccountIndex: Int? = null
 )
 
 @Serializable

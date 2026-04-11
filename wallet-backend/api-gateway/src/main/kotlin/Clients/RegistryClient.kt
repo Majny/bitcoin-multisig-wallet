@@ -5,6 +5,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.get
 import io.ktor.client.request.post
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -25,6 +26,8 @@ interface RegistryClient {
     suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse
 
     suspend fun deriveAddresses(descriptor: String, network: String, count: Int = 5): List<String>
+
+    suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String)
 }
 
 class RegistryClientImpl(
@@ -99,5 +102,12 @@ class RegistryClientImpl(
             setBody(DeriveAddressesRequest(descriptor = descriptor, network = network, count = count))
         }.body()
         return resp.addresses
+    }
+
+    override suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String) {
+        client().put("$baseUrl/registry/wallets/$walletId/cosigners/$cosignerIdx/label") {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("label" to label))
+        }
     }
 }

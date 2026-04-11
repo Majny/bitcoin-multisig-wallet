@@ -45,11 +45,16 @@ fun SettingsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "Settings", color = TextMuted, fontSize = 14.sp)
+            Text(
+                text = "Settings",
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -58,20 +63,6 @@ fun SettingsScreen(
                 )
             }
         }
-
-        /* ── Title ── */
-        Text(
-            text = "Settings",
-            color = TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp),
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         /* ── Account section ── */
         SectionLabel("Account")

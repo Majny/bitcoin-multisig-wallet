@@ -521,7 +521,8 @@ fun Route.psbtRoutes(
                         xpub = cosigner.xpubRoot,
                         signed = sig != null,
                         deviceId = sig?.deviceId,
-                        signedAt = sig?.signedAt
+                        signedAt = sig?.signedAt,
+                        label = cosigner.label
                     )
                 }
 

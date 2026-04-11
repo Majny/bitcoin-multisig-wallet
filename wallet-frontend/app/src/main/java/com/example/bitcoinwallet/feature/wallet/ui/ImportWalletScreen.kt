@@ -64,13 +64,20 @@ fun ImportWalletScreen(
             .background(DarkBackground)
             .padding(horizontal = 20.dp)
     ) {
-        /* ── Top bar: X close ── */
+        /* ── Top bar ── */
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.End
+                .padding(top = 16.dp, bottom = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Text(
+                text = "Import Wallet",
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -79,18 +86,6 @@ fun ImportWalletScreen(
                 )
             }
         }
-
-        /* ── Title ── */
-        Text(
-            text = "Import Wallet",
-            color = TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 20.dp)
-        )
 
         /* ── Descriptor text area ── */
         OutlinedTextField(

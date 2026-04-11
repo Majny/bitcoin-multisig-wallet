@@ -25,7 +25,13 @@ data class CosignerInWallet(
     val cosignerId: String,
     val fingerprint: String,
     val originPath: String,
-    val xpubRoot: String
+    val xpubRoot: String,
+    val label: String? = null
+)
+
+@Serializable
+data class UpdateCosignerLabelRequest(
+    val label: String
 )
 
 @Serializable
@@ -43,7 +49,9 @@ data class WalletSummary(
     val m: Int? = null,
     val n: Int? = null,
     val label: String? = null,
-    val accountIndex: Int? = null
+    val accountIndex: Int? = null,
+    /** For multisig: the BIP-48 account from wallets table (maps to cosigner position). */
+    val cosignerAccountIndex: Int? = null
 )
 
 @Serializable

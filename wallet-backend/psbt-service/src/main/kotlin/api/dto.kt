@@ -100,7 +100,8 @@ data class SignerDetail(
     val xpub: String? = null,
     val signed: Boolean,
     val deviceId: String? = null,
-    val signedAt: String? = null
+    val signedAt: String? = null,
+    val label: String? = null
 )
 
 // ========== Trezor Connect DTOs ==========
@@ -265,7 +266,8 @@ data class CosignerDto(
     val idx: Int,
     val fingerprint: String,
     val originPath: String,
-    val xpubRoot: String
+    val xpubRoot: String,
+    val label: String? = null
 )
 
 @Serializable

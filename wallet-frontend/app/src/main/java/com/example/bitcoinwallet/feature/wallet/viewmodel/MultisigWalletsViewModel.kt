@@ -14,7 +14,9 @@ data class MultisigWalletItem(
     val label: String,
     val m: Int,
     val n: Int,
-    val balanceSats: Long
+    val balanceSats: Long,
+    val accountIndex: Int? = null,
+    val cosignerAccountIndex: Int? = null
 ) {
     val mOfN: String get() = "$m of $n"
     val balanceBtc: String get() {
@@ -75,7 +77,9 @@ class MultisigWalletsViewModel : ViewModel() {
                             label = dto.label.ifBlank { dto.walletId.ifBlank { dto.id } },
                             m = dto.m ?: 0,
                             n = dto.n ?: 0,
-                            balanceSats = balance
+                            balanceSats = balance,
+                            accountIndex = dto.accountIndex,
+                            cosignerAccountIndex = dto.cosignerAccountIndex
                         )
                     }
 

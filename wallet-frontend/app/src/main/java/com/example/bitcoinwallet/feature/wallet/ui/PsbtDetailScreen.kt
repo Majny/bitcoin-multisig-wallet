@@ -1,12 +1,14 @@
 package com.example.bitcoinwallet.feature.wallet.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -15,6 +17,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -27,9 +33,17 @@ import com.example.bitcoinwallet.feature.wallet.viewmodel.CosignerUiInfo
 import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtDetailUiState
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SignatureUiInfo
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SignerStatus
-import com.example.bitcoinwallet.ui.components.PrimaryButton
-import com.example.bitcoinwallet.ui.components.SecondaryButton
-import com.example.bitcoinwallet.ui.theme.*
+import com.example.bitcoinwallet.ui.theme.AccentTeal
+import com.example.bitcoinwallet.ui.theme.BitcoinOrangeLight
+import com.example.bitcoinwallet.ui.theme.BitcoinWalletTheme
+import com.example.bitcoinwallet.ui.theme.DarkBackground
+import com.example.bitcoinwallet.ui.theme.DarkCard
+import com.example.bitcoinwallet.ui.theme.DarkSurface
+import com.example.bitcoinwallet.ui.theme.ErrorRed
+import com.example.bitcoinwallet.ui.theme.ReceiveGreen
+import com.example.bitcoinwallet.ui.theme.TextMuted
+import com.example.bitcoinwallet.ui.theme.TextPrimary
+import com.example.bitcoinwallet.ui.theme.TextSecondary
 
 /**
  * PSBT Detail screen showing transaction summary, signatures status,
@@ -44,14 +58,15 @@ fun PsbtDetailScreen(
     onBroadcast: () -> Unit,
     onShowRecipients: () -> Unit,
     onDismissRecipients: () -> Unit,
+    onRenameCosigner: (cosignerIdx: Int, newLabel: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
-    // Signers dialog
     if (state.showSignersDialog) {
         SignersDialog(
             cosigners = state.cosigners,
             isLoading = state.signersLoading,
-            onDismiss = onDismissRecipients
+            onDismiss = onDismissRecipients,
+            onRename = onRenameCosigner
         )
     }
 
@@ -60,318 +75,259 @@ fun PsbtDetailScreen(
             .fillMaxSize()
             .background(DarkBackground)
     ) {
-        // Top bar
-        PsbtDetailTopBar(onClose = onClose)
+        // ── Top bar ──
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp, top = 14.dp, bottom = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "PSBT Detail",
+                color = TextPrimary,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = TextPrimary
+                )
+            }
+        }
 
         if (state.isLoading) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator(color = AccentTeal)
-            }
+            ) { CircularProgressIndicator(color = AccentTeal) }
         } else if (state.error != null) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = state.error,
-                    color = ErrorRed,
-                    fontSize = 14.sp
-                )
-            }
+            ) { Text(text = state.error, color = ErrorRed, fontSize = 14.sp) }
         } else {
+            // ── Content ──
             Column(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 20.dp)
             ) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Title
-                Text(
-                    text = "PSBT Detail",
-                    color = TextPrimary,
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Signature status: "2 of 3 required"
-                Text(
-                    text = state.signaturesLabel,
-                    color = AccentTeal,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
-                )
-
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // Summary card
-                SummaryCard(state = state)
-
-                Spacer(modifier = Modifier.height(16.dp))
-
-                // Show Signers button
-                PrimaryButton(
-                    text = "Show Signers",
-                    onClick = onShowRecipients
-                )
-
-                // Signers section (who has signed)
-                if (state.signatures.isNotEmpty()) {
-                    Spacer(modifier = Modifier.height(20.dp))
-                    SignersSection(signatures = state.signatures)
-                }
-
-                // Broadcast success message
-                if (state.broadcastSuccess && state.txid != null) {
-                    Spacer(modifier = Modifier.height(16.dp))
+                // Signature progress badge
+                val progressColor = if (state.isFullySigned || state.canBroadcast) ReceiveGreen else AccentTeal
+                Row(
+                    modifier = Modifier
+                        .padding(vertical = 12.dp)
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(progressColor.copy(alpha = 0.12f))
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = "Transaction broadcast! TXID:",
-                        color = ReceiveGreen,
+                        text = state.signaturesLabel,
+                        color = progressColor,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
-                    Spacer(modifier = Modifier.height(4.dp))
+                }
+
+                // ── Summary card ──
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DarkSurface)
+                        .padding(16.dp)
+                ) {
+                    SummaryRow("Amount", state.transactionAmountBtc)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    SummaryRow("Fee", state.networkFeeBtc)
+                    HorizontalDivider(
+                        color = DarkCard, thickness = 1.dp,
+                        modifier = Modifier.padding(vertical = 10.dp)
+                    )
+                    SummaryRow("Total", state.totalBtc, bold = true)
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ── Signatures card ──
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(DarkSurface)
+                        .padding(16.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Signatures",
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            text = "${state.currentSigs} / ${state.requiredSigs}",
+                            color = if (state.isFullySigned) ReceiveGreen else TextMuted,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    if (state.signatures.isNotEmpty()) {
+                        Spacer(modifier = Modifier.height(12.dp))
+                        state.signatures.forEachIndexed { index, sig ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    color = DarkCard, thickness = 0.5.dp,
+                                    modifier = Modifier.padding(vertical = 6.dp)
+                                )
+                            }
+                            val cosigner = state.cosigners.firstOrNull {
+                                it.cosignerIndex == sig.cosignerIndex
+                            }
+                            val signerName = cosigner?.let { displayNameFor(it) }
+                                ?: "Signer ...${sig.fingerprint.take(4).uppercase()}"
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = signerName,
+                                    color = AccentTeal,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Text(
+                                    text = "Signed",
+                                    color = ReceiveGreen,
+                                    fontSize = 12.sp
+                                )
+                            }
+                        }
+                    } else {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "No signatures yet",
+                            color = TextMuted,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    // "Show Signers" link
+                    Spacer(modifier = Modifier.height(12.dp))
                     Text(
-                        text = state.txid,
-                        color = TextSecondary,
-                        fontSize = 11.sp
+                        text = "Show all signers",
+                        color = AccentTeal,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .clickable(onClick = onShowRecipients)
+                            .padding(vertical = 4.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
-            // Bottom action buttons
-            ActionButtonsSection(
-                state = state,
-                onSignPsbt = onSignPsbt,
-                onExportPsbt = onExportPsbt,
-                onBroadcast = onBroadcast
-            )
+            // ── Bottom actions ──
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(DarkBackground)
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if ((state.isFullySigned || state.canBroadcast) && !state.isBroadcast) {
+                    Button(
+                        onClick = onBroadcast,
+                        colors = ButtonDefaults.buttonColors(containerColor = ReceiveGreen),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Broadcast Transaction", color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
+                } else if (state.canSign && !state.isBroadcast) {
+                    Button(
+                        onClick = onSignPsbt,
+                        colors = ButtonDefaults.buttonColors(containerColor = AccentTeal),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Sign with Trezor", color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                    }
+                }
+
+                if (!state.isBroadcast) {
+                    Button(
+                        onClick = onExportPsbt,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentTeal.copy(alpha = 0.12f),
+                            contentColor = AccentTeal
+                        ),
+                        shape = RoundedCornerShape(24.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        Text("Export PSBT", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                    }
+                }
+            }
         }
     }
 }
 
-// ─── Top bar ───────────────────────────────────────────────────────
-
-@Composable
-private fun PsbtDetailTopBar(
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(DarkBackground)
-            .padding(horizontal = 8.dp, vertical = 12.dp)
-    ) {
-        Text(
-            text = "PSBT detail",
-            color = TextMuted,
-            fontSize = 12.sp,
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 12.dp)
-        )
-
-        IconButton(
-            onClick = onClose,
-            modifier = Modifier.align(Alignment.CenterEnd)
-        ) {
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Close",
-                tint = TextPrimary
-            )
-        }
-    }
+private fun displayNameFor(cosigner: CosignerUiInfo): String {
+    if (cosigner.isMe) return "YOU"
+    cosigner.label?.takeIf { it.isNotBlank() }?.let { return it }
+    val suffix = cosigner.xpub?.takeLast(4)?.uppercase()
+        ?: cosigner.fingerprint.take(4).uppercase()
+    return "Signer ...$suffix"
 }
 
-// ─── Summary card ──────────────────────────────────────────────────
-
-@Composable
-private fun SummaryCard(
-    state: PsbtDetailUiState,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(DarkSurface)
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Summary",
-            color = TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        SummaryRow(label = "Transaction Amount", value = state.transactionAmountBtc)
-        SummaryRow(label = "Network Fee", value = state.networkFeeBtc)
-
-        HorizontalDivider(
-            color = DarkCard,
-            thickness = 1.dp,
-            modifier = Modifier.padding(vertical = 8.dp)
-        )
-
-        SummaryRow(label = "Total", value = state.totalBtc)
-    }
-}
+// ─── Small helpers ────────────────────────────────────────────────
 
 @Composable
 private fun SummaryRow(
     label: String,
     value: String,
+    bold: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
+        modifier = modifier.fillMaxWidth().padding(vertical = 3.dp),
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
+        Text(text = label, color = TextMuted, fontSize = 13.sp)
         Text(
-            text = label,
-            color = TextMuted,
-            fontSize = 13.sp
-        )
-        Text(
-            text = value,
-            color = TextSecondary,
-            fontSize = 13.sp
+            text = value, color = if (bold) TextPrimary else TextSecondary,
+            fontSize = 13.sp, fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal
         )
     }
 }
 
-// ─── Signers section ───────────────────────────────────────────────
-
-@Composable
-private fun SignersSection(
-    signatures: List<SignatureUiInfo>,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(DarkSurface)
-            .padding(16.dp)
-    ) {
-        Text(
-            text = "Signatures",
-            color = TextPrimary,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold
-        )
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        signatures.forEach { sig ->
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 4.dp),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    text = sig.fingerprint,
-                    color = AccentTeal,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = sig.deviceId,
-                    color = TextMuted,
-                    fontSize = 13.sp
-                )
-            }
-        }
-    }
-}
-
-// ─── Bottom action buttons ─────────────────────────────────────────
-
-@Composable
-private fun ActionButtonsSection(
-    state: PsbtDetailUiState,
-    onSignPsbt: () -> Unit,
-    onExportPsbt: () -> Unit,
-    onBroadcast: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(DarkBackground)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Show either "Sign PSBT" or "Broadcast" — not both
-        if (state.canSign && !state.isBroadcast) {
-            // Still needs signatures → show Sign button
-            PrimaryButton(
-                text = "Sign PSBT",
-                onClick = onSignPsbt
-            )
-        }
-
-        // Export PSBT — always available (unless already broadcast)
-        if (!state.isBroadcast) {
-            SecondaryButton(
-                text = "Export PSBT",
-                onClick = onExportPsbt
-            )
-        }
-
-        if ((state.isFullySigned || state.canBroadcast) && !state.isBroadcast) {
-            // Fully signed → show bright green Broadcast button
-            Button(
-                onClick = onBroadcast,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = ReceiveGreen
-                ),
-                shape = RoundedCornerShape(24.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-            ) {
-                Text(
-                    text = "Broadcast",
-                    color = TextPrimary,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp
-                )
-            }
-        }
-    }
-}
-
-// ─── Signers dialog (Show Recipients) ──────────────────────────────
+// ─── Signers dialog ───────────────────────────────────────────────
 
 @Composable
 private fun SignersDialog(
     cosigners: List<CosignerUiInfo>,
     isLoading: Boolean,
     onDismiss: () -> Unit,
+    onRename: (cosignerIdx: Int, newLabel: String) -> Unit = { _, _ -> },
     modifier: Modifier = Modifier
 ) {
+    var editingIdx by remember { mutableStateOf<Int?>(null) }
+    var editText by remember { mutableStateOf("") }
     Dialog(onDismissRequest = onDismiss) {
         Column(
             modifier = modifier
@@ -381,48 +337,39 @@ private fun SignersDialog(
                 .padding(20.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            // Header: title + X button
-            Box(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
                     text = "Signers",
                     color = TextPrimary,
                     fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.align(Alignment.CenterStart)
+                    fontWeight = FontWeight.Bold
                 )
-
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.CenterEnd)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = TextPrimary
-                    )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = onDismiss) {
+                    Icon(Icons.Default.Close, "Close", tint = TextPrimary)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
             if (isLoading) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 24.dp),
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = AccentTeal)
-                }
+                ) { CircularProgressIndicator(color = AccentTeal) }
             } else if (cosigners.isEmpty()) {
-                Text(
-                    text = "No cosigners found",
-                    color = TextMuted,
-                    fontSize = 14.sp,
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
+                Text("No cosigners found", color = TextMuted, fontSize = 14.sp,
+                    modifier = Modifier.padding(vertical = 16.dp))
             } else {
-                cosigners.forEach { cosigner ->
+                cosigners.forEachIndexed { index, cosigner ->
+                    if (index > 0) {
+                        HorizontalDivider(color = DarkCard, thickness = 0.5.dp,
+                            modifier = Modifier.padding(vertical = 2.dp))
+                    }
+
                     val statusText = when (cosigner.status) {
                         SignerStatus.SIGNED -> "Signed"
                         SignerStatus.PENDING -> "Pending"
@@ -433,67 +380,108 @@ private fun SignersDialog(
                         SignerStatus.PENDING -> BitcoinOrangeLight
                         SignerStatus.MISSING -> ErrorRed
                     }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 8.dp)
-                    ) {
-                        // Header: fingerprint + status
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = if (cosigner.isMe) "Cosigner #${cosigner.cosignerIndex + 1} (You)" else "Cosigner #${cosigner.cosignerIndex + 1}",
-                                color = if (cosigner.isMe) AccentTeal else TextPrimary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = statusText,
-                                color = statusColor,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        // Fingerprint
-                        Text(
-                            text = "Fingerprint: ${cosigner.fingerprint}",
-                            color = TextSecondary,
-                            fontSize = 12.sp
-                        )
-
-                        // Origin path
-                        if (!cosigner.originPath.isNullOrBlank()) {
-                            Text(
-                                text = "Path: m/${cosigner.originPath}",
-                                color = TextSecondary,
-                                fontSize = 12.sp
-                            )
-                        }
-
-                        // Xpub (full, wrapping)
-                        if (!cosigner.xpub.isNullOrBlank()) {
-                            Spacer(modifier = Modifier.height(2.dp))
-                            Text(
-                                text = cosigner.xpub,
-                                color = TextMuted,
-                                fontSize = 10.sp,
-                                lineHeight = 14.sp
-                            )
-                        }
+                    val statusIcon = when (cosigner.status) {
+                        SignerStatus.SIGNED -> "\u2713"
+                        SignerStatus.PENDING -> "\u25CB"
+                        SignerStatus.MISSING -> "\u2717"
                     }
 
-                    if (cosigner !== cosigners.last()) {
-                        HorizontalDivider(
-                            color = DarkCard,
-                            thickness = 1.dp
-                        )
+                    val displayName = displayNameFor(cosigner)
+                    val isEditing = editingIdx == cosigner.cosignerIndex
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Status icon circle
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(statusColor.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(statusIcon, color = statusColor,
+                                fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            if (isEditing) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(DarkCard)
+                                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                                ) {
+                                    androidx.compose.foundation.text.BasicTextField(
+                                        value = editText,
+                                        onValueChange = { editText = it },
+                                        singleLine = true,
+                                        textStyle = androidx.compose.ui.text.TextStyle(
+                                            fontSize = 14.sp,
+                                            color = TextPrimary
+                                        ),
+                                        cursorBrush = androidx.compose.ui.graphics.SolidColor(AccentTeal),
+                                        decorationBox = { innerTextField ->
+                                            if (editText.isEmpty()) {
+                                                Text("Enter name", color = TextMuted, fontSize = 14.sp)
+                                            }
+                                            innerTextField()
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Text(
+                                        text = "Save",
+                                        color = AccentTeal,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        modifier = Modifier
+                                            .clickable {
+                                                if (editText.isNotBlank()) {
+                                                    onRename(cosigner.cosignerIndex, editText.trim())
+                                                }
+                                                editingIdx = null
+                                            }
+                                            .padding(4.dp)
+                                    )
+                                }
+                            } else {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = displayName,
+                                        color = if (cosigner.isMe) AccentTeal else TextPrimary,
+                                        fontSize = 14.sp, fontWeight = FontWeight.SemiBold
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Rename",
+                                        tint = TextMuted,
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clickable {
+                                                editText = cosigner.label ?: ""
+                                                editingIdx = cosigner.cosignerIndex
+                                            }
+                                    )
+                                }
+                                val subtitle = if (cosigner.xpub != null)
+                                    "${cosigner.fingerprint} · ...${cosigner.xpub.takeLast(8)}"
+                                else cosigner.fingerprint
+                                Text(subtitle,
+                                    color = TextMuted, fontSize = 11.sp)
+                            }
+                        }
+
+                        if (!isEditing) {
+                            Text(statusText, color = statusColor,
+                                fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                        }
                     }
                 }
             }
@@ -509,23 +497,16 @@ private fun PsbtDetailPendingPreview() {
     BitcoinWalletTheme {
         PsbtDetailScreen(
             state = PsbtDetailUiState(
-                psbtId = "abc-123",
-                status = "pending",
-                requiredSigs = 3,
-                currentSigs = 1,
-                totalOutputSats = 123456789,
-                estimatedFeeSats = 12300,
+                psbtId = "abc-123", status = "pending",
+                requiredSigs = 3, currentSigs = 1,
+                totalOutputSats = 123456789, estimatedFeeSats = 12300,
                 isLoading = false,
                 signatures = listOf(
                     SignatureUiInfo("73c5da0a", "Trezor T", "2025-05-27T10:30:00Z")
                 )
             ),
-            onClose = {},
-            onSignPsbt = {},
-            onExportPsbt = {},
-            onBroadcast = {},
-            onShowRecipients = {},
-            onDismissRecipients = {}
+            onClose = {}, onSignPsbt = {}, onExportPsbt = {},
+            onBroadcast = {}, onShowRecipients = {}, onDismissRecipients = {}
         )
     }
 }
@@ -536,24 +517,17 @@ private fun PsbtDetailReadyPreview() {
     BitcoinWalletTheme {
         PsbtDetailScreen(
             state = PsbtDetailUiState(
-                psbtId = "abc-456",
-                status = "finalized",
-                requiredSigs = 2,
-                currentSigs = 2,
-                totalOutputSats = 50_000_000,
-                estimatedFeeSats = 5600,
+                psbtId = "abc-456", status = "finalized",
+                requiredSigs = 2, currentSigs = 2,
+                totalOutputSats = 50_000_000, estimatedFeeSats = 5600,
                 isLoading = false,
                 signatures = listOf(
                     SignatureUiInfo("73c5da0a", "Trezor T", "2025-05-27T10:30:00Z"),
                     SignatureUiInfo("a1b2c3d4", "Ledger S", "2025-05-27T14:20:00Z")
                 )
             ),
-            onClose = {},
-            onSignPsbt = {},
-            onExportPsbt = {},
-            onBroadcast = {},
-            onShowRecipients = {},
-            onDismissRecipients = {}
+            onClose = {}, onSignPsbt = {}, onExportPsbt = {},
+            onBroadcast = {}, onShowRecipients = {}, onDismissRecipients = {}
         )
     }
 }

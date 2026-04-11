@@ -35,6 +35,7 @@ object WalletCosignersTable : Table("wallet_cosigners") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
     val idx = integer("idx")
     val cosignerId = text("cosigner_id").references(CosignersTable.cosignerId)
+    val label = text("label").nullable()
     override val primaryKey = PrimaryKey(walletId, idx)
 }
 

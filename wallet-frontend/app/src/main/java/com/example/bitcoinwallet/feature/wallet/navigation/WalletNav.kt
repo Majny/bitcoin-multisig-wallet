@@ -53,13 +53,16 @@ object WalletRoutes {
     const val Dashboard = "wallet_dashboard"
     const val Send = "wallet_send"
     const val CoinControl = "wallet_coin_control"
-    const val TransactionSent = "wallet_tx_sent/{amountSats}/{feeSats}"
+    const val TransactionSent = "wallet_tx_sent/{amountSats}/{feeSats}/{walletId}"
     const val Receive = "wallet_receive"
     const val MultisigWallets = "wallet_multisig_list"
     const val ImportWallet = "wallet_import"
     const val Settings = "wallet_settings"
 
-    fun transactionSent(amountSats: Long, feeSats: Long) = "wallet_tx_sent/$amountSats/$feeSats"
+    fun transactionSent(amountSats: Long, feeSats: Long, walletId: String?): String {
+        val encoded = java.net.URLEncoder.encode(walletId.orEmpty(), "UTF-8")
+        return "wallet_tx_sent/$amountSats/$feeSats/$encoded"
+    }
     const val TransactionDetail = "wallet_transaction_detail/{txId}"
     
     fun transactionDetail(txId: String) = "wallet_transaction_detail/$txId"
@@ -214,7 +217,11 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             LaunchedEffect(state.broadcastSuccess) {
                 if (state.broadcastSuccess) {
                     navController.navigate(
-                        WalletRoutes.transactionSent(state.totalSats, state.feeSats)
+                        WalletRoutes.transactionSent(
+                            state.totalSats,
+                            state.feeSats,
+                            SessionStore.activeWalletId
+                        )
                     ) {
                         popUpTo(WalletRoutes.Dashboard) { inclusive = false }
                     }
@@ -264,13 +271,36 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         composable(WalletRoutes.TransactionSent) { backStackEntry ->
             val amountSats = backStackEntry.arguments?.getString("amountSats")?.toLongOrNull() ?: 0L
             val feeSats = backStackEntry.arguments?.getString("feeSats")?.toLongOrNull() ?: 0L
+            val walletId = backStackEntry.arguments?.getString("walletId")
+                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+                ?.takeIf { it.isNotBlank() }
 
             TransactionSentScreen(
                 amountSats = amountSats,
                 feeSats = feeSats,
                 onReturnToWallet = {
-                    navController.navigate(WalletRoutes.Dashboard) {
-                        popUpTo(WalletRoutes.Graph) { inclusive = false }
+                    val sourceWallet = walletId?.let { id ->
+                        SessionStore.session?.user?.wallets?.find { it.id == id }
+                    }
+                    if (sourceWallet != null &&
+                        sourceWallet.type == com.example.bitcoinwallet.core.signer.WalletType.MULTI_SIG
+                    ) {
+                        SessionStore.activeWalletId = sourceWallet.id
+                        navController.navigate(
+                            WalletRoutes.multisigDetail(
+                                walletId = sourceWallet.id,
+                                walletName = sourceWallet.label ?: sourceWallet.id,
+                                m = sourceWallet.m ?: 0,
+                                n = sourceWallet.n ?: 0
+                            )
+                        ) {
+                            popUpTo(WalletRoutes.Graph) { inclusive = false }
+                        }
+                    } else {
+                        if (walletId != null) SessionStore.activeWalletId = walletId
+                        navController.navigate(WalletRoutes.Dashboard) {
+                            popUpTo(WalletRoutes.Graph) { inclusive = false }
+                        }
                     }
                 }
             )
@@ -409,6 +439,9 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         navController.navigate(WalletRoutes.ImportWallet)
                     },
                     onWalletClick = { wallet ->
+                        // activeAccountIndex was set at login to the current singlesig
+                        // wallet's BIP-48 account — keep it so "me" detection on multisig
+                        // signers lines up with the logged-in key.
                         navController.navigate(
                             WalletRoutes.multisigDetail(
                                 walletId = wallet.walletId,
@@ -593,6 +626,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 }
             }
 
+            // Navigate to TransactionSent after successful broadcast
+            LaunchedEffect(detailState.broadcastSuccess) {
+                if (detailState.broadcastSuccess) {
+                    navController.navigate(
+                        WalletRoutes.transactionSent(
+                            detailState.totalOutputSats,
+                            detailState.estimatedFeeSats,
+                            detailState.walletId
+                        )
+                    ) {
+                        popUpTo(WalletRoutes.Dashboard) { inclusive = false }
+                    }
+                }
+            }
+
             PsbtDetailScreen(
                 state = detailState,
                 onClose = { navController.popBackStack() },
@@ -617,6 +665,9 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 },
                 onDismissRecipients = {
                     viewModel.dismissSignersDialog()
+                },
+                onRenameCosigner = { idx, label ->
+                    viewModel.updateCosignerLabel(idx, label)
                 }
             )
         }

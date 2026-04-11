@@ -105,43 +105,30 @@ private fun MultisigDetailTopBar(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Box(
+    Row(
         modifier = modifier
             .fillMaxWidth()
             .background(DarkBackground)
-            .padding(horizontal = 8.dp, vertical = 12.dp)
+            .padding(horizontal = 20.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left: subtitle + wallet name
-        Column(
-            modifier = Modifier
-                .align(Alignment.CenterStart)
-                .padding(start = 12.dp)
-        ) {
-            Text(
-                text = "Multisig Main Menu",
-                color = TextMuted,
-                fontSize = 12.sp
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = walletName,
-                color = TextPrimary,
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = mOfN,
-                color = TextSecondary,
-                fontSize = 14.sp
-            )
-        }
+        // Wallet name + M-of-N on one line
+        Text(
+            text = walletName,
+            color = TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = " · $mOfN",
+            color = TextSecondary,
+            fontSize = 14.sp,
+            modifier = Modifier.padding(top = 2.dp)
+        )
 
-        // Right: X close
-        IconButton(
-            onClick = onClose,
-            modifier = Modifier.align(Alignment.TopEnd)
-        ) {
+        Spacer(modifier = Modifier.weight(1f))
+
+        IconButton(onClick = onClose) {
             Icon(
                 imageVector = Icons.Default.Close,
                 contentDescription = "Close",
@@ -219,7 +206,7 @@ private fun MultisigTransactionHistorySection(
     ) {
         // Section header
         Text(
-            text = "Transaction",
+            text = "Transactions",
             color = TextPrimary,
             fontSize = 16.sp,
             fontWeight = FontWeight.SemiBold,
@@ -268,8 +255,7 @@ private fun MultisigTransactionItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val dateFormatter = DateTimeFormatter.ofPattern("MMM dd")
-    val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
+    val dateTimeFormatter = DateTimeFormatter.ofPattern("MMM dd, HH:mm")
     val typeText = if (transaction.type == TransactionType.RECEIVED) "Received" else "Sent"
     val amountBtc = transaction.amount / 100_000_000.0
     val amountText = String.format(java.util.Locale.US, "%.8f BTC", amountBtc)
@@ -279,26 +265,27 @@ private fun MultisigTransactionItem(
         modifier = modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 20.dp, vertical = 12.dp),
+            .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Date + Time
-        Column(modifier = Modifier.width(56.dp)) {
+        // Left: type + date on one line
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = transaction.dateTime.format(dateFormatter),
-                color = TextMuted,
-                fontSize = 14.sp
+                text = typeText,
+                color = typeColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
             )
             Text(
-                text = transaction.dateTime.format(timeFormatter),
+                text = transaction.dateTime.format(dateTimeFormatter),
                 color = TextMuted,
-                fontSize = 11.sp
+                fontSize = 12.sp
             )
         }
 
-        // Type + Amount
+        // Right: amount
         Text(
-            text = "$typeText $amountText",
+            text = amountText,
             color = typeColor,
             fontSize = 14.sp
         )

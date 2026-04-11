@@ -146,5 +146,21 @@ fun Route.walletRoutes() {
 
             call.respond(addressResponse)
         }
+
+        /**
+         * PUT /wallets/{walletId}/cosigners/{idx}/label
+         * Updates the display label for a cosigner in a multisig wallet.
+         */
+        put("/wallets/{walletId}/cosigners/{idx}/label") {
+            val walletId = call.parameters["walletId"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing walletId"))
+            val idx = call.parameters["idx"]?.toIntOrNull()
+                ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "invalid idx"))
+            val body = call.receive<Map<String, String>>()
+            val label = body["label"]
+                ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing label"))
+            call.application.deps.registry.updateCosignerLabel(walletId, idx, label)
+            call.respond(HttpStatusCode.OK, mapOf("ok" to true))
+        }
     }
 }

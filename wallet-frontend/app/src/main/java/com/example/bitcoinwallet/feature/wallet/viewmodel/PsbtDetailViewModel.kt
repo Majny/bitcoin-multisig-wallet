@@ -4,6 +4,7 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitcoinwallet.core.api.PsbtDetailDto
+import com.example.bitcoinwallet.core.api.SignerDetailDto
 import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
@@ -29,7 +30,8 @@ data class CosignerUiInfo(
     val xpub: String? = null,
     val status: SignerStatus,
     val deviceId: String? = null,
-    val isMe: Boolean = false
+    val isMe: Boolean = false,
+    val label: String? = null
 )
 
 /**
@@ -96,7 +98,8 @@ data class PsbtDetailUiState(
 data class SignatureUiInfo(
     val fingerprint: String,
     val deviceId: String,
-    val signedAt: String
+    val signedAt: String,
+    val cosignerIndex: Int = 0
 )
 
 /**
@@ -130,6 +133,9 @@ class PsbtDetailViewModel : ViewModel() {
                 Log.d(TAG, "Loading PSBT detail: $psbtId")
                 val dto = WalletApi.client.getPsbtDetail(psbtId, accessToken)
                 _uiState.value = mapDtoToState(dto)
+                // Load cosigners eagerly so the Signatures card and rename flow
+                // share the same label source of truth.
+                loadCosigners()
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading PSBT detail", e)
                 _uiState.value = _uiState.value.copy(
@@ -234,56 +240,109 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     /**
-     * Open the signers dialog and load cosigner status from backend.
+     * Open the signers dialog. Cosigners are loaded eagerly on detail fetch,
+     * so this just flips the flag. If they were missed, refetch defensively.
      */
     fun showSignersDialog() {
-        _uiState.value = _uiState.value.copy(showSignersDialog = true, signersLoading = true)
-        viewModelScope.launch {
-            val accessToken = SessionStore.session?.accessToken ?: return@launch
-            val psbtId = _uiState.value.psbtId
-
-            try {
-                Log.d(TAG, "Loading signers for PSBT: $psbtId")
-                val response = WalletApi.client.getSignerStatus(psbtId, accessToken)
-
-                val myAccountIndex = SessionStore.activeAccountIndex
-
-                val cosigners = response.signers.map { signer ->
-                    val status = when {
-                        signer.signed -> SignerStatus.SIGNED
-                        // If PSBT is pending and this cosigner hasn't signed → PENDING
-                        _uiState.value.status == "pending" || _uiState.value.status == "signed" ->
-                            SignerStatus.PENDING
-                        else -> SignerStatus.MISSING
-                    }
-                    CosignerUiInfo(
-                        fingerprint = signer.fingerprint,
-                        cosignerIndex = signer.cosignerIndex,
-                        originPath = signer.originPath,
-                        xpub = signer.xpub,
-                        status = status,
-                        deviceId = signer.deviceId,
-                        isMe = signer.originPath?.let { path ->
-                            val segments = path.replace("'", "").replace("h", "").split("/")
-                            val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
-                            cosAccount == myAccountIndex
-                        } ?: false
-                    )
-                }
-
-                _uiState.value = _uiState.value.copy(
-                    cosigners = cosigners,
-                    signersLoading = false
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "Error loading signers", e)
-                _uiState.value = _uiState.value.copy(signersLoading = false)
+        _uiState.value = _uiState.value.copy(showSignersDialog = true)
+        if (_uiState.value.cosigners.isEmpty()) {
+            viewModelScope.launch {
+                _uiState.value = _uiState.value.copy(signersLoading = true)
+                loadCosigners()
             }
         }
     }
 
+    private suspend fun loadCosigners() {
+        val accessToken = SessionStore.session?.accessToken ?: return
+        val psbtId = _uiState.value.psbtId
+        if (psbtId.isBlank()) return
+        try {
+            Log.d(TAG, "Loading signers for PSBT: $psbtId")
+            val response = WalletApi.client.getSignerStatus(psbtId, accessToken)
+
+            // For multisig, "my account index" comes from the wallet list — each
+            // multisig wallet carries the member accountIndex for the current device.
+            // Falls back to the singlesig session account when the lookup fails.
+            val walletId = response.walletId
+            val myAccountIndex = try {
+                WalletApi.client.listWallets(accessToken)
+                    .firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
+                    ?.accountIndex
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to fetch wallet list for isMe resolution", e)
+                null
+            } ?: SessionStore.activeAccountIndex
+
+            val cosigners = response.signers.map { signer ->
+                val status = when {
+                    signer.signed -> SignerStatus.SIGNED
+                    _uiState.value.status == "pending" || _uiState.value.status == "signed" ->
+                        SignerStatus.PENDING
+                    else -> SignerStatus.MISSING
+                }
+                CosignerUiInfo(
+                    fingerprint = signer.fingerprint,
+                    cosignerIndex = signer.cosignerIndex,
+                    originPath = signer.originPath,
+                    xpub = signer.xpub,
+                    status = status,
+                    deviceId = signer.deviceId,
+                    isMe = isCurrentUser(signer, myAccountIndex),
+                    label = signer.label
+                )
+            }
+
+            _uiState.value = _uiState.value.copy(
+                cosigners = cosigners,
+                signersLoading = false
+            )
+        } catch (e: Exception) {
+            Log.e(TAG, "Error loading signers", e)
+            _uiState.value = _uiState.value.copy(signersLoading = false)
+        }
+    }
+
+    private fun isCurrentUser(
+        signer: SignerDetailDto,
+        myAccountIndex: Int?
+    ): Boolean {
+        if (myAccountIndex == null) return false
+        val originPath = signer.originPath ?: return false
+        // BIP-48: purpose'/coinType'/account'/scriptType' — segments[2] is account.
+        // Membership (device ↔ wallet) is proven by the wallet_members row whose
+        // accountIndex we already resolved via listWallets, so account-segment
+        // match is sufficient — no extra fingerprint gate.
+        val segments = originPath
+            .replace("'", "")
+            .replace("h", "")
+            .split("/")
+            .filter { it.isNotBlank() && it != "m" }
+        val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
+        return cosAccount == myAccountIndex
+    }
+
     fun dismissSignersDialog() {
         _uiState.value = _uiState.value.copy(showSignersDialog = false)
+    }
+
+    fun updateCosignerLabel(cosignerIdx: Int, label: String) {
+        val walletId = _uiState.value.walletId.ifBlank {
+            SessionStore.activeWalletId ?: return
+        }
+        viewModelScope.launch {
+            val accessToken = SessionStore.session?.accessToken ?: return@launch
+            try {
+                WalletApi.client.updateCosignerLabel(walletId, cosignerIdx, label, accessToken)
+                // Update local state immediately
+                val updated = _uiState.value.cosigners.map { c ->
+                    if (c.cosignerIndex == cosignerIdx) c.copy(label = label) else c
+                }
+                _uiState.value = _uiState.value.copy(cosigners = updated)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update cosigner label", e)
+            }
+        }
     }
 
     /**
@@ -334,12 +393,13 @@ class PsbtDetailViewModel : ViewModel() {
                 SignatureUiInfo(
                     fingerprint = it.fingerprint,
                     deviceId = it.deviceId,
-                    signedAt = it.signedAt
+                    signedAt = it.signedAt,
+                    cosignerIndex = it.cosignerIndex
                 )
             },
             // Preserve UI-only state that should survive a data refresh
             showSignersDialog = current.showSignersDialog,
-            cosigners = if (current.showSignersDialog) current.cosigners else emptyList(),
+            cosigners = current.cosigners,
             broadcastSuccess = current.broadcastSuccess || dto.status == "broadcast",
             isLoading = false
         )

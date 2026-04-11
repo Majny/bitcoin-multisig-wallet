@@ -44,19 +44,20 @@ fun ReceiveBtcScreen(
             .background(DarkBackground)
             .padding(horizontal = 20.dp)
     ) {
-        /* ── Top bar: "Receive BTC" + X ── */
+        /* ── Top bar ── */
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 16.dp, bottom = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
+                .padding(top = 16.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Receive BTC",
-                color = TextMuted,
-                fontSize = 14.sp
+                text = "Receive Bitcoin",
+                color = TextPrimary,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.Bold
             )
+            Spacer(modifier = Modifier.weight(1f))
             IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Default.Close,
@@ -65,18 +66,6 @@ fun ReceiveBtcScreen(
                 )
             }
         }
-
-        /* ── Title ── */
-        Text(
-            text = "Receive Bitcoin",
-            color = TextPrimary,
-            fontSize = 22.sp,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 24.dp),
-            textAlign = TextAlign.Center
-        )
 
         /* ── Loading / Error / Content ── */
         when {

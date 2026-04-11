@@ -124,6 +124,20 @@ fun Application.configureRoutes(repo: Repository) {
             }
 
             /*
+             * PUT /registry/wallets/{id}/cosigners/{idx}/label
+             * Updates the display label for a cosigner (e.g. "Alice's key").
+             */
+            put("/wallets/{id}/cosigners/{idx}/label") {
+                val id = call.parameters["id"]
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
+                val idx = call.parameters["idx"]?.toIntOrNull()
+                    ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid idx"))
+                val req = call.receive<UpdateCosignerLabelRequest>()
+                repo.updateCosignerLabel(id, idx, req.label)
+                call.respondText("ok")
+            }
+
+            /*
              * POST /registry/wallets/{id}/members/attach
              * Attaches a device as a member of an existing wallet.
              * Called by api-gateway during login for multisig wallets.

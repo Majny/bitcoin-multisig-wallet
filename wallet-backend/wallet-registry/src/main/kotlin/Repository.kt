@@ -139,7 +139,9 @@ class Repository {
                 m = row[WalletsTable.m],
                 n = row[WalletsTable.n],
                 label = resolvedLabel,
-                accountIndex = resolvedAccountIndex
+                accountIndex = resolvedAccountIndex,
+                cosignerAccountIndex = if (row[WalletsTable.type] == "MULTI_SIG")
+                    row[WalletsTable.accountIndex] else null
             )
         }
         log.info("listWalletsForDevice({}): returning {} wallets: {}",
@@ -157,6 +159,7 @@ class Repository {
         val cosigners = (WalletCosignersTable innerJoin CosignersTable)
             .select(
                 WalletCosignersTable.idx,
+                WalletCosignersTable.label,
                 CosignersTable.cosignerId,
                 CosignersTable.fingerprint,
                 CosignersTable.originPath,
@@ -169,7 +172,8 @@ class Repository {
                     cosignerId = row[CosignersTable.cosignerId],
                     fingerprint = row[CosignersTable.fingerprint],
                     originPath = row[CosignersTable.originPath],
-                    xpubRoot = row[CosignersTable.xpubRoot]
+                    xpubRoot = row[CosignersTable.xpubRoot],
+                    label = row[WalletCosignersTable.label]
                 )
             }
             .sortedBy { it.idx }
@@ -199,6 +203,16 @@ class Repository {
             cosigners = cosigners,
             members = members
         )
+    }
+
+    /* Updates the display label for a cosigner in a specific wallet. */
+    fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String) = transaction {
+        WalletCosignersTable.update({
+            (WalletCosignersTable.walletId eq walletId) and
+                (WalletCosignersTable.idx eq cosignerIdx)
+        }) {
+            it[WalletCosignersTable.label] = label
+        }
     }
 
     /* Derives addresses from a descriptor and stores them in wallet_addresses table. */

@@ -127,6 +127,7 @@ data class CreatePsbtResponse(
 data class SignatureInfo(
     val deviceId: String,
     val fingerprint: String,
+    val cosignerIndex: Int = 0,
     val signedAt: String
 )
 
@@ -179,5 +180,8 @@ data class SignerDetail(
     val cosignerIndex: Int,
     val signed: Boolean,
     val deviceId: String? = null,
-    val signedAt: String? = null
+    val signedAt: String? = null,
+    val originPath: String? = null,
+    val xpub: String? = null,
+    val label: String? = null
 )
