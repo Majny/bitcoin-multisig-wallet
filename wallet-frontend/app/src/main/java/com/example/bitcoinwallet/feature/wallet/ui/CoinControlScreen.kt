@@ -181,7 +181,7 @@ private fun UtxoRow(
             )
         }
 
-        // Status label
+        // Status + date
         val statusText = when {
             utxo.reserved -> "Reserved"
             utxo.confirmed -> "Confirmed"
@@ -193,12 +193,29 @@ private fun UtxoRow(
             else -> BitcoinOrangeLight
         }
 
-        Text(
-            text = statusText,
-            color = statusColor,
-            fontSize = 13.sp,
+        Column(
+            horizontalAlignment = Alignment.End,
             modifier = Modifier.padding(end = 12.dp)
-        )
+        ) {
+            Text(
+                text = statusText,
+                color = statusColor,
+                fontSize = 13.sp
+            )
+            val dateText = utxo.blockTime?.let { epoch ->
+                java.time.Instant.ofEpochSecond(epoch)
+                    .atZone(java.time.ZoneId.systemDefault())
+                    .toLocalDateTime()
+                    .format(java.time.format.DateTimeFormatter.ofPattern("MMM dd, HH:mm"))
+            } ?: if (utxo.confirmed) "" else "Pending"
+            if (dateText.isNotBlank()) {
+                Text(
+                    text = dateText,
+                    color = TextMuted,
+                    fontSize = 10.sp
+                )
+            }
+        }
 
         // Checkbox — disabled for reserved UTXOs
         Checkbox(
@@ -267,13 +284,13 @@ private fun SortOrderDialog(
 @Composable
 private fun CoinControlScreenPreview() {
     val sampleUtxos = listOf(
-        SelectableUtxo("tx1", 0, 350_000, "bc1qAlice", "receive", true, false),
-        SelectableUtxo("tx2", 1, 420_000, "bc1q8r9f3ziwk5p7u", "receive", true, false),
-        SelectableUtxo("tx3", 0, 1_800_000, "bc1qRachel", "receive", false, false),
-        SelectableUtxo("tx4", 0, 5_000_000, "bc1q7l9a4", "receive", true, false),
-        SelectableUtxo("tx5", 2, 700_000, "bc1p3nyuzc", "receive", true, false),
-        SelectableUtxo("tx6", 0, 2_500_000, "bc1qBob", "change", false, false),
-        SelectableUtxo("tx7", 1, 1_230_000, "bc1qCharlie", "receive", true, false),
+        SelectableUtxo("tx1", 0, 350_000, "bc1qAlice", "receive", confirmed = true, blockTime = 1712900000),
+        SelectableUtxo("tx2", 1, 420_000, "bc1q8r9f3ziwk5p7u", "receive", confirmed = true, blockTime = 1712850000),
+        SelectableUtxo("tx3", 0, 1_800_000, "bc1qRachel", "receive", confirmed = false),
+        SelectableUtxo("tx4", 0, 5_000_000, "bc1q7l9a4", "receive", confirmed = true, blockTime = 1712700000),
+        SelectableUtxo("tx5", 2, 700_000, "bc1p3nyuzc", "receive", confirmed = true, blockTime = 1712600000),
+        SelectableUtxo("tx6", 0, 2_500_000, "bc1qBob", "change", confirmed = false),
+        SelectableUtxo("tx7", 1, 1_230_000, "bc1qCharlie", "receive", confirmed = true, blockTime = 1712500000),
     )
 
     val state = CoinControlUiState(

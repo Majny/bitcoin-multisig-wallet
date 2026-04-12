@@ -18,6 +18,7 @@ private const val TAG = "CoinControlVM"
  */
 enum class UtxoSortOrder(val label: String) {
     AMOUNT("Amount"),
+    DATE("Date"),
     STATUS("Confirmation Status"),
     ADDRESS("Address")
 }
@@ -32,6 +33,7 @@ data class SelectableUtxo(
     val address: String,
     val addressType: String,
     val confirmed: Boolean,
+    val blockTime: Long? = null,
     val selected: Boolean = false,
     val reserved: Boolean = false
 ) {
@@ -138,6 +140,7 @@ class CoinControlViewModel : ViewModel() {
                         address = dto.address,
                         addressType = dto.addressType,
                         confirmed = dto.confirmed,
+                        blockTime = dto.blockTime,
                         selected = key in preSelectedKeys,
                         reserved = key in reservedKeys
                     )
@@ -190,6 +193,7 @@ class CoinControlViewModel : ViewModel() {
     private fun sortUtxos(utxos: List<SelectableUtxo>, order: UtxoSortOrder): List<SelectableUtxo> =
         when (order) {
             UtxoSortOrder.AMOUNT -> utxos.sortedByDescending { it.valueSats }
+            UtxoSortOrder.DATE -> utxos.sortedByDescending { it.blockTime ?: Long.MAX_VALUE }
             UtxoSortOrder.STATUS -> utxos.sortedByDescending { it.confirmed }
             UtxoSortOrder.ADDRESS -> utxos.sortedBy { it.address }
         }

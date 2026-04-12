@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.sp
 import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtListItem
 import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtListUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
-import com.example.bitcoinwallet.ui.components.SecondaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
 /**
@@ -35,7 +34,6 @@ fun PsbtListScreen(
     state: PsbtListUiState,
     onClose: () -> Unit,
     onCreatePsbt: () -> Unit,
-    onImportPsbt: () -> Unit,
     onPsbtClick: (PsbtListItem) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -79,7 +77,8 @@ fun PsbtListScreen(
             ) {
                 PrimaryButton(
                     text = "Create New PSBT",
-                    onClick = onCreatePsbt
+                    onClick = onCreatePsbt,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 
@@ -122,19 +121,6 @@ fun PsbtListScreen(
                 }
             }
 
-            // Import button at the bottom
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(DarkBackground)
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                SecondaryButton(
-                    text = "Import",
-                    onClick = onImportPsbt
-                )
-            }
         }
     }
 }
@@ -256,7 +242,6 @@ private fun PsbtListPreview() {
             state = sampleState,
             onClose = {},
             onCreatePsbt = {},
-            onImportPsbt = {},
             onPsbtClick = {}
         )
     }
@@ -270,7 +255,6 @@ private fun PsbtListEmptyPreview() {
             state = PsbtListUiState(isLoading = false),
             onClose = {},
             onCreatePsbt = {},
-            onImportPsbt = {},
             onPsbtClick = {}
         )
     }

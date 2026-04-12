@@ -598,9 +598,6 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onCreatePsbt = {
                     navController.navigate(WalletRoutes.createPsbt(walletId))
                 },
-                onImportPsbt = {
-                    // TODO: import PSBT from file/QR
-                },
                 onPsbtClick = { psbt ->
                     navController.navigate(WalletRoutes.psbtDetail(psbt.id))
                 }
