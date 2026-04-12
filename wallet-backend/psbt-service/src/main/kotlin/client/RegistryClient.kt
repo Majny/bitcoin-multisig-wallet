@@ -31,14 +31,6 @@ class RegistryClient(private val baseUrl: String) {
         return client.get("$baseUrl/registry/wallets/$walletId").body()
     }
 
-    /* Fetches a change address for the wallet (used as PSBT change output). */
-    suspend fun getChangeAddress(walletId: String, index: Int = 0): AddressDto {
-        return client.get("$baseUrl/registry/wallets/$walletId/addresses") {
-            parameter("type", "change")
-            parameter("index", index)
-        }.body()
-    }
-
     /* Fetches all addresses for a wallet (receive + change). Used for UTXO scanning. */
     suspend fun getAllAddresses(walletId: String, type: String? = null): List<AddressDto> {
         val response: WalletAddressesResponse = client.get("$baseUrl/registry/wallets/$walletId/addresses") {

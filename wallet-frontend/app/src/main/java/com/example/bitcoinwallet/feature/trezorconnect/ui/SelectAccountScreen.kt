@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -41,16 +43,16 @@ fun SelectAccountScreen(
                 modifier = Modifier.align(Alignment.Center)
             )
 
-            Text(
-                text = "X",
-                color = TextPrimary,
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .clip(RoundedCornerShape(8.dp))
-                    .clickable { onClose() }
-                    .padding(horizontal = 12.dp, vertical = 8.dp)
-            )
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.TopEnd)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
+                    tint = TextPrimary
+                )
+            }
         }
 
         Spacer(Modifier.height(18.dp))
@@ -141,7 +143,7 @@ fun SelectAccountScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = ButtonSecondary)
+            colors = ButtonDefaults.buttonColors(containerColor = TrezorGreen)
         ) {
             Text("Confirm", style = MaterialTheme.typography.titleMedium)
         }

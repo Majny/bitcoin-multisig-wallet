@@ -47,14 +47,6 @@ class ReceiveBtcViewModel : ViewModel() {
 
                 val dto = WalletApi.client.getReceiveAddress(walletId, token)
 
-                if (dto.needsDerivation) {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Address derivation pending – please try again in a moment"
-                    )
-                    return@launch
-                }
-
                 // Build derivation path for "Show on Trezor" verification
                 val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
                 val coinType = if (wallet?.network == "testnet") 1 else 0

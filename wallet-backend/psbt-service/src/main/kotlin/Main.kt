@@ -4,6 +4,7 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import cz.majny.wallet.psbt.api.psbtRoutes
 import cz.majny.wallet.psbt.client.BlockchainClient
+import cz.majny.wallet.psbt.client.ExplorerClient
 import cz.majny.wallet.psbt.client.RegistryClient
 import cz.majny.wallet.psbt.db.PsbtRepository
 import io.ktor.serialization.kotlinx.json.*
@@ -33,24 +34,28 @@ fun main() {
     // External service clients
     val blockchainUrl = System.getenv("BLOCKCHAIN_SERVICE_URL") ?: "http://localhost:8086"
     val registryUrl = System.getenv("REGISTRY_URL") ?: "http://localhost:8082"
-    
+    val explorerUrl = System.getenv("EXPLORER_SERVICE_URL") ?: "http://localhost:8083"
+
     val blockchainClient = BlockchainClient(blockchainUrl)
     val registryClient = RegistryClient(registryUrl)
+    val explorerClient = ExplorerClient(explorerUrl)
     val repository = PsbtRepository()
-    
+
     log.info("Starting PSBT Service on port {}", port)
     log.info("Blockchain service: {}", blockchainUrl)
     log.info("Registry service: {}", registryUrl)
-    
+    log.info("Explorer service: {}", explorerUrl)
+
     embeddedServer(Netty, port = port) {
-        configureApp(repository, blockchainClient, registryClient)
+        configureApp(repository, blockchainClient, registryClient, explorerClient)
     }.start(wait = true)
 }
 
 fun Application.configureApp(
     repository: PsbtRepository,
     blockchainClient: BlockchainClient,
-    registryClient: RegistryClient
+    registryClient: RegistryClient,
+    explorerClient: ExplorerClient
 ) {
     install(ContentNegotiation) {
         json(Json {
@@ -74,7 +79,7 @@ fun Application.configureApp(
             call.respond(mapOf("status" to "ok", "service" to "psbt-service"))
         }
         
-        psbtRoutes(repository, blockchainClient, registryClient)
+        psbtRoutes(repository, blockchainClient, registryClient, explorerClient)
     }
 }
 

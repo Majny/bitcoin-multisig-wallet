@@ -170,6 +170,28 @@ fun Application.configureRoutes(repo: Repository) {
                     call.respond(WalletAddressesResponse(walletId = id, addresses = addresses))
                 }
             }
+
+            /*
+             * POST /registry/wallets/{id}/addresses/derive
+             * Derives an address at a specific index (beyond initial gap limit) and stores it in DB.
+             * Used by explorer-service when all pre-derived addresses of a type are used
+             * and a fresh one is needed (privacy invariant).
+             * Idempotent: returns existing row if index already present.
+             */
+            post("/wallets/{id}/addresses/derive") {
+                val id = call.parameters["id"]
+                    ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
+                try {
+                    val req = call.receive<DeriveAdditionalAddressRequest>()
+                    val addr = repo.deriveAdditionalAddress(id, req.type, req.index)
+                    call.respond(addr)
+                } catch (e: IllegalArgumentException) {
+                    call.respond(HttpStatusCode.BadRequest, ErrorResponse(e.message ?: "invalid request"))
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.InternalServerError,
+                        ErrorResponse("derivation failed: ${e.message}"))
+                }
+            }
         }
     }
 }

@@ -6,7 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,7 +28,7 @@ private val currencies = listOf("CZK", "USD", "EUR")
  */
 @Composable
 fun SettingsScreen(
-    onClose: () -> Unit,
+    onMenuClick: () -> Unit,
     onSwitchAccount: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -45,23 +45,22 @@ fun SettingsScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 16.dp),
+                .padding(start = 8.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(onClick = onMenuClick) {
+                Icon(
+                    imageVector = Icons.Default.Menu,
+                    contentDescription = "Menu",
+                    tint = TextPrimary
+                )
+            }
             Text(
                 text = "Settings",
                 color = TextPrimary,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(onClick = onClose) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = TextPrimary
-                )
-            }
         }
 
         /* ── Account section ── */
@@ -203,5 +202,5 @@ private fun SettingsRow(label: String, value: String) {
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable
 private fun SettingsPreview() {
-    SettingsScreen(onClose = {}, onSwitchAccount = {})
+    SettingsScreen(onMenuClick = {}, onSwitchAccount = {})
 }

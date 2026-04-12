@@ -66,6 +66,9 @@ dependencies {
     // --- QR Code (ZXing core) ---
     implementation("com.google.zxing:core:3.5.3")
 
+    // --- UR decoder (Sparrow/Keystone airgap QR) ---
+    implementation("com.sparrowwallet:hummingbird:1.7.4")
+
     // --- CameraX (QR scanner) ---
     implementation("androidx.camera:camera-core:1.3.4")
     implementation("androidx.camera:camera-camera2:1.3.4")

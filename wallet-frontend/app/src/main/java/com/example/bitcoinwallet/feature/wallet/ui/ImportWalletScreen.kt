@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileOpen
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -35,6 +36,7 @@ fun ImportWalletScreen(
     onDescriptorChanged: (String) -> Unit,
     onWalletNameChanged: (String) -> Unit,
     onFileContent: (String) -> Unit,
+    onScanQr: () -> Unit,
     onImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -95,18 +97,27 @@ fun ImportWalletScreen(
                 Text("Descriptor", color = TextMuted, fontSize = 14.sp)
             },
             trailingIcon = {
-                IconButton(onClick = {
-                    val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                        addCategory(Intent.CATEGORY_OPENABLE)
-                        type = "*/*"
+                Row {
+                    IconButton(onClick = onScanQr) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Scan QR (UR)",
+                            tint = TextSecondary
+                        )
                     }
-                    filePickerLauncher.launch(intent)
-                }) {
-                    Icon(
-                        imageVector = Icons.Default.FileOpen,
-                        contentDescription = "Import from file",
-                        tint = TextSecondary
-                    )
+                    IconButton(onClick = {
+                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                            addCategory(Intent.CATEGORY_OPENABLE)
+                            type = "*/*"
+                        }
+                        filePickerLauncher.launch(intent)
+                    }) {
+                        Icon(
+                            imageVector = Icons.Default.FileOpen,
+                            contentDescription = "Import from file",
+                            tint = TextSecondary
+                        )
+                    }
                 }
             },
             modifier = Modifier
@@ -186,6 +197,7 @@ private fun ImportWalletPreview() {
         onDescriptorChanged = {},
         onWalletNameChanged = {},
         onFileContent = {},
+        onScanQr = {},
         onImport = {}
     )
 }

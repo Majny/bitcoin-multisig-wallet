@@ -245,6 +245,89 @@ class Repository {
         log.info("Derived {} {} addresses for wallet {}", addresses.size, type, walletId)
     }
 
+    /**
+     * Derives a single address beyond the initial gap limit and stores it in DB.
+     *
+     * Used when all pre-derived addresses (of one type) are already used on-chain
+     * and we need to extend the wallet's address window — typically because
+     * psbt-service needs a fresh change output, or explorer-service needs a fresh
+     * receive address. Maintains privacy invariant: callers should verify that
+     * the returned address also has no on-chain activity before committing to use it.
+     *
+     * The operation is idempotent: if an address at (walletId, type, index) already
+     * exists in DB, it's returned as-is instead of re-derived.
+     */
+    fun deriveAdditionalAddress(
+        walletId: String,
+        type: String,
+        index: Int
+    ): WalletAddressResponse = transaction {
+        require(type == "receive" || type == "change") {
+            "type must be 'receive' or 'change', got: $type"
+        }
+        require(index >= 0) { "index must be non-negative, got: $index" }
+
+        // Idempotent: return existing row if it's already there.
+        val existing = WalletAddressesTable
+            .selectAll()
+            .where {
+                (WalletAddressesTable.walletId eq walletId) and
+                    (WalletAddressesTable.addressType eq type) and
+                    (WalletAddressesTable.addressIndex eq index)
+            }
+            .singleOrNull()
+        if (existing != null) {
+            return@transaction WalletAddressResponse(
+                walletId = walletId,
+                address = existing[WalletAddressesTable.address],
+                index = existing[WalletAddressesTable.addressIndex],
+                type = existing[WalletAddressesTable.addressType]
+            )
+        }
+
+        // Load wallet to get descriptor + network.
+        val walletRow = WalletsTable
+            .selectAll()
+            .where { WalletsTable.walletId eq walletId }
+            .singleOrNull()
+            ?: error("Wallet not found: $walletId")
+
+        val network = walletRow[WalletsTable.network]
+        val descriptor = when (type) {
+            "receive" -> walletRow[WalletsTable.receiveDescriptor]
+            "change" -> walletRow[WalletsTable.changeDescriptor]
+            else -> error("unreachable")
+        }
+        val chain = if (type == "receive") 0 else 1
+
+        val derived = AddressDerivation.deriveAddresses(
+            descriptor = descriptor,
+            network = network,
+            chain = chain,
+            fromIndex = index,
+            count = 1
+        ).singleOrNull()
+            ?: error("Derivation returned no address for $walletId $type/$index")
+
+        WalletAddressesTable.insert {
+            it[WalletAddressesTable.walletId] = walletId
+            it[addressType] = type
+            it[addressIndex] = derived.index
+            it[address] = derived.address
+            it[createdAt] = OffsetDateTime.now()
+        }
+
+        log.info("Derived additional {} address for wallet {}: index={} addr={}",
+            type, walletId, derived.index, derived.address)
+
+        WalletAddressResponse(
+            walletId = walletId,
+            address = derived.address,
+            index = derived.index,
+            type = type
+        )
+    }
+
     /* Returns all stored addresses for a wallet, optionally filtered by type (receive/change). */
     fun getAddresses(
         walletId: String,

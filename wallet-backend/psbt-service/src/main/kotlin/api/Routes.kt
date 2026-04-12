@@ -5,6 +5,7 @@ import cz.majny.wallet.psbt.builder.PsbtEncoding
 import cz.majny.wallet.psbt.builder.SelectedUtxo
 import cz.majny.wallet.psbt.builder.TrezorParamsBuilder
 import cz.majny.wallet.psbt.client.BlockchainClient
+import cz.majny.wallet.psbt.client.ExplorerClient
 import cz.majny.wallet.psbt.client.RegistryClient
 import cz.majny.wallet.psbt.db.PsbtRepository
 import io.ktor.http.*
@@ -25,7 +26,8 @@ private val log = LoggerFactory.getLogger("PsbtRoutes")
 fun Route.psbtRoutes(
     repository: PsbtRepository,
     blockchainClient: BlockchainClient,
-    registryClient: RegistryClient
+    registryClient: RegistryClient,
+    explorerClient: ExplorerClient
 ) {
     route("/psbt") {
 
@@ -123,10 +125,11 @@ fun Route.psbtRoutes(
                 log.info("UTXOs with prevTx: {}/{} have rawTxHex",
                     utxosWithPrevTx.count { it.rawTxHex != null }, utxosWithPrevTx.size)
 
-                // 3. Get change address from wallet-registry
-                val changeAddress = registryClient.getChangeAddress(request.walletId)
-                log.info("Change address: addr={} index={} type={}",
-                    changeAddress.address, changeAddress.index, changeAddress.type)
+                // 3. Get next unused change address (privacy: never reuse, each tx gets fresh change)
+                // Explorer-service rozšíří gap limit automaticky, pokud je potřeba.
+                val changeAddress = explorerClient.getNextChangeAddress(request.walletId)
+                log.info("Next unused change address: addr={} index={}",
+                    changeAddress.address, changeAddress.index)
 
                 // 4. Build PSBT
                 val result = PsbtBuilder.createPsbt(

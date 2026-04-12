@@ -213,6 +213,11 @@ private fun TransactionItem(
     val amountBtc = transaction.amount / 100_000_000.0
     val amountText = String.format(java.util.Locale.US, "%.8f BTC", amountBtc)
     val typeColor = if (transaction.type == TransactionType.RECEIVED) ReceiveGreen else TextSecondary
+    val dateText = if (transaction.confirmed) {
+        transaction.dateTime.format(dateTimeFormatter)
+    } else {
+        "Pending"
+    }
 
     Row(
         modifier = modifier
@@ -230,8 +235,8 @@ private fun TransactionItem(
                 fontWeight = FontWeight.Medium
             )
             Text(
-                text = transaction.dateTime.format(dateTimeFormatter),
-                color = TextMuted,
+                text = dateText,
+                color = if (transaction.confirmed) TextMuted else AccentTeal,
                 fontSize = 12.sp
             )
         }

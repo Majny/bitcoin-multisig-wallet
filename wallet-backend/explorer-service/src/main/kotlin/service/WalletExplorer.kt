@@ -254,46 +254,86 @@ class WalletExplorer(
      * Najde první nepoužitou receive adresu.
      * Prochází adresy od indexu 0, hledá první bez aktivity.
      */
-    suspend fun getNextReceiveAddress(walletId: String): ReceiveAddressResponse = coroutineScope {
+    suspend fun getNextReceiveAddress(walletId: String): ReceiveAddressResponse {
         log.info("Finding next receive address for wallet: {}", walletId)
+        return findNextUnusedAddress(walletId, type = "receive")
+    }
 
-        val receiveAddresses = registry.getAddresses(walletId, "receive")
-            .sortedBy { it.index }
+    /**
+     * Vrátí první nepoužitou change adresu (privacy invariant: nikdy nereusuje).
+     * Používá psbt-service při sestavování PSBT, aby každá tx měla nový change output.
+     */
+    suspend fun getNextChangeAddress(walletId: String): ReceiveAddressResponse {
+        log.info("Finding next change address for wallet: {}", walletId)
+        return findNextUnusedAddress(walletId, type = "change")
+    }
 
-        val network = detectNetwork(receiveAddresses)
+    /**
+     * Sdílená logika: najde první adresu daného typu (receive/change) bez on-chain aktivity.
+     *
+     * Když jsou všechny existující adresy v DB použité, požádá wallet-registry o odvození
+     * nové na dalším indexu a okamžitě ji vrátí. Nově odvozená adresa nemůže mít aktivitu
+     * v běžném scénáři, protože dosud neexistovala — ale pro paranoidní případy
+     * (adresář coincidentally dostal peníze před derivací) pokračujeme v derivaci dál
+     * dokud nenajdeme čistou, s tvrdým limitem MAX_DERIVATION_ATTEMPTS.
+     *
+     * IMPORTANT: výjimky z blockchain kontroly propagujeme — spolknutí chyby by vedlo
+     * k reuse adresy (privacy violation).
+     */
+    private suspend fun findNextUnusedAddress(
+        walletId: String,
+        type: String
+    ): ReceiveAddressResponse = coroutineScope {
+        val addresses = registry.getAddresses(walletId, type).sortedBy { it.index }
+        val network = detectNetwork(addresses)
 
-        // Paralelně zjisti aktivitu.
-        // IMPORTANT: do NOT swallow exceptions here — returning false on error
-        // would cause address reuse (privacy violation). Let errors propagate.
-        val withActivity = receiveAddresses.map { addr ->
+        // Paralelně zjisti aktivitu všech existujících adres.
+        val withActivity = addresses.map { addr ->
             async {
                 val hasActivity = blockchain.hasActivity(addr.address, network)
                 addr to hasActivity
             }
         }.awaitAll()
 
-        // Najdi první bez aktivity
         val unused = withActivity.firstOrNull { !it.second }
-
         if (unused != null) {
-            ReceiveAddressResponse(
+            return@coroutineScope ReceiveAddressResponse(
                 walletId = walletId,
                 address = unused.first.address,
                 index = unused.first.index,
                 isNew = true
             )
-        } else {
-            // Všechny adresy jsou použité — nevrátíme žádnou existující adresu (předejdeme reuse),
-            // ale sdělíme frontendu, jaký index má dál odvozovat.
-            val nextIndex = (receiveAddresses.maxOfOrNull { it.index } ?: -1) + 1
-            ReceiveAddressResponse(
-                walletId = walletId,
-                address = "",
-                index = nextIndex,
-                isNew = false,
-                needsDerivation = true
-            )
         }
+
+        // Všechny existující adresy jsou použité — rozšíříme window přes registry.
+        val baseIndex = (addresses.maxOfOrNull { it.index } ?: -1) + 1
+        log.info("All {} addresses up to index {} are used, deriving next for wallet {}",
+            type, baseIndex - 1, walletId)
+
+        for (offset in 0 until MAX_DERIVATION_ATTEMPTS) {
+            val idx = baseIndex + offset
+            val derived = registry.deriveAdditionalAddress(walletId, type, idx)
+            val hasActivity = blockchain.hasActivity(derived.address, network)
+            if (!hasActivity) {
+                return@coroutineScope ReceiveAddressResponse(
+                    walletId = walletId,
+                    address = derived.address,
+                    index = derived.index,
+                    isNew = true
+                )
+            }
+            log.warn("Freshly derived address already has activity (rare): wallet={} {}/{} addr={}",
+                walletId, type, idx, derived.address)
+        }
+
+        // Extrémně nepravděpodobné — vzdáváme to a signalizujeme chybu.
+        error("Failed to find unused $type address for wallet $walletId after " +
+                "$MAX_DERIVATION_ATTEMPTS derivation attempts starting at index $baseIndex")
+    }
+
+    companion object {
+        /** Horní limit pro kolikrát budeme opakovaně derivovat, pokud každá nová má aktivitu. */
+        private const val MAX_DERIVATION_ATTEMPTS = 5
     }
 
     // ========================================================================

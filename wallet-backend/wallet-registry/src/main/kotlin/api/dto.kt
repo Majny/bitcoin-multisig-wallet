@@ -101,3 +101,9 @@ data class DeriveAddressesRequest(
 data class DeriveAddressesResponse(
     val addresses: List<String>
 )
+
+@Serializable
+data class DeriveAdditionalAddressRequest(
+    val type: String,   // "receive" or "change"
+    val index: Int
+)

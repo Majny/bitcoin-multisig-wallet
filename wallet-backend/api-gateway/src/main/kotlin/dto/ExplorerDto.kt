@@ -74,8 +74,7 @@ data class ReceiveAddressDto(
     val walletId: String,
     val address: String,
     val index: Int,
-    val isNew: Boolean = true,
-    val needsDerivation: Boolean = false
+    val isNew: Boolean = true
 )
 
 @Serializable

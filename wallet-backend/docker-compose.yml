@@ -150,12 +150,15 @@ services:
       DATABASE_PASSWORD: wallet
       BLOCKCHAIN_SERVICE_URL: http://blockchain-service:8086
       REGISTRY_URL: http://wallet-registry:8082
+      EXPLORER_SERVICE_URL: http://explorer-service:8083
     depends_on:
       postgres:
         condition: service_healthy
       wallet-registry:
         condition: service_started
       blockchain-service:
+        condition: service_started
+      explorer-service:
         condition: service_started
     restart: unless-stopped
 

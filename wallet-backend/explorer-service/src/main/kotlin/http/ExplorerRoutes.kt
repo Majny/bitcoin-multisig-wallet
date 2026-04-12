@@ -112,6 +112,26 @@ fun Route.explorerRoutes(
                         mapOf("error" to (e.message ?: "Failed to get receive address")))
                 }
             }
+
+            /**
+             * GET /explorer/wallet/{walletId}/change-address
+             *
+             * Vrátí první nepoužitou change adresu. Používá psbt-service při sestavování PSBT.
+             * Privacy invariant: každá outgoing tx dostane nový change output.
+             */
+            get("/change-address") {
+                val walletId = call.parameters["walletId"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing walletId"))
+
+                try {
+                    val addr = explorer.getNextChangeAddress(walletId)
+                    call.respond(addr)
+                } catch (e: Exception) {
+                    log.error("Failed to get change address for {}", walletId, e)
+                    call.respond(HttpStatusCode.InternalServerError,
+                        mapOf("error" to (e.message ?: "Failed to get change address")))
+                }
+            }
         }
 
         // ========== Transaction-level endpoints ==========

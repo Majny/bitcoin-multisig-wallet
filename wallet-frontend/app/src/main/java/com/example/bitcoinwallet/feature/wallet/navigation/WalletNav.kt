@@ -8,7 +8,9 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import androidx.navigation.NavGraphBuilder
+import androidx.navigation.NavType
 import androidx.navigation.compose.composable
+import androidx.navigation.navArgument
 import androidx.navigation.navigation
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ModalNavigationDrawer
@@ -22,6 +24,7 @@ import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.trezor.TrezorDeeplinkLauncher
 import com.example.bitcoinwallet.feature.wallet.ui.WalletDashboardScreen
 import com.example.bitcoinwallet.feature.wallet.ui.QrScannerScreen
+import com.example.bitcoinwallet.feature.wallet.ui.UrQrScannerScreen
 import com.example.bitcoinwallet.feature.wallet.ui.SendTransactionScreen
 import com.example.bitcoinwallet.feature.wallet.ui.CoinControlScreen
 import com.example.bitcoinwallet.feature.wallet.ui.TransactionErrorScreen
@@ -63,9 +66,12 @@ object WalletRoutes {
         val encoded = java.net.URLEncoder.encode(walletId.orEmpty(), "UTF-8")
         return "wallet_tx_sent/$amountSats/$feeSats/$encoded"
     }
-    const val TransactionDetail = "wallet_transaction_detail/{txId}"
-    
-    fun transactionDetail(txId: String) = "wallet_transaction_detail/$txId"
+    const val TransactionDetail =
+        "wallet_transaction_detail/{txId}?depth={depth}&fromVout={fromVout}"
+    const val MaxTransactionDepth = 5
+
+    fun transactionDetail(txId: String, depth: Int = 1, fromVout: Int = -1) =
+        "wallet_transaction_detail/$txId?depth=$depth&fromVout=$fromVout"
 
     const val MultisigDetail = "wallet_multisig_detail/{walletId}/{walletName}/{m}/{n}"
 
@@ -87,6 +93,7 @@ object WalletRoutes {
     fun psbtDetail(psbtId: String) = "wallet_psbt_detail/$psbtId"
 
     const val QrScanner = "wallet_qr_scanner"
+    const val UrQrScanner = "wallet_ur_qr_scanner"
 
     const val TransactionError = "wallet_tx_error/{message}"
     fun transactionError(message: String): String {
@@ -384,8 +391,23 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
         
-        composable(WalletRoutes.TransactionDetail) { backStackEntry ->
+        composable(
+            route = WalletRoutes.TransactionDetail,
+            arguments = listOf(
+                navArgument("txId") { type = NavType.StringType },
+                navArgument("depth") {
+                    type = NavType.IntType
+                    defaultValue = 1
+                },
+                navArgument("fromVout") {
+                    type = NavType.IntType
+                    defaultValue = -1
+                }
+            )
+        ) { backStackEntry ->
             val txId = backStackEntry.arguments?.getString("txId") ?: ""
+            val depth = backStackEntry.arguments?.getInt("depth") ?: 1
+            val fromVout = backStackEntry.arguments?.getInt("fromVout") ?: -1
             val viewModel: TransactionDetailViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
 
@@ -395,7 +417,23 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
 
             TransactionDetailScreen(
                 state = state,
-                onClose = { navController.popBackStack() }
+                depth = depth,
+                maxDepth = WalletRoutes.MaxTransactionDepth,
+                highlightOutputIndex = fromVout.takeIf { it >= 0 },
+                onBack = { navController.popBackStack() },
+                onClose = {
+                    navController.popBackStack(
+                        route = WalletRoutes.Dashboard,
+                        inclusive = false
+                    )
+                },
+                onOpenPrevTx = { prevTxid, prevVout ->
+                    if (depth < WalletRoutes.MaxTransactionDepth) {
+                        navController.navigate(
+                            WalletRoutes.transactionDetail(prevTxid, depth + 1, prevVout)
+                        )
+                    }
+                }
             )
         }
 
@@ -492,9 +530,21 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
 
-        composable(WalletRoutes.ImportWallet) {
+        composable(WalletRoutes.ImportWallet) { backStackEntry ->
             val viewModel: ImportWalletViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
+
+            // Pick up descriptor from UR scanner on return.
+            val scannedDescriptor by backStackEntry.savedStateHandle
+                .getStateFlow<String?>("ur_descriptor", null)
+                .collectAsState()
+            LaunchedEffect(scannedDescriptor) {
+                val d = scannedDescriptor
+                if (d != null) {
+                    viewModel.onDescriptorScanned(d)
+                    backStackEntry.savedStateHandle.remove<String>("ur_descriptor")
+                }
+            }
 
             ImportWalletScreen(
                 state = state,
@@ -502,6 +552,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onDescriptorChanged = viewModel::onDescriptorChanged,
                 onWalletNameChanged = viewModel::onWalletNameChanged,
                 onFileContent = viewModel::onDescriptorScanned,
+                onScanQr = { navController.navigate(WalletRoutes.UrQrScanner) },
                 onImport = {
                     viewModel.importWallet {
                         navController.previousBackStackEntry
@@ -673,18 +724,35 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         }
 
         composable(WalletRoutes.Settings) {
-            SettingsScreen(
-                onClose = { navController.popBackStack() },
-                onSwitchAccount = {
-                    SessionStore.activeWalletId = null
-                    SessionStore.activeAccountIndex = null
-                    navController.navigate(
-                        com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.SelectAccount
-                    ) {
-                        popUpTo(0) { inclusive = true }
+            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+            val scope = rememberCoroutineScope()
+
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    DrawerContent { item ->
+                        scope.launch { drawerState.close() }
+                        when (item) {
+                            DrawerItem.HOME -> navController.popBackStack(WalletRoutes.Dashboard, inclusive = false)
+                            DrawerItem.MULTISIG -> navController.navigate(WalletRoutes.MultisigWallets)
+                            DrawerItem.SETTINGS -> { /* already here */ }
+                        }
                     }
                 }
-            )
+            ) {
+                SettingsScreen(
+                    onMenuClick = { scope.launch { drawerState.open() } },
+                    onSwitchAccount = {
+                        SessionStore.activeWalletId = null
+                        SessionStore.activeAccountIndex = null
+                        navController.navigate(
+                            com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.SelectAccount
+                        ) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
+            }
         }
 
         composable(WalletRoutes.QrScanner) {
@@ -694,6 +762,18 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     navController.previousBackStackEntry
                         ?.savedStateHandle
                         ?.set("qr_address", address)
+                    navController.popBackStack()
+                },
+                onClose = { navController.popBackStack() }
+            )
+        }
+
+        composable(WalletRoutes.UrQrScanner) {
+            UrQrScannerScreen(
+                onResult = { descriptor ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("ur_descriptor", descriptor)
                     navController.popBackStack()
                 },
                 onClose = { navController.popBackStack() }

@@ -3,6 +3,7 @@ package cz.majny.wallet.explorer.client
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
+import io.ktor.http.*
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
 
@@ -29,7 +30,32 @@ class RegistryClient(
         return response.addresses
     }
 
+    /**
+     * Požádá registry o odvození nové adresy za existujícím gap limitem a zápis do DB.
+     * Používá se v privacy-critical flow (getNext*Address): když jsou všechny předem
+     * odvozené adresy spotřebované, musíme rozšířit okno bez reusování.
+     *
+     * Idempotentní — pokud už adresa na daném indexu existuje, registry ji vrátí.
+     */
+    suspend fun deriveAdditionalAddress(
+        walletId: String,
+        type: String,
+        index: Int
+    ): WalletAddress {
+        log.info("Requesting derivation: wallet={} type={} index={}", walletId, type, index)
+        return client.post("$baseUrl/registry/wallets/$walletId/addresses/derive") {
+            contentType(ContentType.Application.Json)
+            setBody(DeriveAdditionalAddressRequest(type = type, index = index))
+        }.body()
+    }
+
 }
+
+@Serializable
+data class DeriveAdditionalAddressRequest(
+    val type: String,
+    val index: Int
+)
 
 // ============ DTOs (mirror wallet-registry responses) ============
 
