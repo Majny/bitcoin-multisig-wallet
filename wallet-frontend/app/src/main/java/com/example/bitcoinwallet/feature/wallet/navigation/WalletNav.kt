@@ -510,24 +510,40 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
 
             val viewModel: MultisigDetailViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
+            val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
+            val scope = rememberCoroutineScope()
 
             LaunchedEffect(walletId) {
                 viewModel.loadWallet(walletId, walletName, m, n)
             }
 
-            MultisigDetailScreen(
-                state = state,
-                onClose = { navController.popBackStack() },
-                onPsbtsClick = {
-                    navController.navigate(WalletRoutes.psbtList(walletId))
-                },
-                onReceiveClick = {
-                    navController.navigate(WalletRoutes.Receive)
-                },
-                onTransactionClick = { transaction ->
-                    navController.navigate(WalletRoutes.transactionDetail(transaction.txid))
+            ModalNavigationDrawer(
+                drawerState = drawerState,
+                drawerContent = {
+                    DrawerContent { item ->
+                        scope.launch { drawerState.close() }
+                        when (item) {
+                            DrawerItem.HOME -> navController.popBackStack(WalletRoutes.Dashboard, inclusive = false)
+                            DrawerItem.MULTISIG -> navController.popBackStack()
+                            DrawerItem.SETTINGS -> navController.navigate(WalletRoutes.Settings)
+                        }
+                    }
                 }
-            )
+            ) {
+                MultisigDetailScreen(
+                    state = state,
+                    onMenuClick = { scope.launch { drawerState.open() } },
+                    onPsbtsClick = {
+                        navController.navigate(WalletRoutes.psbtList(walletId))
+                    },
+                    onReceiveClick = {
+                        navController.navigate(WalletRoutes.Receive)
+                    },
+                    onTransactionClick = { transaction ->
+                        navController.navigate(WalletRoutes.transactionDetail(transaction.txid))
+                    }
+                )
+            }
         }
 
         composable(WalletRoutes.ImportWallet) { backStackEntry ->

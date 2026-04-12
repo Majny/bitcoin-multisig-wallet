@@ -71,27 +71,27 @@ fun TransactionDetailScreen(
                     fontSize = 11.sp
                 )
             }
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.TopStart)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = TextPrimary
+                )
+            }
             if (canGoBack) {
                 IconButton(
-                    onClick = onBack,
-                    modifier = Modifier.align(Alignment.TopStart)
+                    onClick = onClose,
+                    modifier = Modifier.align(Alignment.TopEnd)
                 ) {
                     Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Close",
                         tint = TextPrimary
                     )
                 }
-            }
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.align(Alignment.TopEnd)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "Close",
-                    tint = TextPrimary
-                )
             }
         }
 
