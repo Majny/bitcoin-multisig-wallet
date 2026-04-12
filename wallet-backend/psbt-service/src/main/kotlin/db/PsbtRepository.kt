@@ -176,11 +176,14 @@ class PsbtRepository {
     /*
      * Returns the set of "txid:vout" UTXO keys reserved by pending/signed PSBTs
      * for the given wallet (not yet broadcast). Used to prevent double-spending.
+     * Only multisig PSBTs reserve UTXOs — singlesig flow is atomic
+     * (create → sign → broadcast in one user interaction) so reservation is unnecessary.
      */
     fun getReservedUtxos(walletId: String): Set<String> = transaction {
         PsbtsTable.selectAll()
             .where { PsbtsTable.walletId eq walletId }
             .andWhere { PsbtsTable.status inList listOf("pending", "signed") }
+            .andWhere { PsbtsTable.requiredSigs greater 1 }
             .mapNotNull { row -> row[PsbtsTable.trezorConnectParams] }
             .flatMap { paramsJson ->
                 try {

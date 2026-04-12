@@ -520,14 +520,16 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
-                    DrawerContent { item ->
-                        scope.launch { drawerState.close() }
-                        when (item) {
-                            DrawerItem.HOME -> navController.popBackStack(WalletRoutes.Dashboard, inclusive = false)
-                            DrawerItem.MULTISIG -> navController.popBackStack()
-                            DrawerItem.SETTINGS -> navController.navigate(WalletRoutes.Settings)
+                    DrawerContent(
+                        onItemClick = { item ->
+                            scope.launch { drawerState.close() }
+                            when (item) {
+                                DrawerItem.HOME -> navController.popBackStack(WalletRoutes.Dashboard, inclusive = false)
+                                DrawerItem.MULTISIG -> navController.popBackStack()
+                                DrawerItem.SETTINGS -> navController.navigate(WalletRoutes.Settings)
+                            }
                         }
-                    }
+                    )
                 }
             ) {
                 MultisigDetailScreen(
@@ -746,14 +748,16 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             ModalNavigationDrawer(
                 drawerState = drawerState,
                 drawerContent = {
-                    DrawerContent { item ->
-                        scope.launch { drawerState.close() }
-                        when (item) {
-                            DrawerItem.HOME -> navController.popBackStack(WalletRoutes.Dashboard, inclusive = false)
-                            DrawerItem.MULTISIG -> navController.navigate(WalletRoutes.MultisigWallets)
-                            DrawerItem.SETTINGS -> { /* already here */ }
+                    DrawerContent(
+                        onItemClick = { item ->
+                            scope.launch { drawerState.close() }
+                            when (item) {
+                                DrawerItem.HOME -> navController.popBackStack(WalletRoutes.Dashboard, inclusive = false)
+                                DrawerItem.MULTISIG -> navController.navigate(WalletRoutes.MultisigWallets)
+                                DrawerItem.SETTINGS -> { /* already here */ }
+                            }
                         }
-                    }
+                    )
                 }
             ) {
                 SettingsScreen(
