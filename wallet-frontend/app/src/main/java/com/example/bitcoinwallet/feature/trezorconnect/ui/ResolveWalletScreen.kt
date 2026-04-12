@@ -1,6 +1,7 @@
 package com.example.bitcoinwallet.feature.trezorconnect.ui
 
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -57,6 +58,7 @@ fun ResolveWalletScreen(
             Spacer(Modifier.height(20.dp))
             Button(
                 onClick = onErrorGoBack,
+                shape = RoundedCornerShape(12.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = ButtonSecondary)
             ) {
                 Text("Back")

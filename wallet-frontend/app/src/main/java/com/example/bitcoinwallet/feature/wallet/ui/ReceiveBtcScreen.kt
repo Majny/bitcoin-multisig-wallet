@@ -154,7 +154,7 @@ fun ReceiveBtcScreen(
                                 copyToClipboard(context, state.address)
                                 onCopied()
                             },
-                            shape = RoundedCornerShape(6.dp),
+                            shape = RoundedCornerShape(12.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = DarkCard,
                                 contentColor = TextPrimary

@@ -30,7 +30,7 @@ fun PrimaryButton(
         onClick = onClick,
         modifier = modifier.height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = AccentTeal,
             contentColor = TextPrimary,
@@ -61,7 +61,7 @@ fun SecondaryButton(
         onClick = onClick,
         modifier = modifier.height(48.dp),
         enabled = enabled,
-        shape = RoundedCornerShape(24.dp),
+        shape = RoundedCornerShape(12.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = DarkCard,
             contentColor = TextPrimary,

@@ -80,7 +80,7 @@ fun MultisigWalletsScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
                 .height(48.dp),
-            shape = RoundedCornerShape(24.dp),
+            shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(
                 containerColor = AccentTeal,
                 contentColor = TextPrimary

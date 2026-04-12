@@ -96,7 +96,7 @@ fun SettingsScreen(
                     containerColor = AccentTeal.copy(alpha = 0.15f),
                     contentColor = AccentTeal
                 ),
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(48.dp)

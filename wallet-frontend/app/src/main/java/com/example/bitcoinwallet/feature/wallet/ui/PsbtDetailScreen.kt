@@ -251,7 +251,7 @@ fun PsbtDetailScreen(
                     Button(
                         onClick = onBroadcast,
                         colors = ButtonDefaults.buttonColors(containerColor = ReceiveGreen),
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text("Broadcast Transaction", color = TextPrimary,
@@ -261,7 +261,7 @@ fun PsbtDetailScreen(
                     Button(
                         onClick = onSignPsbt,
                         colors = ButtonDefaults.buttonColors(containerColor = AccentTeal),
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text("Sign with Trezor", color = TextPrimary,
@@ -276,7 +276,7 @@ fun PsbtDetailScreen(
                             containerColor = AccentTeal.copy(alpha = 0.12f),
                             contentColor = AccentTeal
                         ),
-                        shape = RoundedCornerShape(24.dp),
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text("Export PSBT", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)

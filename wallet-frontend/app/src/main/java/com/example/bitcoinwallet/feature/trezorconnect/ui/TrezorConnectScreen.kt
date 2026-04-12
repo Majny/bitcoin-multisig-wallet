@@ -84,7 +84,8 @@ fun TrezorConnectScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = TrezorGreen)
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = AccentTeal)
         ) {
             Text("Connect Trezor", style = MaterialTheme.typography.titleMedium)
         }

@@ -1,15 +1,10 @@
 package com.example.bitcoinwallet.feature.wallet.ui
 
-import android.app.Activity
-import android.content.Intent
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -40,26 +35,6 @@ fun ImportWalletScreen(
     onImport: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    // File picker launcher
-    val filePickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            result.data?.data?.let { uri ->
-                try {
-                    val content = context.contentResolver.openInputStream(uri)
-                        ?.bufferedReader()?.use { it.readText() }
-                    if (!content.isNullOrBlank()) {
-                        onFileContent(content.trim())
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.e("ImportWallet", "Failed to read file: ${e.message}", e)
-                }
-            }
-        }
-    }
-
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -97,27 +72,12 @@ fun ImportWalletScreen(
                 Text("Descriptor", color = TextMuted, fontSize = 14.sp)
             },
             trailingIcon = {
-                Row {
-                    IconButton(onClick = onScanQr) {
-                        Icon(
-                            imageVector = Icons.Default.QrCodeScanner,
-                            contentDescription = "Scan QR (UR)",
-                            tint = TextSecondary
-                        )
-                    }
-                    IconButton(onClick = {
-                        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "*/*"
-                        }
-                        filePickerLauncher.launch(intent)
-                    }) {
-                        Icon(
-                            imageVector = Icons.Default.FileOpen,
-                            contentDescription = "Import from file",
-                            tint = TextSecondary
-                        )
-                    }
+                IconButton(onClick = onScanQr) {
+                    Icon(
+                        imageVector = Icons.Default.QrCodeScanner,
+                        contentDescription = "Scan QR (UR)",
+                        tint = AccentTeal
+                    )
                 }
             },
             modifier = Modifier

@@ -28,15 +28,6 @@ import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
- * Send BTC screen — matches the dark UI mockup:
- *   - Recipient address input
- *   - Amount input with BTC label
- *   - Auto Select checkbox
- *   - Fee priority selector (Low / Medium / High)
- *   - Transaction summary
- *   - Create Transaction button
- */
 @Composable
 fun SendTransactionScreen(
     state: SendTransactionUiState,
@@ -57,225 +48,240 @@ fun SendTransactionScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        // ===== Header with close button =====
-        Box(modifier = Modifier.fillMaxWidth()) {
+        // ── Pinned header ──
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
                 text = title,
                 color = TextPrimary,
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.Center)
+                modifier = Modifier.weight(1f)
             )
-            IconButton(
-                onClick = onClose,
-                modifier = Modifier.align(Alignment.CenterEnd)
-            ) {
+            IconButton(onClick = onClose) {
                 Icon(
                     imageVector = Icons.Default.Close,
                     contentDescription = "Close",
-                    tint = TextSecondary
+                    tint = TextPrimary
                 )
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // ===== Recipient =====
-        SectionLabel("Recipient")
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.recipientAddress,
-            onValueChange = onRecipientChanged,
-            placeholder = {
-                Text("Bitcoin address", color = TextMuted)
-            },
-            isError = state.addressError != null,
-            supportingText = state.addressError?.let { err ->
-                { Text(err, color = ErrorRed, fontSize = 12.sp) }
-            },
-            singleLine = true,
-            trailingIcon = {
-                IconButton(onClick = onScanQr) {
-                    Icon(
-                        imageVector = Icons.Default.QrCodeScanner,
-                        contentDescription = "Scan QR",
-                        tint = TextSecondary
-                    )
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = outlinedFieldColors()
-        )
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // ===== Amount =====
-        SectionLabel("Amount")
-        Spacer(modifier = Modifier.height(8.dp))
-        OutlinedTextField(
-            value = state.amountBtc,
-            onValueChange = onAmountChanged,
-            placeholder = {
-                Text("0.00000000", color = TextMuted)
-            },
-            isError = state.amountError != null,
-            supportingText = state.amountError?.let { err ->
-                { Text(err, color = ErrorRed, fontSize = 12.sp) }
-            },
-            singleLine = true,
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            trailingIcon = {
-                Text(
-                    text = "BTC",
-                    color = TextSecondary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    modifier = Modifier.padding(end = 12.dp)
-                )
-            },
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = outlinedFieldColors()
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ===== Auto Select + Edit Selection =====
-        Row(
-            verticalAlignment = Alignment.CenterVertically
+        // ── Scrollable content ──
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable { onAutoSelectChanged(!state.autoSelect) }
-            ) {
-                Checkbox(
-                    checked = state.autoSelect,
-                    onCheckedChange = onAutoSelectChanged,
-                    colors = CheckboxDefaults.colors(
-                        checkedColor = AccentTeal,
-                        uncheckedColor = TextSecondary,
-                        checkmarkColor = TextPrimary
+            Spacer(Modifier.height(8.dp))
+
+            // ── Recipient ──
+            SectionLabel("Recipient")
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = state.recipientAddress,
+                onValueChange = onRecipientChanged,
+                placeholder = { Text("Bitcoin address", color = TextMuted) },
+                isError = state.addressError != null,
+                supportingText = state.addressError?.let { err ->
+                    { Text(err, color = ErrorRed, fontSize = 12.sp) }
+                },
+                singleLine = true,
+                trailingIcon = {
+                    IconButton(onClick = onScanQr) {
+                        Icon(
+                            imageVector = Icons.Default.QrCodeScanner,
+                            contentDescription = "Scan QR",
+                            tint = AccentTeal
+                        )
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors()
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── Amount ──
+            SectionLabel("Amount")
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = state.amountBtc,
+                onValueChange = onAmountChanged,
+                placeholder = { Text("0.00000000", color = TextMuted) },
+                isError = state.amountError != null,
+                supportingText = state.amountError?.let { err ->
+                    { Text(err, color = ErrorRed, fontSize = 12.sp) }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                trailingIcon = {
+                    Text(
+                        text = "BTC",
+                        color = TextMuted,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.padding(end = 12.dp)
                     )
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Auto Select",
-                    color = TextPrimary,
-                    fontSize = 14.sp
-                )
-            }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors()
+            )
 
-            // Show "Edit Selection" button when auto is OFF
-            if (!state.autoSelect) {
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(
-                    text = "Edit Selection",
-                    color = TextSecondary,
-                    fontSize = 13.sp,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(1.dp, DarkCard, RoundedCornerShape(8.dp))
-                        .clickable { onEditSelection() }
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                )
-            }
-        }
+            Spacer(Modifier.height(16.dp))
 
-        // Show selected UTXO info when in manual mode
-        if (!state.autoSelect && state.selectedUtxoCount > 0) {
-            Spacer(modifier = Modifier.height(8.dp))
-            val selectedTotalSats = state.selectedUtxos.sumOf { it.valueSats }
+            // ── UTXO selection ──
+            SectionLabel("UTXO Selection")
+            Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(8.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .background(DarkSurface)
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "${state.selectedUtxoCount} UTXO${if (state.selectedUtxoCount > 1) "s" else ""} selected",
-                    color = AccentTeal,
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                Text(
-                    text = formatBtc(selectedTotalSats),
-                    color = TextPrimary,
-                    fontSize = 13.sp
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = if (state.autoSelect) "Automatic" else "Manual",
+                        color = TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    Text(
+                        text = if (state.autoSelect) {
+                            "Largest UTXOs first"
+                        } else if (state.selectedUtxoCount > 0) {
+                            "${state.selectedUtxoCount} UTXO${if (state.selectedUtxoCount > 1) "s" else ""} · ${formatBtc(state.selectedUtxos.sumOf { it.valueSats })}"
+                        } else {
+                            "No UTXOs selected"
+                        },
+                        color = if (!state.autoSelect && state.selectedUtxoCount == 0) ErrorRed else TextMuted,
+                        fontSize = 12.sp
+                    )
+                }
+
+                if (!state.autoSelect) {
+                    Text(
+                        text = "Edit",
+                        color = AccentTeal,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onEditSelection() }
+                            .padding(horizontal = 12.dp, vertical = 6.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+
+                Switch(
+                    checked = state.autoSelect,
+                    onCheckedChange = onAutoSelectChanged,
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = AccentTeal,
+                        checkedThumbColor = TextPrimary,
+                        uncheckedTrackColor = DarkCard,
+                        uncheckedThumbColor = TextMuted
+                    )
                 )
             }
-        } else if (!state.autoSelect && state.selectedUtxoCount == 0) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = "No UTXOs selected — tap Edit Selection",
-                color = TextMuted,
-                fontSize = 12.sp
-            )
-        }
 
-        Spacer(modifier = Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
 
-        // ===== Fee section — presets (auto) or custom input (manual) =====
-        if (state.autoSelect) {
+            // ── Fee ──
+            SectionLabel("Fee")
+            Spacer(Modifier.height(8.dp))
             FeePrioritySelector(
                 selected = state.feePriority,
                 onSelect = onFeePriorityChanged,
                 feeEstimates = state.feeEstimates
             )
-        } else {
-            CustomFeeInput(
-                value = state.customFeeRate,
-                onValueChange = onCustomFeeRateChanged,
-                suggestedRate = state.feeEstimates?.halfHourFee
+
+            if (!state.autoSelect) {
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = state.customFeeRate,
+                    onValueChange = onCustomFeeRateChanged,
+                    placeholder = {
+                        Text(
+                            text = state.feeEstimates?.halfHourFee?.let { "$it (recommended)" } ?: "Custom",
+                            color = TextMuted,
+                            fontSize = 13.sp
+                        )
+                    },
+                    label = { Text("Custom fee rate", color = TextMuted, fontSize = 11.sp) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    trailingIcon = {
+                        Text(
+                            text = "sat/vB",
+                            color = TextMuted,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors()
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── Summary ──
+            SectionLabel("Summary")
+            Spacer(Modifier.height(8.dp))
+            SummaryCard(state)
+
+            // ── Error ──
+            if (state.error != null) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = state.error,
+                    color = ErrorRed,
+                    fontSize = 13.sp,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(ErrorRed.copy(alpha = 0.1f))
+                        .padding(12.dp)
+                )
+            }
+
+            Spacer(Modifier.height(20.dp))
+
+            // ── Create button ──
+            PrimaryButton(
+                text = if (state.isSending) "Creating..." else buttonText,
+                onClick = onCreateTransaction,
+                enabled = !state.isSending && !state.isLoading,
+                modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(Modifier.height(20.dp))
         }
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // ===== Summary =====
-        SectionLabel("Summary")
-        Spacer(modifier = Modifier.height(12.dp))
-        SummarySection(state)
-
-        Spacer(modifier = Modifier.height(28.dp))
-
-        // ===== Error message =====
-        if (state.error != null) {
-            Text(
-                text = state.error,
-                color = ErrorRed,
-                fontSize = 13.sp,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
-
-        // ===== Create Transaction button =====
-        PrimaryButton(
-            text = if (state.isSending) "Creating..." else buttonText,
-            onClick = onCreateTransaction,
-            enabled = !state.isSending && !state.isLoading,
-            modifier = Modifier.fillMaxWidth()
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
     }
 }
 
-// ===== Sub-components =====
+// ── Sub-components ──────────────────────────────────────────────────
 
 @Composable
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        color = TextPrimary,
-        fontSize = 15.sp,
-        fontWeight = FontWeight.SemiBold
+        color = TextMuted,
+        fontSize = 12.sp,
+        fontWeight = FontWeight.Medium
     )
 }
 
@@ -285,54 +291,52 @@ private fun FeePrioritySelector(
     onSelect: (FeePriority) -> Unit,
     feeEstimates: FeeEstimatesDto? = null
 ) {
+    val options = listOf(
+        FeePriority.LOW    to Triple("Low",    feeEstimates?.hourFee,     ReceiveGreen),
+        FeePriority.MEDIUM to Triple("Medium", feeEstimates?.halfHourFee, AccentTeal),
+        FeePriority.HIGH   to Triple("High",   feeEstimates?.fastestFee,  BitcoinOrange)
+    )
+
     Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(0.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(DarkSurface),
+        horizontalArrangement = Arrangement.SpaceEvenly
     ) {
-        Text(
-            text = "Fee",
-            color = TextPrimary,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(end = 16.dp)
-        )
+        options.forEach { (priority, info) ->
+            val (label, rate, accentColor) = info
+            val isSelected = selected == priority
 
-        val options = listOf(
-            FeePriority.LOW    to Pair("Low",    feeEstimates?.hourFee),
-            FeePriority.MEDIUM to Pair("Medium", feeEstimates?.halfHourFee),
-            FeePriority.HIGH   to Pair("High",   feeEstimates?.fastestFee)
-        )
-
-        Row(
-            modifier = Modifier
-                .clip(RoundedCornerShape(8.dp))
-                .border(1.dp, DarkCard, RoundedCornerShape(8.dp))
-        ) {
-            options.forEach { (priority, labelRate) ->
-                val (label, rate) = labelRate
-                val isSelected = selected == priority
-                Box(
-                    modifier = Modifier
-                        .background(if (isSelected) AccentTeal else Color.Transparent)
-                        .clickable { onSelect(priority) }
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = label,
-                            color = if (isSelected) TextPrimary else TextSecondary,
-                            fontSize = 13.sp,
-                            fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                        )
-                        if (rate != null) {
-                            Text(
-                                text = "$rate sat/vB",
-                                color = if (isSelected) TextPrimary else TextMuted,
-                                fontSize = 10.sp
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable { onSelect(priority) }
+                    .then(
+                        if (isSelected) Modifier
+                            .background(accentColor.copy(alpha = 0.15f))
+                            .border(
+                                width = 1.5.dp,
+                                color = accentColor.copy(alpha = 0.6f),
+                                shape = RoundedCornerShape(12.dp)
                             )
-                        }
-                    }
+                        else Modifier
+                    )
+                    .padding(vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = label,
+                    color = if (isSelected) accentColor else TextSecondary,
+                    fontSize = 13.sp,
+                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                )
+                if (rate != null) {
+                    Text(
+                        text = "$rate sat/vB",
+                        color = if (isSelected) accentColor.copy(alpha = 0.8f) else TextMuted,
+                        fontSize = 10.sp
+                    )
                 }
             }
         }
@@ -340,82 +344,56 @@ private fun FeePrioritySelector(
 }
 
 @Composable
-private fun CustomFeeInput(
-    value: String,
-    onValueChange: (String) -> Unit,
-    suggestedRate: Int? = null
-) {
-    Column {
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "Fee",
-                color = TextPrimary,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(end = 16.dp)
-            )
-            OutlinedTextField(
-                value = value,
-                onValueChange = onValueChange,
-                placeholder = {
-                    Text(
-                        text = suggestedRate?.let { "$it (recommended)" } ?: "e.g. 5",
-                        color = TextMuted,
-                        fontSize = 13.sp
-                    )
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                trailingIcon = {
-                    Text(
-                        text = "sat/vB",
-                        color = TextMuted,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                },
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(8.dp),
-                colors = outlinedFieldColors()
-            )
-        }
-        if (value.isBlank() && suggestedRate != null) {
-            Text(
-                text = "Leave empty to use medium priority ($suggestedRate sat/vB)",
-                color = TextMuted,
-                fontSize = 11.sp,
-                modifier = Modifier.padding(start = 52.dp, top = 4.dp)
-            )
-        }
-    }
-}
+private fun SummaryCard(state: SendTransactionUiState) {
+    val hasReserved = state.reservedSats > 0
 
-@Composable
-private fun SummarySection(state: SendTransactionUiState) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(12.dp))
             .background(DarkSurface)
             .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SummaryRow("Transaction Amount", formatBtc(state.amountSats))
-        SummaryRow("Network Fee", formatFee(state.feeSats, state.feeRateSatVb))
-        HorizontalDivider(color = DarkCard, thickness = 1.dp)
-        SummaryRow("Total", formatBtc(state.totalSats), bold = true)
-        HorizontalDivider(color = DarkCard, thickness = 1.dp)
-        if (state.reservedSats > 0 && state.autoSelect) {
+        SummaryRow("Amount", formatBtc(state.amountSats), TextPrimary)
+        SummaryRow(
+            "Fee",
+            formatFee(state.feeSats, state.feeRateSatVb),
+            if (state.feeSats > 0) BitcoinOrange else TextMuted
+        )
+
+        HorizontalDivider(color = DarkCard.copy(alpha = 0.5f), thickness = 0.5.dp)
+
+        SummaryRow("Total", formatBtc(state.totalSats), AccentTeal, bold = true)
+
+        HorizontalDivider(color = DarkCard.copy(alpha = 0.5f), thickness = 0.5.dp)
+
+        if (hasReserved) {
+            SummaryRow("Total Balance", formatBtc(state.balanceSats), TextMuted)
             SummaryRow(
-                "Available Balance",
-                formatBtc(maxOf(state.balanceSats - state.reservedSats, 0L))
+                "Reserved (pending PSBTs)",
+                "- ${formatBtc(state.reservedSats)}",
+                BitcoinOrange
+            )
+            SummaryRow(
+                "Available",
+                formatBtc(maxOf(state.balanceSats - state.reservedSats, 0L)),
+                TextPrimary
             )
         } else {
-            SummaryRow("Balance", formatBtc(state.balanceSats))
+            SummaryRow("Balance", formatBtc(state.balanceSats), TextMuted)
         }
-        SummaryRow("Remaining After Tx", formatBtc(state.remainingSats))
+
+        val remaining = state.remainingSats
+        SummaryRow(
+            "Remaining",
+            formatBtc(remaining),
+            when {
+                remaining < 0 -> ErrorRed
+                remaining == 0L -> BitcoinOrange
+                else -> ReceiveGreen
+            }
+        )
     }
 }
 
@@ -423,24 +401,24 @@ private fun SummarySection(state: SendTransactionUiState) {
 private fun SummaryRow(
     label: String,
     value: String,
-    bold: Boolean = false,
-    valueColor: Color = TextPrimary
+    valueColor: Color = TextPrimary,
+    bold: Boolean = false
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
             text = label,
-            color = TextSecondary,
-            fontSize = 13.sp,
-            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal
+            color = TextMuted,
+            fontSize = 13.sp
         )
         Text(
             text = value,
             color = valueColor,
             fontSize = 13.sp,
-            fontWeight = if (bold) FontWeight.SemiBold else FontWeight.Normal
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Medium
         )
     }
 }
@@ -460,7 +438,7 @@ private fun formatFee(sats: Long, rateSatVb: Double): String {
 }
 
 @Composable
-private fun outlinedFieldColors() = OutlinedTextFieldDefaults.colors(
+private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = TextPrimary,
     unfocusedTextColor = TextPrimary,
     cursorColor = AccentTeal,
@@ -471,27 +449,25 @@ private fun outlinedFieldColors() = OutlinedTextFieldDefaults.colors(
     unfocusedContainerColor = DarkSurface
 )
 
-// ===== Preview =====
+// ── Previews ──
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E, name = "Auto Mode")
 @Composable
 private fun SendTransactionScreenPreview() {
-    val state = SendTransactionUiState(
-        recipientAddress = "",
-        amountBtc = "1.23456789",
-        feePriority = FeePriority.MEDIUM,
-        autoSelect = true,
-        balanceSats = 198_901_089L,
-        amountSats = 123_456_789L,
-        feeSats = 12_300L,
-        totalSats = 123_469_089L,
-        remainingSats = 75_432_100L,
-        isLoading = false
-    )
-
     BitcoinWalletTheme {
         SendTransactionScreen(
-            state = state,
+            state = SendTransactionUiState(
+                recipientAddress = "",
+                amountBtc = "0.00100000",
+                feePriority = FeePriority.MEDIUM,
+                autoSelect = true,
+                balanceSats = 198_901_089L,
+                amountSats = 100_000L,
+                feeSats = 140L,
+                totalSats = 100_140L,
+                remainingSats = 198_800_949L,
+                isLoading = false
+            ),
             onClose = {},
             onRecipientChanged = {},
             onAmountChanged = {},
@@ -508,22 +484,20 @@ private fun SendTransactionScreenPreview() {
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E, name = "Manual Mode")
 @Composable
 private fun SendTransactionScreenManualPreview() {
-    val state = SendTransactionUiState(
-        recipientAddress = "",
-        amountBtc = "1.23456789",
-        autoSelect = false,
-        customFeeRate = "",
-        balanceSats = 198_901_089L,
-        amountSats = 123_456_789L,
-        feeSats = 12_300L,
-        totalSats = 123_469_089L,
-        remainingSats = 75_432_100L,
-        isLoading = false
-    )
-
     BitcoinWalletTheme {
         SendTransactionScreen(
-            state = state,
+            state = SendTransactionUiState(
+                recipientAddress = "",
+                amountBtc = "0.00100000",
+                autoSelect = false,
+                customFeeRate = "",
+                balanceSats = 198_901_089L,
+                amountSats = 100_000L,
+                feeSats = 140L,
+                totalSats = 100_140L,
+                remainingSats = 198_800_949L,
+                isLoading = false
+            ),
             onClose = {},
             onRecipientChanged = {},
             onAmountChanged = {},
