@@ -1,0 +1,131 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 32
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 25
+skinparam ranksep 35
+
+skinparam entity {
+  BackgroundColor #FAFAFA
+  BorderColor #424242
+}
+
+hide circle
+
+package "auth-service" {
+
+entity "devices" as devices {
+  * **device_id** : TEXT <<PK>>
+  --
+  fingerprint : TEXT
+  model : TEXT
+  label : TEXT
+  created_at : TIMESTAMP
+}
+
+}
+
+package "wallet-registry" {
+
+entity "wallets" as wallets {
+  * **wallet_id** : TEXT <<PK>>
+  --
+  network : TEXT
+  type : TEXT
+  script_type : TEXT
+  m : INT
+  n : INT
+  account_index : INT
+  receive_descriptor : TEXT
+  change_descriptor : TEXT
+  created_at : TIMESTAMP
+}
+
+entity "cosigners" as cosigners {
+  * **cosigner_id** : TEXT <<PK>>
+  --
+  fingerprint : TEXT
+  origin_path : TEXT
+  xpub_root : TEXT
+  created_at : TIMESTAMP
+}
+
+entity "wallet_cosigners" as wcosigners {
+  * **wallet_id** : TEXT <<FK>>
+  * **idx** : INT
+  --
+  * cosigner_id : TEXT <<FK>>
+}
+
+entity "wallet_members" as members {
+  * **wallet_id** : TEXT <<FK>>
+  * **device_id** : TEXT
+  * **account_index** : INT
+  --
+  label : TEXT
+  created_at : TIMESTAMP
+}
+
+entity "wallet_addresses" as addresses {
+  * **wallet_id** : TEXT <<FK>>
+  * **address_type** : TEXT
+  * **address_index** : INT
+  --
+  address : TEXT
+  created_at : TIMESTAMP
+}
+
+}
+
+package "psbt-service" {
+
+entity "psbts" as psbts {
+  * **id** : UUID <<PK>>
+  --
+  * wallet_id : TEXT <<FK>>
+  psbt_base64 : TEXT
+  status : VARCHAR(50)
+  required_sigs : INT
+  current_sigs : INT
+  total_output_sats : BIGINT
+  estimated_fee_sats : BIGINT
+  trezor_connect_params : TEXT
+  serialized_tx : TEXT
+  created_at : TIMESTAMP
+  updated_at : TIMESTAMP
+}
+
+entity "psbt_signatures" as signatures {
+  * **id** : UUID <<PK>>
+  --
+  * psbt_id : UUID <<FK>>
+  device_id : VARCHAR(255)
+  fingerprint : VARCHAR(16)
+  cosigner_index : INT
+  signed_at : TIMESTAMP
+}
+
+}
+
+' Relationships — wallet-registry
+wallets ||--o{ members : "sdílí"
+wallets ||--o{ wcosigners : "má cosignery"
+cosigners ||--o{ wcosigners : "přiřazení"
+wallets ||--o{ addresses : "má adresy"
+
+' Relationships — psbt-service
+wallets ||--o{ psbts : "má transakce"
+psbts ||--o{ signatures : "má podpisy"
+
+' Force vertical stacking of packages
+devices -[hidden]down- wallets
+addresses -[hidden]down- psbts
+
+' Force compact 2-column layout within wallet-registry
+members -[hidden]right- wcosigners
+addresses -[hidden]right- cosigners
+wallets -[hidden]down- members
+wallets -[hidden]down- addresses
+
+@enduml

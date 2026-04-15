@@ -1,0 +1,41 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 28
+skinparam ParticipantPadding 15
+skinparam BoxPadding 10
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+
+actor "Uživatel" as user
+participant "Android\naplikace" as app
+participant "API\nGateway" as gw
+participant "psbt-\nservice" as psbt
+participant "blockchain-\nservice" as bc
+participant "Trezor Suite\nMobile" as trezor
+
+== Vytvoření PSBT ==
+
+user -> app : Zadání transakce\n(adresa, částka)
+app -> gw : POST /psbt/create
+gw -> psbt : vytvor PSBT
+psbt -> bc : GET /utxo (vstupy)
+psbt -> bc : GET /tx (referencni tx)
+psbt <-- bc : data
+psbt -> psbt : sestav PSBT\n+ Trezor Connect params
+gw <-- psbt : PSBT + params
+app <-- gw : psbt_id, trezor_params
+
+== Podpis cosignera 1 ==
+
+user -> app : "Sign with Trezor"
+app -> trezor : deeplink\n(method=signTransaction)
+user -> trezor : potvrzení na zařízení
+trezor -> app : callback URI\n(signatures[])
+app -> gw : POST /psbt/{id}/sign-trezor\n{signatures, signerAccountIndex=0}
+gw -> psbt : pridej podpisy
+psbt -> psbt : BIP-67 řazení\n+ vlož do PSBT
+psbt -> psbt : stav: pending\n(1/2 podpisu)
+app <-- gw : ok, needs_more_signatures
+
+@enduml

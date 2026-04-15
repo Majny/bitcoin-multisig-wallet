@@ -1,0 +1,107 @@
+%%% Vyplňte prosím základní údaje o závěrečné práci (odstraňte \xxx{...}).
+%%% Automaticky se pak vloží na všechna místa, kde jsou potřeba.
+
+% Druh práce:
+%	"bc" pro bakalářskou
+%	"mgr" pro diplomovou
+%	"phd" pro disertační
+%	"rig" pro rigorozní
+\def\ThesisType{bc}
+
+% Název práce v jazyce práce (přesně podle zadání)
+\def\ThesisTitle{Bitcoinová peněženka pro pokročilé uživatele}
+
+% Název práce v angličtině
+\def\ThesisTitleEN{Bitcoin Wallet for Advanced Users}
+
+% Jméno autora (vy)
+\def\ThesisAuthor{Jakub Dvořák}
+
+% Rok odevzdání
+\def\YearSubmitted{2026}
+
+% Název katedry nebo ústavu, kde byla práce oficiálně zadána
+% (dle Organizační struktury MFF UK:
+% https://www.mff.cuni.cz/cs/fakulta/organizacni-struktura,
+% případně plný název pracoviště mimo MFF)
+\def\Department{Katedra softwarového inženýrství}
+\def\DepartmentEN{Department of Software Engineering}
+
+% Jedná se o katedru (department) nebo o ústav (institute)?
+\def\DeptType{Katedra}
+\def\DeptTypeEN{Department}
+
+% Vedoucí práce: Jméno a příjmení s~tituly
+\def\Supervisor{RNDr. Filip Zavoral, Ph.D.}
+
+% Pracoviště vedoucího (opět dle Organizační struktury MFF)
+\def\SupervisorsDepartment{Katedra softwarového inženýrství}
+\def\SupervisorsDepartmentEN{Department of Software Engineering}
+
+% Studijní program (kromě rigorozních prací)
+\def\StudyProgramme{Informatika}
+
+% Nepovinné poděkování (vedoucímu práce, konzultantovi, tomu, kdo
+% vám nosil pizzu a vařil čaj apod.)
+\def\Dedication{%
+Rád bych poděkoval vedoucímu práce RNDr. Filipu Zavoralovi, Ph.D.
+za cenné rady a~připomínky při vedení této práce.
+}
+
+% Abstrakt (doporučený rozsah cca 80-200 slov; nejedná se o zadání práce)
+\def\Abstract{%
+Tato práce se zabývá návrhem a~implementací mobilní aplikace pro platformu
+Android, která umožňuje pokročilou správu Bitcoinových prostředků. Aplikace
+podporuje multisignature transakce ve schématu M-of-N s~využitím standardů
+BIP-48 a~BIP-67, manuální výběr nepoužitých výstupů (coin control) a~integraci
+s~hardwarovou peněženkou Trezor prostřednictvím protokolu Trezor Connect.
+Bezpečnostní model zajišťuje, že server nikdy nedisponuje privátními klíči --
+veškeré podepisování probíhá výhradně na~hardwarovém zařízení. Pro distribuci
+částečně podepsaných transakcí mezi cosignery je využit formát PSBT dle
+standardu BIP-174. Backend je realizován jako soustava mikroslužeb v~jazyce
+Kotlin s~frameworkem Ktor, frontend jako nativní Android aplikace s~Jetpack
+Compose. Funkčnost aplikace byla ověřena na~testnetové síti včetně úspěšného
+dokončení 2-of-3 multisig transakce.
+}
+
+% Anglická verze abstraktu
+\def\AbstractEN{%
+This thesis presents the design and implementation of a~mobile application
+for the Android platform that enables advanced Bitcoin asset management.
+The application supports multisignature transactions in an M-of-N scheme
+using the BIP-48 and BIP-67 standards, manual selection of unspent transaction
+outputs (coin control), and integration with the Trezor hardware wallet via
+the Trezor Connect protocol. The security model ensures that the server never
+holds private keys -- all transaction signing is performed exclusively on the
+hardware device. The PSBT format defined by BIP-174 is used for distributing
+partially signed transactions among cosigners. The backend is implemented as
+a~set of microservices in Kotlin with the Ktor framework, while the frontend
+is a~native Android application built with Jetpack Compose. The application
+was verified on the Bitcoin testnet, including a~successful completion of
+a~2-of-3 multisig transaction.
+}
+
+% 3 až 5 klíčových slov (doporučeno) oddělených \sep
+% Hodí se pro nalezení práce podle tématu.
+\def\ThesisKeywords{%
+Bitcoin\sep multisignature\sep PSBT\sep hardwarová peněženka\sep Android
+}
+
+\def\ThesisKeywordsEN{
+Bitcoin\sep multisignature\sep PSBT\sep hardware wallet\sep Android
+}
+
+% Pokud některá z položek metadat obsahuje TeXové řídící sekvence, je potřeba
+% dodat i verzi v obyčejném textu, která se objeví v metadatech formátu XMP
+% zabudovaných do výstupního souboru PDF. Pokud si nejste jistí, prohlédněte si
+% vygenerovaný soubor thesis.xmpdata.
+\def\ThesisAuthorXMP{\ThesisAuthor}
+\def\ThesisTitleXMP{Bitcoinova penezenka pro pokrocile uzivatele}
+\def\ThesisKeywordsXMP{Bitcoin, multisignature, PSBT, hardwarova penezenka, Android}
+\def\AbstractXMP{\Abstract}
+
+% Máte-li dlouhý abstrakt a nechceme se mu vejít na informační stranu,
+% můžete použít toto nastavení ke zmenšení písma informační strany.
+% (Uvažte nicméně zkrácení abstraktu, to je často lepší.)
+\def\InfoPageFont{}
+%\def\InfoPageFont{\small}  % odkomentujte pro zmenšení písma

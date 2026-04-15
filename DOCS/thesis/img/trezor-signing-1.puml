@@ -1,0 +1,29 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 30
+skinparam ParticipantPadding 10
+skinparam BoxPadding 8
+skinparam sequenceMessageAlign center
+
+actor "Uživatel" as user
+participant "Android\naplikace" as app
+participant "API\nGateway" as gw
+participant "psbt-service" as psbt
+
+user -> app : zadá adresu, částku
+activate app
+
+app -> gw : POST /psbt/create
+activate gw
+gw -> psbt : vytvoř PSBT
+activate psbt
+psbt -> psbt : výběr UTXO\n+ sestavení PSBT\n+ Trezor Connect params
+psbt --> gw : {psbt_id, trezor_params}
+deactivate psbt
+gw --> app : {psbt_id, trezor_params}
+deactivate gw
+
+deactivate app
+
+@enduml

@@ -1,0 +1,92 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 28
+skinparam state {
+  BackgroundColor #FAFAFA
+  BorderColor #424242
+  FontSize 28
+}
+skinparam note {
+  BackgroundColor #FFFFDD
+  BorderColor #999999
+}
+
+state "Připojení\nTrezoru" as connect
+state "Skenování\núčtů" as resolve
+state "Výběr singlesig\núčtu" as select
+
+state "Dashboard" as dash {
+}
+
+state "Send" as send
+state "Receive" as receive
+state "QR skener" as qr
+state "Coin Control" as coin
+state "Detail\ntransakce" as txdetail
+state "Odeslána" as txsent
+
+state "Multisig\npeněženky" as mslist
+state "Import\ndeskriptoru" as import
+state "Multisig\ndetail" as msdetail
+state "PSBT\nseznam" as psbtlist
+state "Vytvořit\nPSBT" as createpsbt
+state "PSBT\ndetail" as psbtdetail
+
+state "Nastavení" as settings
+
+[*] --> connect
+connect --> resolve : deeplink\nTrezor Connect
+resolve --> select : nalezené účty
+select --> dash : vybraný\nsinglesig účet
+
+dash --> send
+dash --> receive
+dash -[#666]-> mslist : drawer:\nMultisig
+dash -[#666]-> settings : drawer:\nNastavení
+dash --> txdetail : klik na\ntransakci
+
+send --> qr : sken\nadresy
+send --> coin : výběr\nUTXO
+send --> txsent : podpis\nna Trezoru\n+ broadcast
+coin --> txdetail : detail\nUTXO
+
+mslist --> msdetail : výběr\npeněženky
+mslist --> import : import
+mslist -[#666]-> settings : drawer
+
+msdetail --> receive
+msdetail --> psbtlist : PSBTs
+msdetail --> txdetail : klik na\ntransakci
+
+psbtlist --> createpsbt : nový PSBT
+psbtlist --> psbtdetail : detail
+
+createpsbt --> qr
+createpsbt --> coin
+
+psbtdetail --> psbtdetail : podpis\ncosignerem\nna Trezoru
+
+settings --> select : přepnutí\núčtu
+
+note right of connect
+  Trezor Suite Mobile
+  exportuje xpub
+  pro 10 účtů
+end note
+
+note left of select
+  Zobrazuje pouze
+  singlesig účty
+  z Trezoru
+end note
+
+note right of mslist
+  Multisig peněženky
+  importované přes
+  output deskriptor,
+  přidružené k singlesig
+  účtům
+end note
+
+@enduml

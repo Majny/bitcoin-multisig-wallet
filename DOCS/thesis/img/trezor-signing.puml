@@ -1,0 +1,71 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 36
+skinparam ParticipantPadding 5
+skinparam BoxPadding 5
+skinparam minClassWidth 10
+skinparam padding 1
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 180
+
+actor "Uživatel" as user
+participant "Android\naplikace" as app
+participant "API\nGateway" as gw
+participant "psbt-service" as psbt
+participant "Trezor Suite\nMobile" as tsm
+participant "Trezor" as hw
+
+user -> app : zadá adresu, částku
+activate app
+
+app -> gw : POST /api/psbt/create
+activate gw
+gw -> psbt : vytvoř PSBT
+activate psbt
+psbt -> psbt : výběr UTXO\n+ sestavení PSBT\n+ Trezor Connect params
+psbt --> gw : {psbt_id, trezor_connect_params}
+deactivate psbt
+gw --> app : {psbt_id, trezor_connect_params}
+deactivate gw
+
+app -> tsm : deeplink: signTransaction\n(vstupy, výstupy, derivační cesty)
+activate tsm
+tsm -> hw : předá transakci
+activate hw
+hw -> user : zobrazí detaily\nna displeji
+user -> hw : fyzicky potvrdí
+hw --> tsm : podpisy
+deactivate hw
+tsm --> app : callback URL\n(signatures / serialized_tx)
+deactivate tsm
+
+alt singlesig
+    app -> gw : POST /api/psbt/{id}/broadcast\n(serialized_tx)
+    activate gw
+    gw -> psbt : broadcast
+    activate psbt
+    psbt --> gw : txid
+    deactivate psbt
+    gw --> app : txid
+    deactivate gw
+else multisig
+    app -> gw : POST /api/psbt/{id}/sign-trezor\n(signatures, cosignerIndex)
+    activate gw
+    gw -> psbt : přidej podpisy
+    activate psbt
+    psbt -> psbt : BIP-67 řazení\n+ vložení do PSBT\n+ current_sigs++
+    alt current_sigs == required_sigs
+        psbt -> psbt : finalizace + broadcast
+        psbt --> gw : {status: "broadcast"}
+    else čeká na další cosignery
+        psbt --> gw : {status: "pending"}
+    end
+    deactivate psbt
+    gw --> app : stav PSBT
+    deactivate gw
+end
+
+deactivate app
+
+@enduml

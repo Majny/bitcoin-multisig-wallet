@@ -1,0 +1,792 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated by
+% biber as required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+
+\refsection{0}
+  \datalist[entry]{none/global//global/global/global}
+    \entry{SparrowWallet}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=f57fe41cddeea4d0e773032317bc0375}{%
+           family={Raw},
+           familyi={R\bibinitperiod},
+           given={Craig},
+           giveni={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{fullhash}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{fullhashraw}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{bibnamehash}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{authorbibnamehash}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{authornamehash}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{authorfullhash}{f57fe41cddeea4d0e773032317bc0375}
+      \strng{authorfullhashraw}{f57fe41cddeea4d0e773032317bc0375}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Sparrow Wallet}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://sparrowwallet.com/
+      \endverb
+      \verb{url}
+      \verb https://sparrowwallet.com/
+      \endverb
+    \endentry
+    \entry{Electrum}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=aa88fd2bb444028524421a776fae7ffd}{%
+           family={{Electrum Technologies GmbH}},
+           familyi={E\bibinitperiod}}}%
+      }
+      \strng{namehash}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{fullhash}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{fullhashraw}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{bibnamehash}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{authorbibnamehash}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{authornamehash}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{authorfullhash}{aa88fd2bb444028524421a776fae7ffd}
+      \strng{authorfullhashraw}{aa88fd2bb444028524421a776fae7ffd}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Electrum {Bitcoin} Wallet}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://electrum.org/
+      \endverb
+      \verb{url}
+      \verb https://electrum.org/
+      \endverb
+    \endentry
+    \entry{TrezorConnect}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=db9f21fea14daa6705acba28922ee968}{%
+           family={{SatoshiLabs}},
+           familyi={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{fullhash}{db9f21fea14daa6705acba28922ee968}
+      \strng{fullhashraw}{db9f21fea14daa6705acba28922ee968}
+      \strng{bibnamehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authorbibnamehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authornamehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authorfullhash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authorfullhashraw}{db9f21fea14daa6705acba28922ee968}
+      \field{extraname}{1}
+      \field{sortinit}{3}
+      \field{sortinithash}{ad6fe7482ffbd7b9f99c9e8b5dccd3d7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Trezor Connect -- Third-party integration}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://connect.trezor.io/
+      \endverb
+      \verb{url}
+      \verb https://connect.trezor.io/
+      \endverb
+    \endentry
+    \entry{BIP174}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=0c02fb370a9df48af1959d26d60fdc1c}{%
+           family={Chow},
+           familyi={C\bibinitperiod},
+           given={Ava},
+           giveni={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{fullhash}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{fullhashraw}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{bibnamehash}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{authorbibnamehash}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{authornamehash}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{authorfullhash}{0c02fb370a9df48af1959d26d60fdc1c}
+      \strng{authorfullhashraw}{0c02fb370a9df48af1959d26d60fdc1c}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-174}: Partially Signed Bitcoin Transaction Format}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0174.mediawiki
+      \endverb
+    \endentry
+    \entry{KtorFramework}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=b6a77f3f5bead76a495a90d63703e1f9}{%
+           family={{JetBrains}},
+           familyi={J\bibinitperiod}}}%
+      }
+      \strng{namehash}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{fullhash}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{fullhashraw}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{bibnamehash}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{authorbibnamehash}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{authornamehash}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{authorfullhash}{b6a77f3f5bead76a495a90d63703e1f9}
+      \strng{authorfullhashraw}{b6a77f3f5bead76a495a90d63703e1f9}
+      \field{sortinit}{5}
+      \field{sortinithash}{20e9b4b0b173788c5dace24730f47d8c}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Ktor -- Asynchronous Web Framework for {Kotlin}}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://ktor.io/
+      \endverb
+      \verb{url}
+      \verb https://ktor.io/
+      \endverb
+    \endentry
+    \entry{JetpackCompose}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=8b36e9207c24c76e6719268e49201d94}{%
+           family={{Google}},
+           familyi={G\bibinitperiod}}}%
+      }
+      \strng{namehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{fullhash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{fullhashraw}{8b36e9207c24c76e6719268e49201d94}
+      \strng{bibnamehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authorbibnamehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authornamehash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authorfullhash}{8b36e9207c24c76e6719268e49201d94}
+      \strng{authorfullhashraw}{8b36e9207c24c76e6719268e49201d94}
+      \field{sortinit}{6}
+      \field{sortinithash}{b33bc299efb3c36abec520a4c896a66d}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Jetpack Compose -- {Android}'s modern toolkit for building native {UI}}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://developer.android.com/jetpack/compose
+      \endverb
+      \verb{url}
+      \verb https://developer.android.com/jetpack/compose
+      \endverb
+    \endentry
+    \entry{Nakamoto08}{article}{}{}
+      \name{author}{1}{}{%
+        {{hash=1977190f018b398e43ede3de043de8ea}{%
+           family={Nakamoto},
+           familyi={N\bibinitperiod},
+           given={Satoshi},
+           giveni={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{1977190f018b398e43ede3de043de8ea}
+      \strng{fullhash}{1977190f018b398e43ede3de043de8ea}
+      \strng{fullhashraw}{1977190f018b398e43ede3de043de8ea}
+      \strng{bibnamehash}{1977190f018b398e43ede3de043de8ea}
+      \strng{authorbibnamehash}{1977190f018b398e43ede3de043de8ea}
+      \strng{authornamehash}{1977190f018b398e43ede3de043de8ea}
+      \strng{authorfullhash}{1977190f018b398e43ede3de043de8ea}
+      \strng{authorfullhashraw}{1977190f018b398e43ede3de043de8ea}
+      \field{sortinit}{7}
+      \field{sortinithash}{108d0be1b1bee9773a1173443802c0a3}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{Bitcoin}: A Peer-to-Peer Electronic Cash System}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{year}{2008}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://bitcoin.org/bitcoin.pdf
+      \endverb
+      \verb{url}
+      \verb https://bitcoin.org/bitcoin.pdf
+      \endverb
+    \endentry
+    \entry{MasteringBitcoin}{book}{}{}
+      \name{author}{1}{}{%
+        {{hash=a8107494556af1100a132bb87b1cbd5d}{%
+           family={Antonopoulos},
+           familyi={A\bibinitperiod},
+           given={Andreas\bibnamedelima M.},
+           giveni={A\bibinitperiod\bibinitdelim M\bibinitperiod}}}%
+      }
+      \list{publisher}{1}{%
+        {O'Reilly Media}%
+      }
+      \strng{namehash}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{fullhash}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{fullhashraw}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{bibnamehash}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{authorbibnamehash}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{authornamehash}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{authorfullhash}{a8107494556af1100a132bb87b1cbd5d}
+      \strng{authorfullhashraw}{a8107494556af1100a132bb87b1cbd5d}
+      \field{sortinit}{8}
+      \field{sortinithash}{a231b008ebf0ecbe0b4d96dcc159445f}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{edition}{3}
+      \field{isbn}{978-1098150099}
+      \field{title}{Mastering Bitcoin: Programming the Open Blockchain}
+      \field{year}{2023}
+    \endentry
+    \entry{BIP141}{online}{}{}
+      \name{author}{3}{}{%
+        {{hash=e9a355c6a5e31c95266d76766e9a8997}{%
+           family={Lombrozo},
+           familyi={L\bibinitperiod},
+           given={Eric},
+           giveni={E\bibinitperiod}}}%
+        {{hash=9c598f2466d36cfbd350079d4f247c49}{%
+           family={Lau},
+           familyi={L\bibinitperiod},
+           given={Johnson},
+           giveni={J\bibinitperiod}}}%
+        {{hash=2b412289584d398c21473720d90bf541}{%
+           family={Wuille},
+           familyi={W\bibinitperiod},
+           given={Pieter},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{b4ec62a0b1ba78a8e796e26a3646e70f}
+      \strng{fullhash}{b38b06b5fae08e5a51e5b1c1150fdf0d}
+      \strng{fullhashraw}{b38b06b5fae08e5a51e5b1c1150fdf0d}
+      \strng{bibnamehash}{b38b06b5fae08e5a51e5b1c1150fdf0d}
+      \strng{authorbibnamehash}{b38b06b5fae08e5a51e5b1c1150fdf0d}
+      \strng{authornamehash}{b4ec62a0b1ba78a8e796e26a3646e70f}
+      \strng{authorfullhash}{b38b06b5fae08e5a51e5b1c1150fdf0d}
+      \strng{authorfullhashraw}{b38b06b5fae08e5a51e5b1c1150fdf0d}
+      \field{sortinit}{9}
+      \field{sortinithash}{0a5ebc79d83c96b6579069544c73c7d4}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-141}: Segregated Witness (Consensus layer)}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP32}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=2b412289584d398c21473720d90bf541}{%
+           family={Wuille},
+           familyi={W\bibinitperiod},
+           given={Pieter},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{2b412289584d398c21473720d90bf541}
+      \strng{fullhash}{2b412289584d398c21473720d90bf541}
+      \strng{fullhashraw}{2b412289584d398c21473720d90bf541}
+      \strng{bibnamehash}{2b412289584d398c21473720d90bf541}
+      \strng{authorbibnamehash}{2b412289584d398c21473720d90bf541}
+      \strng{authornamehash}{2b412289584d398c21473720d90bf541}
+      \strng{authorfullhash}{2b412289584d398c21473720d90bf541}
+      \strng{authorfullhashraw}{2b412289584d398c21473720d90bf541}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-32}: Hierarchical Deterministic Wallets}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0032.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP39}{online}{}{}
+      \name{author}{4}{}{%
+        {{hash=365ec43d80b2e3130205ff72ca46d810}{%
+           family={Palatinus},
+           familyi={P\bibinitperiod},
+           given={Marek},
+           giveni={M\bibinitperiod}}}%
+        {{hash=9af69ede5e2ffe47a5671091ec6f5035}{%
+           family={Rusnak},
+           familyi={R\bibinitperiod},
+           given={Pavol},
+           giveni={P\bibinitperiod}}}%
+        {{hash=e4a14b77bc4f257f7c361045fa298648}{%
+           family={Voisine},
+           familyi={V\bibinitperiod},
+           given={Aaron},
+           giveni={A\bibinitperiod}}}%
+        {{hash=0274806506056a5f9c69300287f6063a}{%
+           family={Bowe},
+           familyi={B\bibinitperiod},
+           given={Sean},
+           giveni={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{e671868917b70028b958a8f5d739b02b}
+      \strng{fullhash}{02f509e7df24170f1913c2e22972ce88}
+      \strng{fullhashraw}{02f509e7df24170f1913c2e22972ce88}
+      \strng{bibnamehash}{02f509e7df24170f1913c2e22972ce88}
+      \strng{authorbibnamehash}{02f509e7df24170f1913c2e22972ce88}
+      \strng{authornamehash}{e671868917b70028b958a8f5d739b02b}
+      \strng{authorfullhash}{02f509e7df24170f1913c2e22972ce88}
+      \strng{authorfullhashraw}{02f509e7df24170f1913c2e22972ce88}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-39}: Mnemonic code for generating deterministic keys}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP44}{online}{}{}
+      \name{author}{2}{}{%
+        {{hash=365ec43d80b2e3130205ff72ca46d810}{%
+           family={Palatinus},
+           familyi={P\bibinitperiod},
+           given={Marek},
+           giveni={M\bibinitperiod}}}%
+        {{hash=9af69ede5e2ffe47a5671091ec6f5035}{%
+           family={Rusnak},
+           familyi={R\bibinitperiod},
+           given={Pavol},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{fullhash}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{fullhashraw}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{bibnamehash}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{authorbibnamehash}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{authornamehash}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{authorfullhash}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \strng{authorfullhashraw}{319fd5369f15ab8bd02cb785ec0b4a0b}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-44}: Multi-Account Hierarchy for Deterministic Wallets}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP84}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=9af69ede5e2ffe47a5671091ec6f5035}{%
+           family={Rusnak},
+           familyi={R\bibinitperiod},
+           given={Pavol},
+           giveni={P\bibinitperiod}}}%
+      }
+      \strng{namehash}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{fullhash}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{fullhashraw}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{bibnamehash}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{authorbibnamehash}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{authornamehash}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{authorfullhash}{9af69ede5e2ffe47a5671091ec6f5035}
+      \strng{authorfullhashraw}{9af69ede5e2ffe47a5671091ec6f5035}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-84}: Derivation scheme for {P2WPKH} based accounts}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0084.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP48}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=49d67579e16989854abf8c9273fb2223}{%
+           family={Fontaine},
+           familyi={F\bibinitperiod}}}%
+      }
+      \strng{namehash}{49d67579e16989854abf8c9273fb2223}
+      \strng{fullhash}{49d67579e16989854abf8c9273fb2223}
+      \strng{fullhashraw}{49d67579e16989854abf8c9273fb2223}
+      \strng{bibnamehash}{49d67579e16989854abf8c9273fb2223}
+      \strng{authorbibnamehash}{49d67579e16989854abf8c9273fb2223}
+      \strng{authornamehash}{49d67579e16989854abf8c9273fb2223}
+      \strng{authorfullhash}{49d67579e16989854abf8c9273fb2223}
+      \strng{authorfullhashraw}{49d67579e16989854abf8c9273fb2223}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-48}: Multi-Script Hierarchy for Multi-Sig Wallets}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0048.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0048.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP67}{online}{}{}
+      \name{author}{3}{}{%
+        {{hash=92922b0242c2a75e7a1eac05c7dd31b3}{%
+           family={Kerin},
+           familyi={K\bibinitperiod},
+           given={Thomas},
+           giveni={T\bibinitperiod}}}%
+        {{hash=7c6c2f398ed06ee500a48669d894794d}{%
+           family={Rupp},
+           familyi={R\bibinitperiod},
+           given={Jean-Pierre},
+           giveni={J\bibinithyphendelim P\bibinitperiod}}}%
+        {{hash=9932cad6ab1cde72076144c94a7beb8a}{%
+           family={Vries},
+           familyi={V\bibinitperiod},
+           given={Ruben},
+           giveni={R\bibinitperiod},
+           prefix={de},
+           prefixi={d\bibinitperiod}}}%
+      }
+      \strng{namehash}{dd05b50fe62ecfe4d491ae357712839c}
+      \strng{fullhash}{d16b5bbda3515998a7e01701670be23f}
+      \strng{fullhashraw}{d16b5bbda3515998a7e01701670be23f}
+      \strng{bibnamehash}{d16b5bbda3515998a7e01701670be23f}
+      \strng{authorbibnamehash}{d16b5bbda3515998a7e01701670be23f}
+      \strng{authornamehash}{dd05b50fe62ecfe4d491ae357712839c}
+      \strng{authorfullhash}{d16b5bbda3515998a7e01701670be23f}
+      \strng{authorfullhashraw}{d16b5bbda3515998a7e01701670be23f}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-67}: Deterministic Pay-to-Script-Hash Multi-Signature Addresses through Public Key Sorting}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0067.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0067.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP380}{online}{}{}
+      \name{author}{2}{}{%
+        {{hash=2b412289584d398c21473720d90bf541}{%
+           family={Wuille},
+           familyi={W\bibinitperiod},
+           given={Pieter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=0c02fb370a9df48af1959d26d60fdc1c}{%
+           family={Chow},
+           familyi={C\bibinitperiod},
+           given={Ava},
+           giveni={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{fullhash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{fullhashraw}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{bibnamehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authorbibnamehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authornamehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authorfullhash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authorfullhashraw}{b98c3dd748aca3dce3a184b834d771d2}
+      \field{extraname}{1}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-380}: Output Script Descriptors General Operation}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0380.mediawiki
+      \endverb
+    \endentry
+    \entry{BIP383}{online}{}{}
+      \name{author}{2}{}{%
+        {{hash=2b412289584d398c21473720d90bf541}{%
+           family={Wuille},
+           familyi={W\bibinitperiod},
+           given={Pieter},
+           giveni={P\bibinitperiod}}}%
+        {{hash=0c02fb370a9df48af1959d26d60fdc1c}{%
+           family={Chow},
+           familyi={C\bibinitperiod},
+           given={Ava},
+           giveni={A\bibinitperiod}}}%
+      }
+      \strng{namehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{fullhash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{fullhashraw}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{bibnamehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authorbibnamehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authornamehash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authorfullhash}{b98c3dd748aca3dce3a184b834d771d2}
+      \strng{authorfullhashraw}{b98c3dd748aca3dce3a184b834d771d2}
+      \field{extraname}{2}
+      \field{sortinit}{1}
+      \field{sortinithash}{4f6aaa89bab872aa0999fec09ff8e98a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BIP-383}: Multisig Output Script Descriptors}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0383.mediawiki
+      \endverb
+      \verb{url}
+      \verb https://github.com/bitcoin/bips/blob/master/bip-0383.mediawiki
+      \endverb
+    \endentry
+    \entry{TrezorSuite}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=db9f21fea14daa6705acba28922ee968}{%
+           family={{SatoshiLabs}},
+           familyi={S\bibinitperiod}}}%
+      }
+      \strng{namehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{fullhash}{db9f21fea14daa6705acba28922ee968}
+      \strng{fullhashraw}{db9f21fea14daa6705acba28922ee968}
+      \strng{bibnamehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authorbibnamehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authornamehash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authorfullhash}{db9f21fea14daa6705acba28922ee968}
+      \strng{authorfullhashraw}{db9f21fea14daa6705acba28922ee968}
+      \field{extraname}{2}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Trezor Suite}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://trezor.io/trezor-suite
+      \endverb
+      \verb{url}
+      \verb https://trezor.io/trezor-suite
+      \endverb
+    \endentry
+    \entry{LianaWallet}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=4ee9787aafd1d19f195ca0188447112a}{%
+           family={{Wizardsardine}},
+           familyi={W\bibinitperiod}}}%
+      }
+      \strng{namehash}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{fullhash}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{fullhashraw}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{bibnamehash}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{authorbibnamehash}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{authornamehash}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{authorfullhash}{4ee9787aafd1d19f195ca0188447112a}
+      \strng{authorfullhashraw}{4ee9787aafd1d19f195ca0188447112a}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Liana -- {Bitcoin} Wallet with Protection Against Loss}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://wizardsardine.com/liana/
+      \endverb
+      \verb{url}
+      \verb https://wizardsardine.com/liana/
+      \endverb
+    \endentry
+    \entry{BlueWallet}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=14b193620401dd619c40c2cd264ca0b9}{%
+           family={{BlueWallet}},
+           familyi={B\bibinitperiod}}}%
+      }
+      \strng{namehash}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{fullhash}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{fullhashraw}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{bibnamehash}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{authorbibnamehash}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{authornamehash}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{authorfullhash}{14b193620401dd619c40c2cd264ca0b9}
+      \strng{authorfullhashraw}{14b193620401dd619c40c2cd264ca0b9}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{BlueWallet} -- {Bitcoin} Wallet for {iOS} and {Android}}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://bluewallet.io/
+      \endverb
+      \verb{url}
+      \verb https://bluewallet.io/
+      \endverb
+    \endentry
+    \entry{Nunchuk}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=09a491225b9e88e1f5412a6fe3880f9d}{%
+           family={{Nunchuk}},
+           familyi={N\bibinitperiod}}}%
+      }
+      \strng{namehash}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{fullhash}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{fullhashraw}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{bibnamehash}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{authorbibnamehash}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{authornamehash}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{authorfullhash}{09a491225b9e88e1f5412a6fe3880f9d}
+      \strng{authorfullhashraw}{09a491225b9e88e1f5412a6fe3880f9d}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Nunchuk -- Multisig Made Easy}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://nunchuk.io/
+      \endverb
+      \verb{url}
+      \verb https://nunchuk.io/
+      \endverb
+    \endentry
+    \entry{WasabiWallet}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=031b7d161c3e486a924ac2dc5522e9ea}{%
+           family={{zkSNACKs}},
+           familyi={z\bibinitperiod}}}%
+      }
+      \strng{namehash}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{fullhash}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{fullhashraw}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{bibnamehash}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{authorbibnamehash}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{authornamehash}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{authorfullhash}{031b7d161c3e486a924ac2dc5522e9ea}
+      \strng{authorfullhashraw}{031b7d161c3e486a924ac2dc5522e9ea}
+      \field{sortinit}{2}
+      \field{sortinithash}{8b555b3791beccb63322c22f3320aa9a}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{Wasabi Wallet}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://wasabiwallet.io/
+      \endverb
+      \verb{url}
+      \verb https://wasabiwallet.io/
+      \endverb
+    \endentry
+    \entry{CoinGeckoAPI}{online}{}{}
+      \name{author}{1}{}{%
+        {{hash=1d10ef61412db6ed3d85d3a096b358c2}{%
+           family={{CoinGecko}},
+           familyi={C\bibinitperiod}}}%
+      }
+      \strng{namehash}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{fullhash}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{fullhashraw}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{bibnamehash}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{authorbibnamehash}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{authornamehash}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{authorfullhash}{1d10ef61412db6ed3d85d3a096b358c2}
+      \strng{authorfullhashraw}{1d10ef61412db6ed3d85d3a096b358c2}
+      \field{sortinit}{4}
+      \field{sortinithash}{9381316451d1b9788675a07e972a12a7}
+      \field{labelnamesource}{author}
+      \field{labeltitlesource}{title}
+      \field{title}{{CoinGecko} {API} Documentation}
+      \field{urlday}{11}
+      \field{urlmonth}{3}
+      \field{urlyear}{2026}
+      \field{urldateera}{ce}
+      \verb{urlraw}
+      \verb https://www.coingecko.com/en/api/documentation
+      \endverb
+      \verb{url}
+      \verb https://www.coingecko.com/en/api/documentation
+      \endverb
+    \endentry
+  \enddatalist
+\endrefsection
+\endinput
+

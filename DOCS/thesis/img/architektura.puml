@@ -1,0 +1,93 @@
+@startuml
+skinparam backgroundColor white
+skinparam componentStyle rectangle
+skinparam defaultFontSize 26
+skinparam shadowing false
+skinparam linetype ortho
+skinparam nodesep 60
+skinparam ranksep 50
+
+skinparam rectangle {
+  BackgroundColor<<android>> #E8F5E9
+  BorderColor<<android>> #388E3C
+  BackgroundColor<<gateway>> #E3F2FD
+  BorderColor<<gateway>> #1565C0
+  BackgroundColor<<service>> #FFF3E0
+  BorderColor<<service>> #EF6C00
+  BackgroundColor<<external>> #F3E5F5
+  BorderColor<<external>> #7B1FA2
+  BackgroundColor<<db>> #ECEFF1
+  BorderColor<<db>> #546E7A
+}
+
+rectangle "Android aplikace" <<android>> as android {
+  rectangle "Jetpack\nCompose UI" as ui
+  rectangle "ViewModely" as vm
+  rectangle "WalletApiClient" as api_client
+  rectangle "TrezorDeeplink\nLauncher" as trezor_launcher
+  ui -[hidden]right- vm
+  api_client -[hidden]right- trezor_launcher
+  ui -[hidden]down- api_client
+  vm -[hidden]down- trezor_launcher
+}
+
+rectangle "API Gateway :8080" <<gateway>> as gw {
+  rectangle "JWT validace" as jwt
+  rectangle "Routing" as routing
+}
+
+rectangle "Backendové služby" <<service>> as backend {
+  rectangle "auth-service\n:8081" as auth
+  rectangle "wallet-registry\n:8082" as registry
+  rectangle "explorer-service\n:8083" as explorer
+  rectangle "psbt-service\n:8085" as psbt
+  rectangle "blockchain-service\n:8086" as blockchain
+  rectangle "price-service\n:8087" as price
+  auth -[hidden]right- registry
+  explorer -[hidden]right- psbt
+  blockchain -[hidden]right- price
+  auth -[hidden]down- explorer
+  explorer -[hidden]down- blockchain
+  registry -[hidden]down- psbt
+  psbt -[hidden]down- price
+}
+
+rectangle "Externí služby" <<external>> as ext {
+  rectangle "Mempool.space\nREST API" as mempool
+  rectangle "CoinGecko\nAPI" as coingecko
+  mempool -[hidden]down- coingecko
+}
+
+rectangle "Trezor zařízení" <<external>> as ext_trezor {
+  rectangle "Trezor Suite\nMobile" as trezor
+}
+
+database "PostgreSQL" <<db>> as db
+
+' Connections
+api_client -down-> gw : HTTPS
+trezor_launcher <-right-> trezor : deeplink
+
+' Gateway -> services
+gw -down-> auth
+gw -down-> registry
+gw -down-> explorer
+gw -down-> psbt
+
+' Inter-service relations
+explorer --> registry : adresy
+explorer --> blockchain : on-chain data
+psbt --> registry : UTXO, adresy
+psbt --> blockchain : ref. transakce
+psbt --> explorer : next change
+
+' External services
+blockchain -right-> mempool : HTTP
+price -right-> coingecko : HTTP
+
+' Database
+auth -down-> db
+registry -down-> db
+psbt -down-> db
+
+@enduml

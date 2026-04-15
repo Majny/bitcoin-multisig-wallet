@@ -1,0 +1,38 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 28
+skinparam ParticipantPadding 15
+skinparam BoxPadding 10
+skinparam shadowing false
+skinparam sequenceMessageAlign center
+skinparam maxMessageSize 200
+
+actor "Uživatel" as user
+participant "Android\naplikace" as app
+participant "API\nGateway" as gw
+participant "psbt-\nservice" as psbt
+participant "blockchain-\nservice" as bc
+participant "Trezor Suite\nMobile" as trezor
+
+== Podpis cosignera 2 ==
+
+user -> app : Přepnout účet\n(accountIndex=1)
+user -> app : "Sign with Trezor"
+app -> trezor : deeplink\n(method=signTransaction)
+user -> trezor : potvrzení na zařízení
+trezor -> app : callback URI\n(signatures[], serialized_tx)
+app -> gw : POST /psbt/{id}/sign-trezor\n{signatures, signerAccountIndex=1}
+gw -> psbt : pridej podpisy
+psbt -> psbt : stav: signed\n(2/2 podpisu)
+app <-- gw : ok, fully_signed
+
+== Broadcast ==
+
+user -> app : "Broadcast"
+app -> gw : POST /psbt/{id}/broadcast-raw\n{serialized_tx}
+gw -> bc : POST /tx
+bc -> bc : Mempool.space API
+app <-- gw : txid
+user <-- app : Transakce odeslána!
+
+@enduml

@@ -1,0 +1,34 @@
+@startuml
+skinparam backgroundColor white
+skinparam defaultFontSize 24
+skinparam shadowing false
+skinparam actorStyle awesome
+
+left to right direction
+
+actor "Uživatel" as user
+
+rectangle "Bitcoin Multisig Wallet" {
+  usecase "Přihlášení\npřes Trezor" as UC1
+  usecase "Zobrazení\nzůstatku" as UC2
+  usecase "Odeslání\nsinglesig transakce" as UC3
+  usecase "Import multisig\ndeskriptoru" as UC4
+  usecase "Podepsání\nmultisig PSBT" as UC5
+  usecase "Coin control\n(výběr UTXO)" as UC6
+  usecase "Zobrazení stavu\nPSBT transakcí" as UC7
+  usecase "Přepnutí\núčtu" as UC8
+}
+
+user -- UC1
+user -- UC2
+user -- UC3
+user -- UC4
+user -- UC5
+user -- UC6
+user -- UC7
+user -- UC8
+
+UC3 ..> UC6 : <<extend>>
+UC5 ..> UC8 : <<include>>
+
+@enduml

@@ -1,0 +1,85 @@
+\chapter*{Závěr}
+\addcontentsline{toc}{chapter}{Závěr}
+\label{chap:zaver}
+
+Cílem této práce bylo navrhnout a~implementovat mobilní aplikaci pro Android,
+která umožní pokročilou správu Bitcoinových prostředků -- konkrétně podporu
+multisignature transakcí ve schématu M-of-N, integraci s~hardwarovou peněženkou
+Trezor a~manuální výběr UTXO -- a~zaplnit tak mezeru, kterou jsme v~analýze
+existujících peněženek (viz~kapitolu~\ref{chap:related}) identifikovali na
+mobilních platformách. Všechny tři stanovené cíle se podařilo naplnit;
+ověření jejich funkčnosti popisujeme v~kapitole~\ref{chap:testovani}, kde jsme
+mimo jiné provedli kompletní 2-of-3 multisig transakci od importu deskriptoru
+přes postupné podepisování dvěma cosignery až po broadcast na Bitcoin testnet.
+
+Výsledná aplikace se skládá z~šesti backendových mikroslužeb a~API Gateway
+implementovaných v~jazyce Kotlin s~frameworkem Ktor~\cite{KtorFramework}
+a~nativního Android frontendu postaveného na Jetpack Compose~\cite{JetpackCompose}.
+Bezpečnostní model důsledně dodržuje princip, že server nikdy nedisponuje
+privátními klíči ani jinými materiály, ze~kterých by je bylo možné odvodit --
+veškeré podepisování probíhá výhradně na hardwarové peněžence, kterou
+oslovujeme prostřednictvím deeplink protokolu Trezor Connect~\cite{TrezorConnect}
+zprostředkovaného aplikací Trezor Suite Mobile~\cite{TrezorSuite}.
+Pro distribuci částečně podepsaných transakcí mezi cosignery
+využíváme standard PSBT~\cite{BIP174} a~konfiguraci multisig peněženky
+přebíráme z~výstupních deskriptorů ve~formátu \texttt{wsh(sortedmulti(M,\ldots))}
+podle BIP-380~\cite{BIP380} a~BIP-383~\cite{BIP383}. Tato volba zajišťuje
+interoperabilitu s~existujícími desktopovými peněženkami -- typicky lze
+vytvořit multisig konfiguraci ve Sparrow Wallet~\cite{SparrowWallet}, exportovat
+deskriptor a~v~naší aplikaci jej importovat, čímž obě peněženky pracují nad
+totožnou množinou adres.
+
+Práce ukazuje, že kombinace pokročilých funkcí, kterou na desktopu poskytuje
+Sparrow Wallet, je realizovatelná i~na mobilní platformě bez kompromisu
+v~bezpečnostním modelu. Mobilní zařízení v~tomto uspořádání slouží jako
+plnohodnotný koordinátor multisig transakcí (vytváří PSBT, sleduje stav
+shromážděných podpisů, koordinuje broadcast), zatímco veškeré kryptografické
+operace zůstávají izolovány na hardwarové peněžence cosignera. Nejvýraznějším
+ústupkem oproti desktopovému řešení je delegace komunikace s~Trezorem na
+externí aplikaci Trezor Suite Mobile, kterou jsme zvolili jako pragmatický
+kompromis mezi rozsahem bakalářské práce a~kvalitou uživatelského prožitku;
+důvody i~zvažované alternativy popisujeme v~sekci~\ref{sec:analyza-trezor}.
+
+\section*{Možnosti dalšího vývoje}
+
+Aplikace je navržena s~ohledem na další rozšiřování a~několik konkrétních
+směrů budoucího vývoje považujeme za přirozené pokračování této práce.
+
+Nejvýznamnějším z~nich je \textbf{přímá komunikace s~hardwarovou peněženkou}
+přes Android USB Host API. Současný stav, kdy aplikace deleguje podepisování
+na Trezor Suite Mobile, je sice funkční, ale zhoršuje uživatelský komfort
+nutností přepínat mezi dvěma aplikacemi a~zavádí závislost na~softwaru třetí
+strany. Vlastní implementace by znamenala napsat USB transportní vrstvu
+nad 64bajtovým paketovým protokolem Trezoru, kompletní sadu protobuf zpráv
+podle aktuálního firmware a~stavový automat pro vícekolovou komunikaci typu
+\texttt{SignTx -- TxRequest -- TxAck}, který Trezor používá kvůli omezené
+paměti zařízení. Hrubý odhad pracnosti je zhruba 20~vývojářských dní. Tento
+směr jsme v~rámci bakalářské práce vědomě nepřevzali, ale architektura aplikace
+je na něj připravena -- veškerá komunikace s~Trezorem prochází přes interní
+abstrakci \texttt{TrezorDeeplinkLauncher} popsanou v~sekci~\ref{sec:impl-detaily},
+za~kterou se aktuální deeplink implementace dá nahradit přímou USB
+komunikací bez zásahu do zbytku systému.
+
+Druhým přirozeným rozšířením je \textbf{podpora dalších hardwarových peněženek},
+zejména Ledger a~Coldcard. Architektura backendu je na~konkrétním modelu
+Trezoru nezávislá -- pracuje s~PSBT a~výstupními deskriptory, což jsou
+otevřené standardy podporované všemi zmíněnými výrobci. Podpora dalších
+zařízení by tak vyžadovala práci pouze na straně mobilní aplikace,
+především implementaci odpovídajících transportních vrstev.
+
+Třetím směrem je \textbf{příprava na produkční provoz}. Aplikace již
+podporuje přepínání mezi testnetem a~mainnetem přímo z~přihlašovací
+obrazovky a~backend automaticky komunikuje s~odpovídajícím blockchainovým
+API (Mempool.space pro testnet, Blockstream
+Esplora~\cite{BlockstreamEsplora} pro mainnet). Před reálným nasazením
+s~finančními prostředky by však bylo vhodné provést bezpečnostní audit
+a~doplnit \textbf{automatizovanou testovací sadu} (jednotkové i~integrační
+testy nad PSBT logikou a~derivací adres), která dosud chybí a~kterou jsme
+v~kapitole~\ref{chap:testovani} označili za vědomé omezení zvoleného
+přístupu k~testování.
+
+Mezi další užitečná rozšíření patří podpora náhradních strategií výběru
+UTXO (například algoritmus Branch and Bound), možnost připojit aplikaci
+k~vlastnímu Bitcoin uzlu místo veřejných API, podpora schématu Taproot
+(BIP-86) a~rozšíření o~zobrazení podrobných statistik a~grafů pohybů
+prostředků.

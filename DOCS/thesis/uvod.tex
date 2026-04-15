@@ -1,0 +1,35 @@
+\chapter*{Úvod}
+\addcontentsline{toc}{chapter}{Úvod}
+
+Bitcoin umožňuje uživatelům spravovat finanční prostředky bez prostředníků,
+ovšem za cenu plné odpovědnosti za zabezpečení privátních klíčů. Ztráta nebo
+zcizení klíče znamená nevratnou ztrátu prostředků. V~praxi se proto používají
+hardwarové peněženky, které uchovávají klíče na izolovaném zařízení,
+a~multisignature schémata, kde je k~provedení transakce potřeba souhlas více
+klíčů. Pokud uživatel obě metody zkombinuje, výrazně tím sníží riziko ztráty
+i~krádeže.
+
+Na desktopu tuto kombinaci pokročilých funkcí nabízí například Sparrow
+Wallet~\cite{SparrowWallet} nebo Electrum~\cite{Electrum}. Na Androidu je ale
+situace horší, většina peněženek buď multisig nepodporuje, nebo jej
+implementuje jen omezeně, bez přímé integrace s~hardwarovou peněženkou.
+Podobně je na tom coin control, tedy ruční výběr konkrétních UTXO při tvorbě
+transakcí.
+
+Cílem práce je navrhnout a~implementovat mobilní aplikaci pro Android, která
+tyto nedostatky řeší. Aplikace podporuje multisignature transakce ve schématu
+M-of-N, integraci s~hardwarovou peněženkou Trezor a~manuální výběr UTXO.
+Server přitom nikdy nepracuje s~privátními klíči, transakce se podepisují
+výhradně na Trezoru přes rozhraní Trezor Connect~\cite{TrezorConnect}.
+
+Pro distribuci částečně podepsaných transakcí mezi cosignery používáme formát
+PSBT (BIP-174)~\cite{BIP174}. Backend tvoří soustava mikroslužeb v~Kotlinu
+s~frameworkem Ktor~\cite{KtorFramework}, frontend je nativní Android aplikace
+v~Jetpack Compose~\cite{JetpackCompose}.
+
+Práce je členěna následovně. Kapitola~1 pokrývá teoretické základy Bitcoinu
+a~srovnání existujících peněženek. Kapitola~2 specifikuje požadavky formou
+user stories a~use cases. V~kapitole~3 popisujeme návrh architektury,
+technologická rozhodnutí a~vybrané implementační detaily včetně technických
+výzev, na které jsme narazili. Kapitola~4 popisuje testování na testnetové
+síti a~kapitola~5 obsahuje uživatelskou dokumentaci.

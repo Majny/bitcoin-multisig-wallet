@@ -1,0 +1,38 @@
+@startuml psbt-structure
+skinparam backgroundColor white
+skinparam defaultFontSize 28
+skinparam shadowing false
+skinparam nodesep 20
+skinparam ranksep 20
+skinparam rectangle {
+  RoundCorner 8
+}
+
+title <size:28><b>Struktura PSBT (BIP-174)</b></size>
+
+rectangle "<b>Globální mapa</b>  //jedna pro celou transakci//" as global #E3F2FD {
+  card "**UNSIGNED_TX**\nnepodepsaná transakce\n(vstupy, výstupy, částky)" as g1 #white
+}
+
+rectangle "<b>Mapa vstupu</b>  //jedna pro každý vstup//" as input #E8F5E9 {
+  card "**WITNESS_UTXO**\nutrácený výstup\n(ověření částky)" as i1 #white
+  card "**NON_WITNESS_UTXO**\ncelá předchozí transakce\n(vyžadováno Trezorem)" as i2 #white
+  card "**BIP32_DERIVATION**\nderivační cesty klíčů\n(signer najde privátní klíč)" as i3 #white
+  card "**WITNESS_SCRIPT**\nmultisig skript M-of-N\n(seznam veřejných klíčů)" as i4 #white
+  card "**PARTIAL_SIG**\ndílčí podpisy cosignerů\n(postupně přibývají)" as i5 #white
+  i1 -[hidden]down- i2
+  i2 -[hidden]down- i3
+  i3 -[hidden]down- i4
+  i4 -[hidden]down- i5
+}
+
+rectangle "<b>Mapa výstupu</b>  //jedna pro každý výstup//" as output #FFF3E0 {
+  card "**BIP32_DERIVATION**\nderivační cesty\n(identifikace change výstupu)" as o1 #white
+  card "**WITNESS_SCRIPT**\nmultisig skript\n(pro change výstup)" as o2 #white
+  o1 -[hidden]down- o2
+}
+
+global -[hidden]down- input
+input -[hidden]down- output
+
+@enduml

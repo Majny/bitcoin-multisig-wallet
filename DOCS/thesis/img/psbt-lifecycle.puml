@@ -1,0 +1,53 @@
+@startuml psbt-lifecycle
+skinparam backgroundColor white
+skinparam defaultFontSize 26
+skinparam shadowing false
+skinparam ActivityBackgroundColor #E3F2FD
+skinparam ActivityBorderColor #1565C0
+skinparam ArrowColor #333333
+
+title <size:30><b>Životní cyklus PSBT (BIP-174)</b></size>
+
+|Server|
+start
+:""**Creator**""
+Vytvoří PSBT s nepodepsanou
+transakcí a prázdnými mapami;
+
+:""**Updater**""
+Doplní UTXO informace,
+derivační cesty klíčů
+a witness skripty;
+
+|Hardwarová peněženka|
+:""**Signer 1**""
+Přidá podpis za prvního
+cosignera;
+
+|Server|
+if (Další cosigneři?) then (ano)
+
+|Hardwarová peněženka|
+:""**Signer 2 .. N**""
+Další cosigneři postupně
+přidají své podpisy;
+
+|Server|
+else (ne / dosažen práh M)
+endif
+
+:""**Combiner**""
+Sloučí podpisy
+do jednoho PSBT;
+
+:""**Finalizer**""
+Sestaví finální witness
+data, odstraní metadata;
+
+:""**Extractor**""
+Extrahuje hotovou transakci;
+
+:Broadcast do Bitcoin sítě;
+stop
+
+@enduml

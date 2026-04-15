@@ -1,0 +1,245 @@
+%%% Kapitola 4: Testování
+
+\chapter{Testování}
+\label{chap:testovani}
+
+Cílem testování bylo ověřit, že navržená aplikace splňuje funkční požadavky
+formulované v~kapitole~\ref{chap:specifikace} -- zejména že dokáže přihlásit
+uživatele přes Trezor, správně sestavit a~odeslat singlesig transakci a~že celý
+multisig workflow od importu deskriptoru přes postupné podepisování až po
+broadcast funguje proti reálnému Bitcoinovému uzlu. V~této kapitole popisujeme
+zvolený přístup k~testování, jeho odůvodnění, použité prostředí, provedené
+scénáře a~nakonec chyby, které jsme díky testování odhalili.
+
+%%% -----------------------------------------------------------------------
+\section{Zvolený přístup}
+\label{sec:test-pristup}
+
+Při návrhu testovací strategie jsme zvažovali tři varianty.
+
+První možností byla \textbf{automatizovaná sada unit testů} pokrývající
+jednotlivé komponenty backendu (parsing deskriptorů, derivaci adres,
+sestavování PSBT). Tento přístup poskytuje rychlou zpětnou vazbu při
+změnách kódu a~je standardem pro produkční software. V~kontextu naší
+aplikace by však unit testy izolovaly právě ty části, kde jsme reálně
+nehledali chyby -- kryptografická logika je delegována na knihovnu
+bitcoinj~\cite{BitcoinJ}, derivace probíhá podle dobře definovaných BIP
+standardů a~lze ji ověřit proti existujícím peněženkám. Naopak by neodhalily
+problémy v~integraci s~Trezorem, protože ten je v~unit testech nahrazen
+mockem, který se na rozdíl od skutečného firmware chová tolerantně.
+
+Druhou možností byly \textbf{end-to-end testy s~emulátorem Trezoru}, který
+SatoshiLabs poskytuje pro vývojové účely. Tento přístup by umožnil
+automatizovat i~podepisovací krok. Komunikace s~emulátorem však vyžaduje
+implementaci části protokolu Trezor Connect, což je přesně to, čemu se
+naše architektura záměrně vyhýbá delegováním na Trezor Suite Mobile (viz
+sekci~\ref{sec:analyza-trezor}). Pro testovací sadu by tak bylo nutné
+vyvinout paralelní komunikační vrstvu, která by se v~samotné aplikaci
+vůbec nepoužila. To jsme v~rámci bakalářské práce vyhodnotili jako úsilí
+neúměrné přínosu.
+
+Zvolili jsme proto třetí variantu: \textbf{manuální integrační testování
+proti Bitcoin testnetu} s~reálnou hardwarovou peněženkou Trezor.
+Tento přístup ověřuje právě ty integrační body, kde reálně vznikají chyby --
+komunikaci mezi mobilní aplikací, Trezor Suite Mobile a~hardwarovým
+zařízením, korektnost sestavených PSBT z~pohledu firmware Trezoru
+a~validitu výsledných transakcí z~pohledu Bitcoinové sítě. Cenou je nutnost
+manuálně procházet všechny scénáře při každé větší změně, což akceptujeme
+vzhledem k~omezenému rozsahu funkcionality. Doplnění automatizované testovací
+sady považujeme za vhodný směr dalšího vývoje.
+
+%%% -----------------------------------------------------------------------
+\section{Testovací prostředí}
+\label{sec:test-prostredi}
+
+Veškeré testování probíhalo proti síti testnet4. Testnetové prostředky
+(tBTC) jsme získávali z~veřejně dostupných faucetů -- webových služeb, které
+bezplatně distribuují malé množství testnetových mincí vývojářům pro účely
+testování.
+
+Backend byl spuštěn lokálně pomocí Docker Compose~\cite{Docker} -- jednou
+spuštěný stack obsahoval všech šest mikroslužeb popsaných
+v~sekci~\ref{sec:architektura},
+API Gateway, tři instance PostgreSQL~\cite{PostgreSQL} a~síťové připojení na
+veřejné API Mempool.space~\cite{MempoolAPI} pro testnet4. Mobilní aplikace
+běžela na fyzickém Android zařízení se soubežně nainstalovanou aplikací
+Trezor Suite Mobile, která zprostředkovává komunikaci s~hardwarovou peněženkou
+podle deeplink protokolu popsaného v~sekci~\ref{subsec:trezor-connect}.
+K~testování jsme využili jednu hardwarovou peněženku Trezor s~inicializovaným
+seedem.
+
+Pro multisig scénáře 2-of-3 vyvstává otázka, jak simulovat tři nezávislé
+cosignery, když máme k~dispozici pouze jedno fyzické zařízení. Zvolili jsme
+přístup, kdy na témže Trezoru používáme tři různé účty podle BIP-48~\cite{BIP48}
+s~derivačními cestami \texttt{m/48'/1'/0'/2'}, \texttt{m/48'/1'/1'/2'}
+a~\texttt{m/48'/1'/2'/2'}. Z~pohledu kryptografického protokolu jsou tyto účty
+plnohodnotnými nezávislými klíčovými páry -- BIP-32 garantuje, že odvozené
+klíče různých větví spolu nesouvisí způsobem, který by šel z~veřejných dat
+detekovat. Aplikace přitom mezi účty přepíná na úrovni session a~Trezor pro
+každý podpis vyžaduje samostatné fyzické potvrzení, takže z~hlediska workflow
+se postup neliší od reálného nasazení s~více zařízeními. Jediné, co tento
+přístup neověří, je souběžné podepisování více uživateli v~čase; v~našem
+sériovém workflow však k~souběhu beztak nedochází, protože PSBT se mezi
+cosignery předává postupně.
+
+Multisig deskriptor jsme vytvářeli v~aplikaci Sparrow Wallet~\cite{SparrowWallet},
+do které jsme z~Trezoru exportovali tři xpub klíče, nakonfigurovali peněženku
+2-of-3 a~deskriptor ve formátu \texttt{wsh(sortedmulti(2,...))} jsme zkopírovali
+do importního dialogu naší aplikace. Sparrow zároveň sloužil jako referenční
+peněženka -- adresy odvozené naší aplikací jsme porovnávali s~adresami, které
+pro stejný deskriptor zobrazil Sparrow, a~v~prohlížeči blockchainu Mempool.space
+jsme nezávisle ověřovali stav transakcí.
+
+%%% -----------------------------------------------------------------------
+\section{Provedené scénáře}
+\label{sec:test-scenare}
+
+Testovací scénáře jsme odvodili z~případů užití definovaných
+v~sekci~\ref{sec:use-cases}. Pro každý use case existuje odpovídající
+manuální scénář; níže je popisujeme stručně, pouze z~hlediska toho, co
+ověřují a~co je u~nich kritické.
+
+\textbf{Singlesig workflow.} Začínáme přihlášením uživatele přes Trezor
+(UC1). Aplikace vyžádá z~hardwarové peněženky deset xpub klíčů pro účty
+\texttt{m/84'/1'/0'} až \texttt{m/84'/1'/9'}, backend pro každý xpub provede
+account discovery dle BIP-44~\cite{BIP44} a~vrátí seznam aktivních
+singlesig peněženek. Tento scénář ověřuje, že deeplink komunikace s~Trezor
+Suite Mobile funguje a~že JWT token vydaný službou \texttt{auth-service}
+umožní následný přístup k~ostatním službám.
+
+Dalším scénářem je odeslání singlesig transakce typu P2WPKH (UC2). Zadáme
+testnetovou adresu, částku a~úroveň poplatku, aplikace nás přes deeplink
+přesměruje do Trezor Suite Mobile, kde transakci podepíšeme na zařízení.
+Po návratu callback URL aplikace odešle serializovanou transakci na
+backend, který provede broadcast přes \texttt{blockchain-service}. Úspěšnost
+ověřujeme jednak hlášením z~aplikace (zobrazení txid), jednak vyhledáním
+této transakce v~Mempool.space. Variantou tohoto scénáře je test funkce
+coin control (UC5), kdy před potvrzením ručně vybereme konkrétní UTXO --
+ověřujeme, že výsledná transakce na blockchainu obsahuje právě jeden vstup
+odpovídající zvolenému UTXO a~že odhad poplatku se přepočítal podle nového
+počtu vstupů.
+
+Příjem prostředků (UC z~user story~US4) testujeme tak, že v~aplikaci
+zobrazíme přijímací adresu, z~externího faucetu na ni odešleme malou částku
+tBTC a~ověřujeme, že po potvrzení transakce se zůstatek v~aplikaci aktualizuje
+a~v~historii se objeví příchozí transakce se správnou klasifikací směru
+(\textit{received}, nikoli \textit{sent}).
+
+\textbf{Multisig workflow.} Po importu deskriptoru (UC3) ověřujeme, že
+aplikace zobrazí novou peněženku s~informací ,,2-of-3``, že odvozené adresy
+začínají prefixem \texttt{tb1q} a~jsou shodné s~adresami, které pro tentýž
+deskriptor zobrazí Sparrow Wallet, a~že zobrazený zůstatek odpovídá
+prostředkům, které jsme na multisig adresy předem odeslali z~faucetu.
+
+Hlavním scénářem multisig části je vytvoření, podepsání a~broadcast 2-of-3
+transakce (UC4 + UC6). Postup probíhá ve čtyřech krocích: nejprve jako
+cosigner~1 (\texttt{m/48'/1'/0'/2'}) zadáme cílovou adresu a~částku, backend
+sestaví PSBT pro multisig vstupy a~aplikace nás přes deeplink odešle k~podpisu
+na Trezor. Trezor v~multisig režimu vrací pouze pole podpisů, nikoli celou
+serializovanou transakci -- tyto podpisy backend přidá do PSBT na pozici
+odpovídající aktuálnímu cosignerovi. Stav PSBT přejde z~\texttt{pending}
+(0~podpisů) na 1~ze~2 a~aplikace zobrazí informaci, že transakce čeká na
+dalšího cosignera. Ve druhém kroku v~nastavení přepneme aktivní účet na
+cosignera~2 (\texttt{m/48'/1'/1'/2'}), v~seznamu rozpracovaných PSBT vybereme
+připravovanou transakci a~znovu projdeme deeplink podpisem. Backend po
+přijetí druhého podpisu detekuje dosažení prahu, finalizuje PSBT (sestaví
+witness s~podpisy ve správném pořadí dle BIP-67~\cite{BIP67}) a~provede broadcast.
+Úspěch ověřujeme v~Mempool.space, kde u~vstupů vidíme očekávaný witness
+obsahující dva podpisy a~kompletní redeem skript ve tvaru
+\texttt{OP\_2~<pk1>~<pk2>~<pk3>~OP\_3 OP\_CHECKMULTISIG}.
+
+V~rámci tohoto scénáře ověřujeme i~speciální případy, které byly v~průběhu
+vývoje zdrojem chyb -- zejména transakci s~více vstupy z~různých multisig
+adres (každý vstup může mít jiné lexikografické pořadí cosignerů, takže
+podpisy nelze řadit globálně, viz~sekci~\ref{sec:test-chyby}) a~transakci
+s~change výstupem, u~níž Trezor musí na svém displeji označit change jako
+vlastní výstup, nikoli jako platbu třetí straně.
+
+%%% -----------------------------------------------------------------------
+\section{Nalezené chyby}
+\label{sec:test-chyby}
+
+Manuální testování splnilo svůj hlavní účel -- odhalilo několik integračních
+chyb, které by se v~unit testech s~mockovaným Trezorem nemohly projevit.
+Dvě z~nich považujeme za dostatečně netriviální, abychom je popsali
+podrobněji.
+
+\textbf{Chybné řazení podpisů ve witness (BIP-67).}
+Při prvním pokusu o~broadcast 2-of-3 transakce s~více vstupy Bitcoinová síť
+transakci odmítla jako nevalidní, ačkoli oba cosigneři transakci úspěšně
+podepsali. Vyšetřování ukázalo, že podpisy byly ve witness datech umístěny
+ve špatném pořadí. Příčinou byla skutečnost, že naše původní implementace
+řadila pozice cosignerů jednou globálně podle pořadí xpub klíčů v~deskriptoru,
+zatímco BIP-67~\cite{BIP67} vyžaduje řazení na úrovni odvozených (child)
+veřejných klíčů, a~to pro každou adresu samostatně. Protože child klíče
+jednotlivých cosignerů odvozené pro různé adresy mohou mít různé vzájemné
+lexikografické pořadí, globální strategie fungovala jen tehdy, když se
+shodou okolností shodovala s~lokálním pořadím u~první adresy. Oprava
+spočívala v~tom, že komponenta sestavující witness pro každý vstup nezávisle
+odvodí child klíče všech cosignerů, seřadí je dle BIP-67 a~podpis daného
+cosignera umístí na pozici odpovídající v~tomto lokálním seřazení. Od této
+opravy procházejí všechny multisig scénáře včetně transakcí s~více vstupy.
+
+\textbf{Chybějící \texttt{PSBT\_IN\_NON\_WITNESS\_UTXO}.}
+Po upgradu firmware Trezoru začaly i~singlesig transakce, které dosud
+fungovaly bez problémů, končit chybou ,,Transaction has changed during
+signing``. Dohledali jsme, že firmware Trezoru od verze 2.4 vyžaduje, aby
+PSBT pro každý vstup obsahoval kompletní předchozí transakci v~poli
+\texttt{PSBT\_IN\_NON\_WITNESS\_UTXO} -- a~to i~u~nativních SegWit vstupů
+typu P2WPKH, kde to BIP-174 striktně nevyžaduje. Důvodem je, že firmware
+chce nezávisle ověřit částky vstupů a~předejít útoku, při kterém by se mu
+podsunula falešná hodnota poplatku~\cite{TrezorFirmwareDocs}. Naše původní
+implementace toto pole vynechávala, protože pro P2WPKH stačilo
+\texttt{PSBT\_IN\_WITNESS\_UTXO} obsahující pouze utrácené UTXO.
+Oprava vyžadovala dvě změny: ve službě \texttt{blockchain-service} jsme
+přidali endpoint \texttt{/tx/\{txid\}/hex} vracející serializovanou
+předchozí transakci a~ve službě \texttt{psbt-service} při sestavování PSBT
+pro každý vstup tento raw tx fetchneme a~zapíšeme do odpovídajícího pole.
+
+Kromě těchto dvou jsme během testování odhalili a~opravili i~další chyby.
+Významnou z~nich bylo chybějící pole
+\texttt{PSBT\_OUT\_BIP32\_DERIVATION} u~change výstupu. Toto pole podle
+BIP-174~\cite{BIP174} sděluje podepisujícímu zařízení derivační cestu
+výstupu, díky čemuž může ověřit, že change adresa patří téže peněžence
+a~zobrazit ji uživateli jako vnitřní převod, nikoliv jako platbu třetí
+straně. Bez tohoto pole Trezor při podepisování zobrazoval change výstup
+jako samostatnou platbu na cizí adresu, což uživatele mátlo -- na displeji
+viděl dvě odchozí platby místo jedné platby a~jednoho vrácení změny.
+Oprava spočívala v~doplnění derivační cesty change adresy do příslušného
+pole při sestavování PSBT.
+
+Zajímavým příkladem toho, jak nová funkce odhalí skrytou chybu, bylo
+opravení derivace přijímací adresy. Služba \texttt{explorer-\allowbreak service}
+v~metodě \texttt{getNext\-Receive\-Address} vracela poslední \emph{použitou}
+adresu místo první \emph{nepoužité} -- všechny příchozí platby tak směřovaly
+na tutéž adresu, což porušuje zásadu neopakování adres (každá transakce
+by měla používat novou adresu kvůli ochraně soukromí). Chybu jsme odhalili
+díky funkci rekurzivního procházení vstupů v~detailu transakce
+(viz sekci~\ref{sec:user-detail-tx}): při proklikávání předchozích transakcí
+jsme si všimli, že více nezávislých UTXO odkazuje na tutéž přijímací adresu.
+Oprava spočívala v~přepsání logiky tak, aby služba prohledala adresy od
+nejnižšího indexu a~vrátila první, která dosud nemá žádnou aktivitu
+v~blockchainu; pokud jsou všechny předem odvozené adresy použité, služba
+automaticky derivuje novou adresu na dalším indexu.
+
+Dále jsme opravili počítadlo virtuální velikosti, které pro multisig vstupy
+používalo hodnotu 68~vB platnou pro singlesig P2WPKH a~vedlo k~podstatnému
+podhodnocení odhadovaného poplatku u~multisig transakcí.
+
+%%% -----------------------------------------------------------------------
+\section{Známá omezení}
+\label{sec:test-omezeni}
+
+Zvolený přístup k~testování má několik omezení, která je vhodné explicitně
+uvést. Prvním je již zmíněná simulace tří cosignerů na jednom fyzickém
+zařízení -- ačkoli je z~kryptografického pohledu plnohodnotná, neumožňuje
+zachytit potenciální problémy specifické pro produkční nasazení s~více
+zařízeními (například chyby v~enkódování PSBT, které by se projevily pouze
+mezi různými verzemi firmware). Druhým omezením je zaměření testování výhradně na testnet -- ačkoli
+aplikace podporuje přepínání mezi testnetem a~mainnetem přímo
+z~přihlašovací obrazovky, veškeré testovací scénáře jsme prováděli pouze
+na testnetu. Provoz na mainnetu jsme neověřovali.
+Konečně, neměřili jsme chování aplikace pod zátěží
+ani její odolnost vůči síťovým výpadkům -- pro mobilní peněženku s~jednotkami
+uživatelů jsou tyto charakteristiky druhořadé, ale v~širším nasazení by
+si zasloužily samostatné ověření.

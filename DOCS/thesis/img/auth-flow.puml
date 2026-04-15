@@ -1,0 +1,67 @@
+@startuml
+skinparam backgroundColor white
+skinparam shadowing false
+skinparam defaultFontSize 28
+skinparam ParticipantPadding 15
+skinparam BoxPadding 10
+skinparam sequenceMessageAlign center
+
+actor "Uživatel" as user
+participant "Android\naplikace" as app
+participant "Trezor Suite\nMobile" as tsm
+participant "API\nGateway" as gw
+participant "auth-service" as auth
+participant "wallet-registry" as reg
+
+user -> app : spustí aplikaci
+activate app
+
+app -> tsm : deeplink: getPublicKey\n(m/84'/1'/0' .. m/84'/1'/9')
+activate tsm
+user -> tsm : potvrdí export na Trezoru
+tsm --> app : callback: xpub[], fingerprint
+deactivate tsm
+
+app -> app : device_id = UUID v5(fingerprint)
+
+app -> gw : POST /auth/trezor/login\n(fingerprint, xpub[], ...)
+activate gw
+
+gw -> auth : POST /auth/trezor/login
+activate auth
+auth -> auth : device_id = UUID v5(fingerprint)
+auth -> auth : uloží zařízení do DB
+auth -> auth : vydá JWT (RS256)\nsubject = device_id
+auth --> gw : {accessToken, refreshToken}
+deactivate auth
+
+gw -> auth : POST /auth/device\n(deviceId, fingerprint, model)
+activate auth
+auth --> gw : ok
+deactivate auth
+
+gw -> reg : account discovery\n+ vytvoření peněženek
+activate reg
+reg --> gw : seznam peněženek
+deactivate reg
+
+gw --> app : {accessToken, refreshToken,\nseznamu účtů}
+deactivate gw
+
+app -> app : uloží JWT do SessionStore
+
+== Následné požadavky ==
+
+app -> gw : GET /api/wallet/...\nAuthorization: Bearer <JWT>
+activate gw
+gw -> gw : validuje JWT\npomocí JWKS z auth-service
+gw -> reg : přeposílá požadavek\n+ hlavička device_id
+activate reg
+reg --> gw : odpověď
+deactivate reg
+gw --> app : odpověď
+deactivate gw
+
+deactivate app
+
+@enduml
