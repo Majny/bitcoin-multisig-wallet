@@ -16,6 +16,7 @@ interface PsbtClient {
     suspend fun broadcastRaw(id: String, req: BroadcastRawTxRequest): BroadcastResponse
     suspend fun signTrezor(id: String, req: AddTrezorSignaturesRequest): PsbtDetailResponse
     suspend fun delete(id: String)
+    suspend fun verifyAddress(walletId: String, index: Int, cosignerIndex: Int): VerifyAddressResponse
 }
 
 class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
@@ -86,5 +87,17 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
         upstreamRequest("psbt") {
             client.delete("${cfg.psbtBaseUrl}/psbt/$id")
         }.ensureSuccess("psbt")
+    }
+
+    override suspend fun verifyAddress(walletId: String, index: Int, cosignerIndex: Int): VerifyAddressResponse {
+        requireAttached(this::client.isInitialized, "psbt")
+        val resp = upstreamRequest("psbt") {
+            client.get("${cfg.psbtBaseUrl}/psbt/verify-address") {
+                parameter("walletId", walletId)
+                parameter("index", index)
+                parameter("cosignerIndex", cosignerIndex)
+            }
+        }.ensureSuccess("psbt")
+        return resp.body()
     }
 }

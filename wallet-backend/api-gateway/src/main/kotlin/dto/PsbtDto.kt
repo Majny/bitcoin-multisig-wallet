@@ -101,6 +101,15 @@ data class TrezorConnectParams(
 )
 
 @Serializable
+data class VerifyAddressResponse(
+    val path: List<Long>,
+    val coin: String,
+    val scriptType: String,
+    val showOnTrezor: Boolean = true,
+    val multisig: TrezorConnectMultisig? = null
+)
+
+@Serializable
 data class BroadcastRawTxRequest(
     val txHex: String
 )

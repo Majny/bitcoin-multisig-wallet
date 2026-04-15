@@ -295,7 +295,7 @@ object TrezorParamsBuilder {
      * E.g. wpkh([aabbccdd/84h/1h/0h]xpub...) -> [0x80000054, 0x80000001, 0x80000000]
      * Returns null if the descriptor does not contain origin info.
      */
-    private fun parseDescriptorOrigin(descriptor: String): List<Long>? {
+    fun parseDescriptorOrigin(descriptor: String): List<Long>? {
         val bracketStart = descriptor.indexOf('[')
         val bracketEnd = descriptor.indexOf(']')
         if (bracketStart < 0 || bracketEnd < 0 || bracketEnd <= bracketStart) return null

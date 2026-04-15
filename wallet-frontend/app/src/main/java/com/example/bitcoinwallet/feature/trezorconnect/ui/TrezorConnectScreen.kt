@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.bitcoinwallet.ui.theme.*
 
@@ -66,7 +67,8 @@ fun TrezorConnectScreen(
         Text(
             text = "Please connect your Trezor device\nto load your Bitcoin balance\nand transactions.",
             style = MaterialTheme.typography.bodyMedium,
-            color = TextSecondary
+            color = TextSecondary,
+            textAlign = TextAlign.Center
         )
 
         Spacer(Modifier.height(32.dp))

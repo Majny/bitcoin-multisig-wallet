@@ -75,6 +75,7 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                     // Check if any wallets were found for the connected network
                     val connectedNetwork = identities.first().derivationPath
                         .let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
+                    SessionStore.selectedNetwork = connectedNetwork
                     val networkWallets = session.user.wallets.filter { it.network == connectedNetwork }
 
                     if (networkWallets.isEmpty()) {

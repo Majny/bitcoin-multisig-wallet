@@ -22,27 +22,27 @@ fun Route.priceRoutes() {
          * - currencies (optional): Comma-separated currency codes (default: czk,usd,eur)
          */
         get {
-            val currencies = call.parameters["currencies"] ?: "czk,usd,eur"
+            val currencies = call.request.queryParameters["currencies"] ?: "czk,usd,eur"
             val prices = priceClient.getBitcoinPrices(currencies)
             call.respond(prices)
         }
-        
+
         /**
          * GET /api/v1/price/convert
          * Convert satoshis to fiat value.
-         * 
+         *
          * Query params:
          * - sats (required): Amount in satoshis
          * - currency (optional): Target currency (default: czk)
          */
         get("/convert") {
-            val sats = call.parameters["sats"]?.toLongOrNull()
+            val sats = call.request.queryParameters["sats"]?.toLongOrNull()
             if (sats == null) {
                 call.respond(io.ktor.http.HttpStatusCode.BadRequest, mapOf("error" to "Missing or invalid 'sats' parameter"))
                 return@get
             }
-            
-            val currency = call.parameters["currency"] ?: "czk"
+
+            val currency = call.request.queryParameters["currency"] ?: "czk"
             val result = priceClient.convertSatsToFiat(sats, currency)
             call.respond(result)
         }

@@ -55,7 +55,6 @@ fun PsbtDetailScreen(
     state: PsbtDetailUiState,
     onClose: () -> Unit,
     onSignPsbt: () -> Unit,
-    onExportPsbt: () -> Unit,
     onBroadcast: () -> Unit,
     onShowRecipients: () -> Unit,
     onDismissRecipients: () -> Unit,
@@ -269,19 +268,6 @@ fun PsbtDetailScreen(
                     }
                 }
 
-                if (!state.isBroadcast) {
-                    Button(
-                        onClick = onExportPsbt,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AccentTeal.copy(alpha = 0.12f),
-                            contentColor = AccentTeal
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
-                    ) {
-                        Text("Export PSBT", fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                    }
-                }
             }
         }
     }
@@ -505,7 +491,7 @@ private fun PsbtDetailPendingPreview() {
                     SignatureUiInfo("73c5da0a", "Trezor T", "2025-05-27T10:30:00Z")
                 )
             ),
-            onClose = {}, onSignPsbt = {}, onExportPsbt = {},
+            onClose = {}, onSignPsbt = {},
             onBroadcast = {}, onShowRecipients = {}, onDismissRecipients = {}
         )
     }
@@ -526,7 +512,7 @@ private fun PsbtDetailReadyPreview() {
                     SignatureUiInfo("a1b2c3d4", "Ledger S", "2025-05-27T14:20:00Z")
                 )
             ),
-            onClose = {}, onSignPsbt = {}, onExportPsbt = {},
+            onClose = {}, onSignPsbt = {},
             onBroadcast = {}, onShowRecipients = {}, onDismissRecipients = {}
         )
     }

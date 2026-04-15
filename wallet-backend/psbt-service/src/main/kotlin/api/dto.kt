@@ -212,6 +212,16 @@ data class TrezorConnectParams(
     val locktime: Int = 0
 )
 
+/* Trezor Connect getAddress params for on-device address verification. */
+@Serializable
+data class VerifyAddressResponse(
+    val path: List<Long>,
+    val coin: String,
+    val scriptType: String,
+    val showOnTrezor: Boolean = true,
+    val multisig: TrezorConnectMultisig? = null
+)
+
 /* Request for broadcasting a raw signed transaction hex (from Trezor Connect serializedTx). */
 @Serializable
 data class BroadcastRawTxRequest(

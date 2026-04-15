@@ -101,7 +101,25 @@ class WalletApiClient(
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
-    
+
+    /**
+     * GET /api/v1/psbt/verify-address
+     * Trezor Connect getAddress params for on-device address verification.
+     */
+    suspend fun getVerifyAddressParams(
+        walletId: String,
+        index: Int,
+        cosignerIndex: Int,
+        accessToken: String
+    ): VerifyAddressDto {
+        return client.get("$baseUrl/psbt/verify-address") {
+            header("Authorization", "Bearer $accessToken")
+            parameter("walletId", walletId)
+            parameter("index", index)
+            parameter("cosignerIndex", cosignerIndex)
+        }.body()
+    }
+
     /**
      * GET /api/v1/explorer/tx/{txid}
      * Transaction detail with inputs/outputs.
@@ -372,6 +390,15 @@ data class WalletUtxoDto(
     val confirmed: Boolean,
     val blockHeight: Int? = null,
     val blockTime: Long? = null
+)
+
+@Serializable
+data class VerifyAddressDto(
+    val path: List<Long>,
+    val coin: String,
+    val scriptType: String,
+    val showOnTrezor: Boolean = true,
+    val multisig: TrezorConnectMultisigDto? = null
 )
 
 @Serializable

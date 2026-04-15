@@ -14,6 +14,7 @@ object SessionStore {
 
     @Volatile var activeWalletId: String? = null
     @Volatile var activeAccountIndex: Int? = null
+    @Volatile var selectedNetwork: String = "testnet"
 
     /** Account discovery: collected xpubs from Trezor bundle callback. */
     @Volatile var pendingBatchXpubs: MutableList<TrezorDeviceIdentity> = mutableListOf()
@@ -57,6 +58,7 @@ object SessionStore {
         session = null
         activeWalletId = null
         activeAccountIndex = null
+        selectedNetwork = "testnet"
         pendingBatchXpubs = mutableListOf()
         _pendingSignedPsbt.value = null
         _pendingSignType.value = null

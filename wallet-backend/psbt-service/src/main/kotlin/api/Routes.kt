@@ -205,6 +205,95 @@ fun Route.psbtRoutes(
         }
 
         /*
+         * GET /psbt/verify-address?walletId=X&index=N&cosignerIndex=M
+         * Returns Trezor Connect getAddress params for on-device address verification.
+         * For multisig: includes multisig object with BIP-67 sorted cosigner pubkeys.
+         * For singlesig: returns path + scriptType only.
+         */
+        get("/verify-address") {
+            val walletId = call.request.queryParameters["walletId"]
+            if (walletId.isNullOrBlank()) {
+                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing walletId"))
+                return@get
+            }
+            val addressIndex = call.request.queryParameters["index"]?.toIntOrNull() ?: 0
+            val cosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
+
+            try {
+                val wallet = registryClient.getWallet(walletId)
+                val coin = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin")) "Bitcoin" else "Testnet"
+                val btcNetwork = if (coin == "Bitcoin") BitcoinNetwork.MAINNET else BitcoinNetwork.TESTNET
+
+                if (wallet.type == "MULTI_SIG") {
+                    val m = wallet.m ?: 2
+                    val sortedCosigners = wallet.cosigners.sortedBy { it.idx }
+                    val signerCosigner = sortedCosigners.getOrNull(cosignerIndex)
+                    if (signerCosigner == null) {
+                        call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid cosignerIndex"))
+                        return@get
+                    }
+                    val signerOriginPath = TrezorParamsBuilder.parseOriginPathToUint32(signerCosigner.originPath)
+
+                    val cosignerHdNodes = sortedCosigners.map { cos ->
+                        TrezorParamsBuilder.xpubToHDNode(cos.xpubRoot, btcNetwork)
+                    }
+                    val isSortedMulti = wallet.receiveDescriptor.contains("sortedmulti(")
+
+                    val pubkeys = if (isSortedMulti) {
+                        val withDerived = sortedCosigners.mapIndexed { i, cos ->
+                            val accountKey = DeterministicKey.deserializeB58(cos.xpubRoot, btcNetwork)
+                            val chainKey = org.bitcoinj.crypto.HDKeyDerivation.deriveChildKey(accountKey, 0)
+                            val childKey = org.bitcoinj.crypto.HDKeyDerivation.deriveChildKey(chainKey, addressIndex)
+                            Pair(cosignerHdNodes[i], childKey.pubKey)
+                        }
+                        val sorted = withDerived.sortedWith(
+                            compareBy<Pair<HDNodeDto, ByteArray>> { it.second.size }
+                                .thenBy { it.second.joinToString("") { b -> "%02x".format(b) } }
+                        )
+                        sorted.map { (hdNode, _) ->
+                            TrezorConnectMultisigPubkey(node = hdNode, address_n = listOf(0L, addressIndex.toLong()))
+                        }
+                    } else {
+                        cosignerHdNodes.map { hdNode ->
+                            TrezorConnectMultisigPubkey(node = hdNode, address_n = listOf(0L, addressIndex.toLong()))
+                        }
+                    }
+
+                    call.respond(VerifyAddressResponse(
+                        path = signerOriginPath + listOf(0L, addressIndex.toLong()),
+                        coin = coin,
+                        scriptType = "SPENDWITNESS",
+                        multisig = TrezorConnectMultisig(
+                            pubkeys = pubkeys,
+                            m = m,
+                            signatures = sortedCosigners.map { "" }
+                        )
+                    ))
+                } else {
+                    // Singlesig
+                    val originPath = if (wallet.cosigners.isNotEmpty()) {
+                        TrezorParamsBuilder.parseOriginPathToUint32(wallet.cosigners.first().originPath)
+                    } else {
+                        TrezorParamsBuilder.parseDescriptorOrigin(wallet.receiveDescriptor)
+                            ?: run {
+                                call.respond(HttpStatusCode.BadRequest, mapOf("error" to "No cosigner info and cannot parse descriptor"))
+                                return@get
+                            }
+                    }
+                    call.respond(VerifyAddressResponse(
+                        path = originPath + listOf(0L, addressIndex.toLong()),
+                        coin = coin,
+                        scriptType = "SPENDWITNESS"
+                    ))
+                }
+            } catch (e: Exception) {
+                log.error("Failed to build verify-address params for wallet {}", walletId, e)
+                call.respond(HttpStatusCode.InternalServerError,
+                    mapOf("error" to (e.message ?: "Failed to build address params")))
+            }
+        }
+
+        /*
          * GET /psbt/{id}
          * Returns the detail of a specific PSBT by its UUID.
          * Called by frontend to display transaction detail and signing status.
@@ -485,11 +574,6 @@ fun Route.psbtRoutes(
             }
         }
 
-        /*
-         * GET /psbt/{id}/signers
-         * Returns the signing status — which cosigners have signed and which are missing.
-         * Called by frontend to display progress of multisig signing rounds.
-         */
         get("/{id}/signers") {
             val appCall = call
             val id = appCall.parameters["id"]

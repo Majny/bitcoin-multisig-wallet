@@ -161,7 +161,7 @@ fun SettingsScreen(
                 .background(DarkSurface)
                 .padding(16.dp)
         ) {
-            SettingsRow("Network", "Bitcoin mainnet")
+            SettingsRow("Network", if (SessionStore.selectedNetwork == "mainnet") "Bitcoin mainnet" else "Bitcoin testnet")
             HorizontalDivider(color = DarkCard, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))
             SettingsRow("Address type", "Native SegWit (P2WSH)")
             HorizontalDivider(color = DarkCard, thickness = 0.5.dp, modifier = Modifier.padding(vertical = 8.dp))

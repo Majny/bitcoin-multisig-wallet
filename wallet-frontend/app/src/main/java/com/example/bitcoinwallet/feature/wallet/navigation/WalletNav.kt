@@ -372,21 +372,23 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val state by viewModel.uiState.collectAsState()
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
-            val walletNetwork = remember {
-                SessionStore.session?.user?.wallets
-                    ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
-            }
-
             ReceiveBtcScreen(
                 state = state,
                 onClose = { navController.popBackStack() },
                 onCopied = { viewModel.onCopied() },
                 onShowOnTrezor = {
-                    trezorLauncher.openGetAddress(
-                        context,
-                        state.derivationPath.ifBlank { "m/84'/1'/0'/0/0" },
-                        walletNetwork
-                    )
+                    val params = state.verifyAddressParams
+                    if (params != null) {
+                        trezorLauncher.openGetAddress(
+                            context = context,
+                            path = params.path,
+                            coin = params.coin,
+                            scriptType = params.scriptType,
+                            multisig = params.multisig
+                        )
+                    } else {
+                        Log.w("WalletNav", "verifyAddressParams is null — cannot show on Trezor")
+                    }
                 }
             )
         }
@@ -534,7 +536,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             ) {
                 MultisigDetailScreen(
                     state = state,
-                    onMenuClick = { scope.launch { drawerState.open() } },
+                    onClose = { navController.popBackStack() },
                     onPsbtsClick = {
                         navController.navigate(WalletRoutes.psbtList(walletId))
                     },
@@ -719,9 +721,6 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         Log.d("WalletNav", "PSBT detail: signing with raw PSBT fallback")
                         trezorLauncher.openSignTransaction(context, detailState.psbtBase64, walletNetwork)
                     }
-                },
-                onExportPsbt = {
-                    // TODO: share/export PSBT base64
                 },
                 onBroadcast = {
                     viewModel.broadcast()

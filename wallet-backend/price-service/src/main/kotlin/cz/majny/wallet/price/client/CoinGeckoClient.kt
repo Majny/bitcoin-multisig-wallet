@@ -100,7 +100,7 @@ class CoinGeckoClient {
      * @return Fiat value or null if currency not available
      */
     suspend fun convertSatsToFiat(satoshis: Long, currency: String): Double? {
-        val prices = getBitcoinPrices(listOf(currency))
+        val prices = getBitcoinPrices(listOf("czk", "usd", "eur"))
         val btcPrice = when (currency.lowercase()) {
             "czk" -> prices.czk
             "usd" -> prices.usd

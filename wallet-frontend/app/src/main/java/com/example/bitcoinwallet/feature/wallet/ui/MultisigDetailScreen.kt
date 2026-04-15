@@ -7,7 +7,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -38,7 +38,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun MultisigDetailScreen(
     state: MultisigDetailUiState,
-    onMenuClick: () -> Unit,
+    onClose: () -> Unit,
     onPsbtsClick: () -> Unit,
     onReceiveClick: () -> Unit,
     onTransactionClick: (Transaction) -> Unit,
@@ -49,11 +49,11 @@ fun MultisigDetailScreen(
             .fillMaxSize()
             .background(DarkBackground)
     ) {
-        // Top bar with hamburger + wallet name
+        // Top bar with close button + wallet name
         MultisigDetailTopBar(
             walletName = state.walletName,
             mOfN = state.mOfN,
-            onMenuClick = onMenuClick
+            onClose = onClose
         )
 
         if (state.isLoading) {
@@ -102,23 +102,16 @@ fun MultisigDetailScreen(
 private fun MultisigDetailTopBar(
     walletName: String,
     mOfN: String,
-    onMenuClick: () -> Unit,
+    onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(DarkBackground)
-            .padding(start = 8.dp, end = 20.dp, top = 14.dp, bottom = 14.dp),
+            .padding(start = 16.dp, end = 8.dp, top = 14.dp, bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconButton(onClick = onMenuClick) {
-            Icon(
-                imageVector = Icons.Default.Menu,
-                contentDescription = "Menu",
-                tint = TextPrimary
-            )
-        }
         Text(
             text = walletName,
             color = TextPrimary,
@@ -131,6 +124,14 @@ private fun MultisigDetailTopBar(
             fontSize = 14.sp,
             modifier = Modifier.padding(top = 2.dp)
         )
+        Spacer(modifier = Modifier.weight(1f))
+        IconButton(onClick = onClose) {
+            Icon(
+                imageVector = Icons.Default.Close,
+                contentDescription = "Close",
+                tint = TextPrimary
+            )
+        }
     }
 }
 
@@ -316,7 +317,7 @@ private fun MultisigDetailPreview() {
     BitcoinWalletTheme {
         MultisigDetailScreen(
             state = sampleState,
-            onMenuClick = {},
+            onClose = {},
             onPsbtsClick = {},
             onReceiveClick = {},
             onTransactionClick = {}
@@ -335,7 +336,7 @@ private fun MultisigDetailLoadingPreview() {
                 n = 3,
                 isLoading = true
             ),
-            onMenuClick = {},
+            onClose = {},
             onPsbtsClick = {},
             onReceiveClick = {},
             onTransactionClick = {}

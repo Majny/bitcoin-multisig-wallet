@@ -85,6 +85,32 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
             
+            // GET /psbt/verify-address - Trezor Connect getAddress params for on-device verification
+            get("/verify-address") {
+                val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
+                val deviceId = principal.payload.getClaim("device_id").asString()
+                val walletId = call.request.queryParameters["walletId"]
+                if (walletId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing walletId"))
+                    return@get
+                }
+                // Verify wallet ownership
+                try {
+                    val wallet = call.application.deps.registry.getWallet(walletId)
+                    if (wallet.members.none { it.deviceId == deviceId }) {
+                        call.respond(HttpStatusCode.Forbidden, mapOf("error" to "Access denied"))
+                        return@get
+                    }
+                } catch (e: Exception) {
+                    call.respond(HttpStatusCode.NotFound, mapOf("error" to "Wallet not found"))
+                    return@get
+                }
+                val index = call.request.queryParameters["index"]?.toIntOrNull() ?: 0
+                val cosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
+                val resp = call.application.deps.psbt.verifyAddress(walletId, index, cosignerIndex)
+                call.respond(resp)
+            }
+
             // DELETE /psbt/{id} - smaže PSBT
             delete("/{id}") {
                 val id = call.parameters["id"] ?: error("id missing")

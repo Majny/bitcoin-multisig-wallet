@@ -205,13 +205,23 @@ class TrezorDeeplinkLauncher(
     /**
      * Opens Trezor Suite to display an address on the Trezor device screen.
      * This lets the user verify the receive address on the hardware device.
+     * For multisig wallets, the multisig object with all cosigner HD nodes is required.
      */
-    fun openGetAddress(context: Context, derivationPath: String = "m/84'/1'/0'/0/0", network: String = "testnet"): Boolean {
-        val coin = if (network == "testnet") "Testnet" else "Bitcoin"
+    fun openGetAddress(
+        context: Context,
+        path: List<Long>,
+        coin: String,
+        scriptType: String,
+        multisig: com.example.bitcoinwallet.core.api.TrezorConnectMultisigDto? = null
+    ): Boolean {
         val paramsJson = JSONObject().apply {
             put("coin", coin)
-            put("path", derivationPath)
+            put("path", JSONArray(path))
             put("showOnTrezor", true)
+            put("scriptType", scriptType)
+            multisig?.let { ms ->
+                put("multisig", buildMultisigJson(ms))
+            }
         }.toString()
 
         val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
@@ -222,6 +232,9 @@ class TrezorDeeplinkLauncher(
             .appendQueryParameter("params", paramsJson)
             .appendQueryParameter("callback", callbackUrl)
             .build()
+
+        Log.d("TrezorDeeplink", "openGetAddress: coin=$coin scriptType=$scriptType multisig=${multisig != null}")
+        Log.d("TrezorDeeplink", "paramsJson: $paramsJson")
 
         val intent = Intent(Intent.ACTION_VIEW, uri)
 
