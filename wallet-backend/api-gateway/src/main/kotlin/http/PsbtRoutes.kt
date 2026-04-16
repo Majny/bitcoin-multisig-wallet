@@ -92,7 +92,8 @@ fun Route.psbtRoutes() {
                 if (!verifyWalletAccess(deviceId, walletId)) return@get
                 val index = call.request.queryParameters["index"]?.toIntOrNull() ?: 0
                 val cosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
-                val resp = call.application.deps.psbt.verifyAddress(walletId, index, cosignerIndex)
+                val signerAccountIndex = call.request.queryParameters["signerAccountIndex"]?.toIntOrNull()
+                val resp = call.application.deps.psbt.verifyAddress(walletId, index, cosignerIndex, signerAccountIndex)
                 call.respond(resp)
             }
 
