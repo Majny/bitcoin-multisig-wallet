@@ -227,7 +227,13 @@ class MempoolClientImpl(
             return first
         }
         delay(1000L)
-        val retry = rateLimiter.withPermit { client.get(url) }
+        val retry = try {
+            rateLimiter.withPermit { client.get(url) }
+        } catch (e: IOException) {
+            throw RuntimeException("Mempool API unreachable after retry for: $url", e)
+        } catch (e: HttpRequestTimeoutException) {
+            throw RuntimeException("Mempool API timeout after retry for: $url", e)
+        }
         if (retry.status == HttpStatusCode.TooManyRequests) {
             throw RuntimeException("Mempool API rate limit exceeded after retry for: $url")
         }
