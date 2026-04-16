@@ -12,7 +12,7 @@ class JwtIssuer(
     private val audience: String,
     private val kid: String,
     private val privateKey: RSAPrivateKey,
-    private val accessTtlSeconds: Long = 15 * 60,
+    private val accessTtlSeconds: Long = 24 * 60 * 60,
 ) {
     private val alg = Algorithm.RSA256(null, privateKey)
 
