@@ -6,6 +6,8 @@ import cz.majny.wallet.psbt.api.TrezorConnectParams
 import kotlinx.serialization.json.Json
 import org.jetbrains.exposed.sql.*
 import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.inList
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.less
 import org.jetbrains.exposed.sql.transactions.transaction
 import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
@@ -171,6 +173,19 @@ class PsbtRepository {
     /* Deletes a PSBT record and releases its reserved UTXOs. */
     fun delete(id: UUID) = transaction {
         PsbtsTable.deleteWhere { PsbtsTable.id eq id }
+    }
+
+    /**
+     * Deletes pending/signed PSBTs whose createdAt is older than [olderThan].
+     * Used by the scheduled cleanup to release stale UTXO reservations left
+     * behind when a user abandons a multisig signing flow. Returns the
+     * number of rows removed.
+     */
+    fun deleteStale(olderThan: OffsetDateTime): Int = transaction {
+        PsbtsTable.deleteWhere {
+            (PsbtsTable.status inList listOf("pending", "signed")) and
+                (PsbtsTable.createdAt less olderThan)
+        }
     }
 
     /*
