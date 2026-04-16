@@ -174,13 +174,37 @@ fun ReceiveBtcScreen(
                 }
 
                 /* ── Show On Trezor button ── */
-                PrimaryButton(
-                    text = "Show On Trezor",
-                    onClick = onShowOnTrezor,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 24.dp)
-                )
+                if (state.verifyingAddress) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp)
+                            .background(DarkCard, RoundedCornerShape(12.dp))
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(
+                            color = AccentTeal,
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Confirm the address on your Trezor…",
+                            color = TextPrimary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                } else {
+                    PrimaryButton(
+                        text = "Show On Trezor",
+                        onClick = onShowOnTrezor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 24.dp)
+                    )
+                }
             }
         }
     }

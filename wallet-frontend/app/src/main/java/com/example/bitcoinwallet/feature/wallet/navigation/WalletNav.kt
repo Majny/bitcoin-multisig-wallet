@@ -197,12 +197,32 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
             val pendingSignType by SessionStore.pendingSignType.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
+                // Ignore callbacks belonging to another flow (PSBT_DETAIL) so the
+                // Send composable does not swallow a result meant for the PSBT detail screen.
+                if (SessionStore.activeSignFlow.value != com.example.bitcoinwallet.core.session.SignFlow.SEND) {
+                    return@LaunchedEffect
+                }
                 val signedData = pendingSignedPsbt
                 val signType = pendingSignType
-                if (signedData != null && signType != null) {
-                    SessionStore.setPendingSignedPsbt(null)
-                    SessionStore.setPendingSignType(null)
-                    viewModel.onTrezorResult(signedData, signType) {}
+                when {
+                    signedData == "CANCELLED" -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setPendingSignType(null)
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.resetTrezorState()
+                    }
+                    signedData == "ERROR" -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setPendingSignType(null)
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorFailed("Trezor returned an invalid response. Please try again.")
+                    }
+                    signedData != null && signType != null -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setPendingSignType(null)
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorResult(signedData, signType) {}
+                    }
                 }
             }
 
@@ -221,8 +241,11 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             // Navigate to success screen when broadcast completes.
             // Separate LaunchedEffect avoids lifecycle issues from navigating inside
             // a viewModelScope callback that may fire before the composable is RESUMED.
+            // Reset the flag immediately so a re-entry (rotation, process restore) does
+            // not re-trigger navigation.
             LaunchedEffect(state.broadcastSuccess) {
                 if (state.broadcastSuccess) {
+                    viewModel.consumeBroadcastSuccess()
                     navController.navigate(
                         WalletRoutes.transactionSent(
                             state.totalSats,
@@ -257,6 +280,8 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                             }
                         }
                     ) { psbtBase64, trezorParams ->
+                        // Claim the sign callback for the Send flow before launching Trezor.
+                        SessionStore.setActiveSignFlow(com.example.bitcoinwallet.core.session.SignFlow.SEND)
                         val launched = if (trezorParams != null) {
                             // Singlesig: use structured Trezor Connect params
                             Log.d("WalletNav", "Opening Trezor with STRUCTURED params: coin=${trezorParams.coin}, inputs=${trezorParams.inputs.size}, outputs=${trezorParams.outputs.size}, version=${trezorParams.version}, locktime=${trezorParams.locktime}")
@@ -268,6 +293,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         }
                         if (!launched) {
                             Log.e("WalletNav", "Failed to launch Trezor Suite — app may not be installed")
+                            SessionStore.setActiveSignFlow(null)
                             viewModel.resetTrezorState()
                         }
                     }
@@ -339,8 +365,16 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 try {
                     navController.getBackStackEntry(WalletRoutes.Send)
                 } catch (_: IllegalArgumentException) {
-                    navController.previousBackStackEntry!!
+                    try {
+                        navController.getBackStackEntry(WalletRoutes.CreatePsbt)
+                    } catch (_: IllegalArgumentException) {
+                        navController.previousBackStackEntry
+                    }
                 }
+            }
+            if (sendBackStackEntry == null) {
+                navController.popBackStack()
+                return@composable
             }
             val sendVm: SendTransactionViewModel = viewModel(sendBackStackEntry)
 
@@ -367,11 +401,26 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             )
         }
 
-        composable(WalletRoutes.Receive) {
+        composable(WalletRoutes.Receive) { backStackEntry ->
             val viewModel: ReceiveBtcViewModel = viewModel()
             val state by viewModel.uiState.collectAsState()
             val context = LocalContext.current
             val trezorLauncher = TrezorDeeplinkLauncher()
+
+            // Clear the "verifying on Trezor" state when the user returns to the
+            // screen. Trezor Suite does not route its showAddress callback back
+            // into the app, so ON_RESUME is our only signal that verification
+            // concluded (either confirmed or cancelled).
+            DisposableEffect(backStackEntry) {
+                val observer = LifecycleEventObserver { _, event ->
+                    if (event == Lifecycle.Event.ON_RESUME) {
+                        viewModel.onShowOnTrezorFinished()
+                    }
+                }
+                backStackEntry.lifecycle.addObserver(observer)
+                onDispose { backStackEntry.lifecycle.removeObserver(observer) }
+            }
+
             ReceiveBtcScreen(
                 state = state,
                 onClose = { navController.popBackStack() },
@@ -379,6 +428,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 onShowOnTrezor = {
                     val params = state.verifyAddressParams
                     if (params != null) {
+                        viewModel.onShowOnTrezorStarted()
                         trezorLauncher.openGetAddress(
                             context = context,
                             path = params.path,
@@ -424,10 +474,16 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 highlightOutputIndex = fromVout.takeIf { it >= 0 },
                 onBack = { navController.popBackStack() },
                 onClose = {
-                    navController.popBackStack(
+                    val popped = navController.popBackStack(
                         route = WalletRoutes.Dashboard,
                         inclusive = false
                     )
+                    if (!popped) {
+                        navController.popBackStack(
+                            route = WalletRoutes.MultisigDetail,
+                            inclusive = false
+                        )
+                    }
                 },
                 onOpenPrevTx = { prevTxid, prevVout ->
                     if (depth < WalletRoutes.MaxTransactionDepth) {
@@ -686,17 +742,49 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             // Sleduj StateFlow — funguje i při návratu přes onNewIntent (FLAG_SINGLE_TOP)
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
+                // Only process callbacks explicitly claimed by the PSBT detail flow.
+                if (SessionStore.activeSignFlow.value != com.example.bitcoinwallet.core.session.SignFlow.PSBT_DETAIL) {
+                    return@LaunchedEffect
+                }
                 val signedData = pendingSignedPsbt
-                if (signedData != null) {
-                    SessionStore.setPendingSignedPsbt(null)
-                    // Submit Trezor signatures to backend for multisig
-                    viewModel.onTrezorSigned(signedData)
+                when {
+                    signedData == "CANCELLED" -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorCancelled()
+                    }
+                    signedData == "ERROR" -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorFailed("Trezor returned an invalid response. Please try again.")
+                    }
+                    signedData != null -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorSigned(signedData)
+                    }
                 }
             }
 
-            // Navigate to TransactionSent after successful broadcast
+            // Reset awaitingTrezor after 120s if no callback arrives — matches Send flow.
+            LaunchedEffect(detailState.awaitingTrezor) {
+                if (detailState.awaitingTrezor) {
+                    kotlinx.coroutines.delay(120_000L)
+                    if (viewModel.uiState.value.awaitingTrezor &&
+                        SessionStore.pendingSignedPsbt.value == null
+                    ) {
+                        Log.d("WalletNav", "PSBT detail Trezor sign timeout — resetting")
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorFailed("Trezor did not respond in time. Please try again.")
+                    }
+                }
+            }
+
+            // Navigate to TransactionSent after successful broadcast.
+            // Reset the flag so a recomposition or re-entry does not re-navigate.
             LaunchedEffect(detailState.broadcastSuccess) {
                 if (detailState.broadcastSuccess) {
+                    viewModel.consumeBroadcastSuccess()
                     navController.navigate(
                         WalletRoutes.transactionSent(
                             detailState.totalOutputSats,
@@ -713,13 +801,20 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 state = detailState,
                 onClose = { navController.popBackStack() },
                 onSignPsbt = {
+                    // Claim the sign callback for the PSBT detail flow before launching Trezor.
+                    SessionStore.setActiveSignFlow(com.example.bitcoinwallet.core.session.SignFlow.PSBT_DETAIL)
+                    viewModel.markAwaitingTrezor()
                     val params = detailState.trezorConnectParams
-                    if (params != null) {
+                    val launched = if (params != null) {
                         Log.d("WalletNav", "PSBT detail: signing with structured params")
                         trezorLauncher.openSignTransactionStructured(context, params)
                     } else {
                         Log.d("WalletNav", "PSBT detail: signing with raw PSBT fallback")
                         trezorLauncher.openSignTransaction(context, detailState.psbtBase64, walletNetwork)
+                    }
+                    if (!launched) {
+                        SessionStore.setActiveSignFlow(null)
+                        viewModel.onTrezorFailed("Trezor Suite is not installed or cannot be launched.")
                     }
                 },
                 onBroadcast = {
@@ -759,6 +854,9 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 SettingsScreen(
                     onMenuClick = { scope.launch { drawerState.open() } },
                     onSwitchAccount = {
+                        // Keep the JWT session alive — only the wallet selection is cleared
+                        // so the user lands on SelectAccount and can switch to another
+                        // BIP-48 account on the same Trezor without re-authenticating.
                         SessionStore.activeWalletId = null
                         SessionStore.activeAccountIndex = null
                         navController.navigate(

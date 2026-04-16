@@ -249,22 +249,30 @@ fun PsbtDetailScreen(
                 if ((state.isFullySigned || state.canBroadcast) && !state.isBroadcast) {
                     Button(
                         onClick = onBroadcast,
+                        enabled = !state.isLoading,
                         colors = ButtonDefaults.buttonColors(containerColor = ReceiveGreen),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("Broadcast Transaction", color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text(
+                            if (state.isLoading) "Broadcasting…" else "Broadcast Transaction",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp
+                        )
                     }
                 } else if (state.canSign && !state.isBroadcast) {
                     Button(
                         onClick = onSignPsbt,
+                        enabled = !state.isLoading,
                         colors = ButtonDefaults.buttonColors(containerColor = AccentTeal),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
-                        Text("Sign with Trezor", color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                        Text(
+                            if (state.isLoading) "Processing…" else "Sign with Trezor",
+                            color = TextPrimary,
+                            fontWeight = FontWeight.SemiBold, fontSize = 16.sp
+                        )
                     }
                 }
 

@@ -29,8 +29,10 @@ class MobileSigner(
     /**
      * Login with one or more Trezor account xpubs.
      * Backend scans each account for blockchain activity and creates wallets for active ones.
+     * Returns the session plus the refresh token (which the caller should put
+     * into [com.example.bitcoinwallet.core.session.SessionStore.refreshToken]).
      */
-    suspend fun loginWithTrezor(identities: List<TrezorDeviceIdentity>): UserSession {
+    suspend fun loginWithTrezor(identities: List<TrezorDeviceIdentity>): LoginResult {
         val primary = identities.first()
         val loginResp: TrezorLoginResponse =
             client.post("$backendBaseUrl/auth/trezor/login") {
@@ -49,7 +51,7 @@ class MobileSigner(
 
         val wallets = listWallets(loginResp.accessToken)
 
-        return UserSession(
+        val session = UserSession(
             accessToken = loginResp.accessToken,
             user = UserSummary(
                 id = loginResp.user.id,
@@ -58,6 +60,20 @@ class MobileSigner(
                 wallets = wallets
             )
         )
+        return LoginResult(session = session, refreshToken = loginResp.refreshToken)
+    }
+
+    /** Exchanges a refresh token for a new access token. Returns null on failure. */
+    suspend fun refreshTokens(refreshToken: String): RefreshResult? {
+        return try {
+            val resp: TokenRefreshResponse = client.post("$backendBaseUrl/auth/token/refresh") {
+                contentType(ContentType.Application.Json)
+                setBody(TokenRefreshRequest(refreshToken = refreshToken))
+            }.body()
+            RefreshResult(accessToken = resp.accessToken, refreshToken = resp.refreshToken)
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /**
@@ -130,6 +146,27 @@ class MobileSigner(
 }
 
 /* ---------- MODELS ---------- */
+
+/** Return value of [MobileSigner.loginWithTrezor] — session plus one-time refresh token. */
+data class LoginResult(
+    val session: UserSession,
+    val refreshToken: String?
+)
+
+/** Return value of [MobileSigner.refreshTokens]. */
+data class RefreshResult(
+    val accessToken: String,
+    val refreshToken: String?
+)
+
+@kotlinx.serialization.Serializable
+data class TokenRefreshRequest(val refreshToken: String)
+
+@kotlinx.serialization.Serializable
+data class TokenRefreshResponse(
+    val accessToken: String,
+    val refreshToken: String? = null
+)
 
 data class TrezorDeviceIdentity(
     val fingerprint: String,

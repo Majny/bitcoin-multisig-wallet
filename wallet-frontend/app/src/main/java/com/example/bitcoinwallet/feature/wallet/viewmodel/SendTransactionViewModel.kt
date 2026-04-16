@@ -115,7 +115,12 @@ class SendTransactionViewModel : ViewModel() {
 
             try {
                 val balance = repository.getWalletBalance(walletId, accessToken)
-                val fees = repository.getFeeEstimates(accessToken)
+                val fees = try {
+                    repository.getFeeEstimates(accessToken)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to fetch fee estimates — user must enter a custom fee rate", e)
+                    null
+                }
 
                 // Zjisti kolik sats je rezervováno v pending PSBTs.
                 // Rezervovaná částka = součet VSTUPNÍCH UTXO (celé UTXO je zamčené
@@ -134,7 +139,11 @@ class SendTransactionViewModel : ViewModel() {
                     0L
                 }
 
-                Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: fast=${fees.fastestFee} med=${fees.halfHourFee} low=${fees.hourFee}")
+                if (fees != null) {
+                    Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: fast=${fees.fastestFee} med=${fees.halfHourFee} low=${fees.hourFee}")
+                } else {
+                    Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: unavailable")
+                }
 
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
@@ -165,6 +174,26 @@ class SendTransactionViewModel : ViewModel() {
             isSending = false,
             error = null
         )
+    }
+
+    /**
+     * Called when Trezor Suite returned a failure that is NOT a user cancel
+     * (malformed JSON, protocol error, etc.). Shows a distinct error.
+     */
+    fun onTrezorFailed(message: String) {
+        _uiState.value = _uiState.value.copy(
+            awaitingTrezor = false,
+            isSending = false,
+            isSubmitting = false,
+            error = message
+        )
+    }
+
+    /** Called by the UI after it has acted on broadcastSuccess (navigated away). */
+    fun consumeBroadcastSuccess() {
+        if (_uiState.value.broadcastSuccess) {
+            _uiState.value = _uiState.value.copy(broadcastSuccess = false)
+        }
     }
 
     fun onRecipientChanged(address: String) {
@@ -538,8 +567,9 @@ class SendTransactionViewModel : ViewModel() {
             val customRate = state.customFeeRate.toDoubleOrNull()
             if (customRate != null && customRate > 0) return customRate
         }
-        // Fall back to preset priorities (also used when autoSelect=false but no custom rate entered)
-        val fees = state.feeEstimates ?: return 5.0
+        // Fee estimates not loaded — return 0 so validation blocks send until
+        // the user enters a custom rate or fees come back online.
+        val fees = state.feeEstimates ?: return 0.0
         return when (state.feePriority) {
             FeePriority.LOW -> fees.hourFee.toDouble()
             FeePriority.MEDIUM -> fees.halfHourFee.toDouble()
@@ -553,12 +583,25 @@ class SendTransactionViewModel : ViewModel() {
 
         // Address validation
         val addr = state.recipientAddress
+        val walletNetwork = SessionStore.session?.user?.wallets
+            ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
         if (addr.isBlank()) {
             _uiState.value = _uiState.value.copy(addressError = "Address is required")
             hasError = true
-        } else if (!isValidBitcoinAddress(addr)) {
-            _uiState.value = _uiState.value.copy(addressError = "Invalid Bitcoin address")
-            hasError = true
+        } else {
+            val validationError = validateBitcoinAddress(addr, walletNetwork)
+            if (validationError != null) {
+                _uiState.value = _uiState.value.copy(addressError = validationError)
+                hasError = true
+            }
+        }
+
+        // Fee estimates must be available unless user provides a custom rate.
+        if (state.feeEstimates == null && state.customFeeRate.toDoubleOrNull().let { it == null || it <= 0 }) {
+            _uiState.value = _uiState.value.copy(
+                amountError = "Fee estimates unavailable. Enter a custom fee rate to continue."
+            )
+            return false
         }
 
         // Amount validation
@@ -593,16 +636,39 @@ class SendTransactionViewModel : ViewModel() {
         return !hasError
     }
 
-    private fun isValidBitcoinAddress(address: String): Boolean {
-        // Bech32/Bech32m: bc1... (mainnet) or tb1... (testnet), 42-62 chars
-        if (address.startsWith("bc1") || address.startsWith("tb1")) {
-            return address.length in 42..62 && address.lowercase().all { it.isLetterOrDigit() }
+    /**
+     * Validates a Bitcoin address against the wallet network.
+     * Returns null if valid, or a user-facing error message.
+     *
+     * BIP-173 requires bech32 to be all-lowercase or all-uppercase;
+     * Trezor rejects mixed case, so we also reject it here for a clearer error.
+     */
+    private fun validateBitcoinAddress(address: String, walletNetwork: String): String? {
+        val mainnet = walletNetwork == "mainnet"
+
+        // Bech32/Bech32m — mandatory lowercase, checked by BIP-173.
+        if (address.startsWith("bc1", ignoreCase = true) || address.startsWith("tb1", ignoreCase = true)) {
+            val hasUpper = address.any { it.isUpperCase() }
+            val hasLower = address.any { it.isLowerCase() }
+            if (hasUpper && hasLower) return "Bech32 address must not mix upper and lower case"
+            val normalized = address.lowercase()
+            if (normalized.length !in 42..62) return "Invalid Bitcoin address"
+            if (!normalized.all { it.isLetterOrDigit() }) return "Invalid Bitcoin address"
+            val isMainnetAddr = normalized.startsWith("bc1")
+            if (mainnet && !isMainnetAddr) return "This is a testnet address, wallet is on mainnet"
+            if (!mainnet && isMainnetAddr) return "This is a mainnet address, wallet is on testnet"
+            return null
         }
-        // Legacy P2PKH/P2SH: 25-34 chars, starts with 1/3 (mainnet) or m/n/2 (testnet)
-        if (address.startsWith("1") || address.startsWith("3") ||
-            address.startsWith("m") || address.startsWith("n") || address.startsWith("2")) {
-            return address.length in 25..34 && address.all { it.isLetterOrDigit() }
-        }
-        return false
+
+        // Legacy P2PKH/P2SH — base58, case-sensitive.
+        val firstChar = address.firstOrNull() ?: return "Invalid Bitcoin address"
+        val isMainnetLegacy = firstChar == '1' || firstChar == '3'
+        val isTestnetLegacy = firstChar == 'm' || firstChar == 'n' || firstChar == '2'
+        if (!isMainnetLegacy && !isTestnetLegacy) return "Invalid Bitcoin address"
+        if (address.length !in 25..35) return "Invalid Bitcoin address"
+        if (!address.all { it.isLetterOrDigit() }) return "Invalid Bitcoin address"
+        if (mainnet && !isMainnetLegacy) return "This is a testnet address, wallet is on mainnet"
+        if (!mainnet && !isTestnetLegacy) return "This is a mainnet address, wallet is on testnet"
+        return null
     }
 }

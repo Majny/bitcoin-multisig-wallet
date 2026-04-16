@@ -178,7 +178,7 @@ private fun TransactionHistorySection(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Žádné transakce",
+                        text = "No transactions yet",
                         color = TextMuted,
                         fontSize = 14.sp
                     )

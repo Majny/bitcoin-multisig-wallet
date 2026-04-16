@@ -1,6 +1,10 @@
 package com.example.bitcoinwallet.core.api
 
 import android.util.Log
+import com.example.bitcoinwallet.core.session.SessionPersistence
+import com.example.bitcoinwallet.core.session.SessionStore
+import com.example.bitcoinwallet.core.signer.UserSession
+import com.example.bitcoinwallet.core.signer.UserSummary
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
@@ -17,6 +21,8 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -24,6 +30,15 @@ import kotlinx.serialization.json.Json
  * API client for wallet data.
  * Communicates with API Gateway which routes to explorer-service, blockchain-service, and price-service.
  */
+class SessionExpiredException(message: String) : Exception(message)
+
+/**
+ * Thrown when a 401 was met with a successful refresh.
+ * The new access token is already stored in SessionStore; the caller just
+ * needs to retry its request (the UI typically re-renders after a user action).
+ */
+class SessionRefreshedException(message: String = "Session refreshed — please retry") : Exception(message)
+
 class WalletApiClient(
     private val baseUrl: String,
     private val client: HttpClient = defaultClient()
@@ -110,13 +125,15 @@ class WalletApiClient(
         walletId: String,
         index: Int,
         cosignerIndex: Int,
-        accessToken: String
+        accessToken: String,
+        signerAccountIndex: Int? = null
     ): VerifyAddressDto {
         return client.get("$baseUrl/psbt/verify-address") {
             header("Authorization", "Bearer $accessToken")
             parameter("walletId", walletId)
             parameter("index", index)
             parameter("cosignerIndex", cosignerIndex)
+            signerAccountIndex?.let { parameter("signerAccountIndex", it) }
         }.body()
     }
 
@@ -307,6 +324,54 @@ class WalletApiClient(
     }
     
     companion object {
+        // Single-flight guard so parallel 401s do not fire N concurrent refresh calls.
+        private val refreshMutex = Mutex()
+
+        /**
+         * Attempts to swap SessionStore.refreshToken for a new access token.
+         * Returns true on success; the new token is already written into
+         * SessionStore and SessionPersistence before this returns.
+         */
+        private suspend fun tryRefreshTokens(): Boolean {
+            val observedRefresh = SessionStore.refreshToken ?: return false
+            val currentSession = SessionStore.session ?: return false
+            return refreshMutex.withLock {
+                // If a sibling request entered the mutex first and rotated the token,
+                // our captured value is now stale (auth-service invalidates old tokens
+                // on rotate). Treat that as success — the caller just needs to retry.
+                val liveRefresh = SessionStore.refreshToken ?: return@withLock false
+                if (liveRefresh != observedRefresh) {
+                    Log.d("WalletApiClient", "Refresh token already rotated by sibling request")
+                    return@withLock true
+                }
+                try {
+                    val plainClient = HttpClient(Android) {
+                        install(ContentNegotiation) {
+                            json(Json { ignoreUnknownKeys = true; isLenient = true })
+                        }
+                    }
+                    val baseUrl = com.example.bitcoinwallet.core.api.ApiConfig.API_GATEWAY_BASE_URL
+                    val resp: TokenRefreshRespDto = plainClient.post("$baseUrl/auth/token/refresh") {
+                        contentType(ContentType.Application.Json)
+                        setBody(TokenRefreshReqDto(refreshToken = liveRefresh))
+                    }.body()
+                    plainClient.close()
+                    // Write through to SessionStore (triggers persistSession).
+                    SessionStore.refreshToken = resp.refreshToken ?: liveRefresh
+                    SessionStore.session = UserSession(
+                        accessToken = resp.accessToken,
+                        user = currentSession.user
+                    )
+                    SessionPersistence.updateTokens(resp.accessToken, resp.refreshToken)
+                    Log.d("WalletApiClient", "Access token refreshed")
+                    true
+                } catch (e: Exception) {
+                    Log.w("WalletApiClient", "Token refresh failed", e)
+                    false
+                }
+            }
+        }
+
         private fun defaultClient(): HttpClient =
             HttpClient(Android) {
                 install(ContentNegotiation) {
@@ -326,6 +391,15 @@ class WalletApiClient(
                         if (!response.status.isSuccess()) {
                             val body = response.bodyAsText()
                             Log.e("WalletApiClient", "HTTP ${response.status.value}: $body")
+                            if (response.status.value == 401) {
+                                // Try to refresh the access token before giving up.
+                                val refreshed = tryRefreshTokens()
+                                if (refreshed) {
+                                    throw SessionRefreshedException()
+                                }
+                                SessionStore.clearAuth()
+                                throw SessionExpiredException("Session expired. Please reconnect your Trezor.")
+                            }
                             throw Exception("Request failed (${response.status.value}). Please try again.")
                         }
                     }
@@ -692,4 +766,13 @@ data class ImportWalletResponseDto(
     val walletId: String? = null,
     val isNew: Boolean = false,
     val error: String? = null
+)
+
+@Serializable
+data class TokenRefreshReqDto(val refreshToken: String)
+
+@Serializable
+data class TokenRefreshRespDto(
+    val accessToken: String,
+    val refreshToken: String? = null
 )

@@ -7,9 +7,10 @@ import android.net.Uri
 import android.util.Log
 import com.example.bitcoinwallet.core.api.TrezorConnectMultisigDto
 import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
+import com.example.bitcoinwallet.core.session.SessionStore
 import org.json.JSONArray
 import org.json.JSONObject
-import kotlin.random.Random
+import java.security.SecureRandom
 
 class TrezorDeeplinkLauncher(
     private val connectBaseUrl: String = "https://connect.trezor.io/9/deeplink/1/",
@@ -17,6 +18,17 @@ class TrezorDeeplinkLauncher(
     private val callbackHost: String = "trezor-callback",
 ) {
 
+    /**
+     * Generates a cryptographically random id and records it in [SessionStore]
+     * so [TrezorCallbackActivity] can reject callbacks that don't match.
+     */
+    private fun newRequestId(): String {
+        val bytes = ByteArray(16)
+        SecureRandom().nextBytes(bytes)
+        val id = bytes.joinToString("") { "%02x".format(it) }
+        SessionStore.pendingRequestId = id
+        return id
+    }
 
     fun openGetPublicKey(
         context: Context,
@@ -31,8 +43,7 @@ class TrezorDeeplinkLauncher(
             put("suppressBackupWarning", true)
         }.toString()
 
-        // to identify request callbacks
-        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val requestId = newRequestId()
         val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId"
 
         val uri = Uri.parse(connectBaseUrl).buildUpon()
@@ -66,7 +77,7 @@ class TrezorDeeplinkLauncher(
             put("psbt", psbtBase64)
         }.toString()
 
-        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val requestId = newRequestId()
         val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&action=sign"
 
         val uri = Uri.parse(connectBaseUrl).buildUpon()
@@ -175,7 +186,7 @@ class TrezorDeeplinkLauncher(
             }
         }.toString()
 
-        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val requestId = newRequestId()
         val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&action=sign"
 
         val uri = Uri.parse(connectBaseUrl).buildUpon()
@@ -224,7 +235,7 @@ class TrezorDeeplinkLauncher(
             }
         }.toString()
 
-        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val requestId = newRequestId()
         val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&action=showAddress"
 
         val uri = Uri.parse(connectBaseUrl).buildUpon()
@@ -303,7 +314,7 @@ class TrezorDeeplinkLauncher(
             put("bundle", bundle)
         }.toString()
 
-        val requestId = Random.nextInt(1, Int.MAX_VALUE).toString()
+        val requestId = newRequestId()
         val callbackUrl = "$callbackScheme://$callbackHost?id=$requestId&bundle=true"
 
         val uri = Uri.parse(connectBaseUrl).buildUpon()

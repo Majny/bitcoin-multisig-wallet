@@ -125,6 +125,13 @@ fun CoinControlScreen(
             ) {
                 Text(text = state.error, color = ErrorRed, fontSize = 14.sp)
             }
+        } else if (state.utxos.isEmpty()) {
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(text = "No UTXOs available", color = TextMuted, fontSize = 14.sp)
+            }
         } else {
             // ===== UTXO list =====
             LazyColumn(

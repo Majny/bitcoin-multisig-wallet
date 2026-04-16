@@ -22,7 +22,11 @@ data class ReceiveBtcUiState(
     val qrBitmap: Bitmap? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
-    val copiedToClipboard: Boolean = false
+    val copiedToClipboard: Boolean = false,
+    // True after user taps "Show On Trezor" while Trezor Suite is displaying the address.
+    // Trezor's showAddress callback only closes TrezorCallbackActivity, so we clear this
+    // on the next ON_RESUME of this screen (i.e. when the user returns to the app).
+    val verifyingAddress: Boolean = false
 ) {
     /** Truncated address for display (first 18 chars + "...") */
     val displayAddress: String
@@ -49,11 +53,18 @@ class ReceiveBtcViewModel : ViewModel() {
 
                 val dto = WalletApi.client.getReceiveAddress(walletId, token)
 
-                // Fetch Trezor Connect getAddress params from backend
-                val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
-                val cosignerIndex = 0
+                // Fetch Trezor Connect getAddress params from backend.
+                // For multisig we pass signerAccountIndex so the backend resolves the
+                // correct cosigner origin path — otherwise a non-first cosigner would
+                // receive cosigner[0]'s path and Trezor would reject the derivation.
                 val verifyParams = try {
-                    WalletApi.client.getVerifyAddressParams(walletId, dto.index, cosignerIndex, token)
+                    WalletApi.client.getVerifyAddressParams(
+                        walletId = walletId,
+                        index = dto.index,
+                        cosignerIndex = 0,
+                        accessToken = token,
+                        signerAccountIndex = SessionStore.activeAccountIndex
+                    )
                 } catch (e: Exception) {
                     Log.e("ReceiveBtcVM", "Failed to fetch verify-address params", e)
                     null
@@ -79,6 +90,18 @@ class ReceiveBtcViewModel : ViewModel() {
 
     fun onCopied() {
         _uiState.value = _uiState.value.copy(copiedToClipboard = true)
+    }
+
+    /** Called right before the Trezor Suite deeplink is launched. */
+    fun onShowOnTrezorStarted() {
+        _uiState.value = _uiState.value.copy(verifyingAddress = true)
+    }
+
+    /** Called when the user returns to the Receive screen from Trezor Suite. */
+    fun onShowOnTrezorFinished() {
+        if (_uiState.value.verifyingAddress) {
+            _uiState.value = _uiState.value.copy(verifyingAddress = false)
+        }
     }
 
     /**

@@ -56,7 +56,9 @@ data class PsbtDetailUiState(
     val serializedTx: String? = null,
     val isLoading: Boolean = true,
     val error: String? = null,
-    val broadcastSuccess: Boolean = false
+    val broadcastSuccess: Boolean = false,
+    // True while waiting for Trezor Suite to return a sign callback.
+    val awaitingTrezor: Boolean = false
 ) {
     /** e.g. "2 of 3 required" */
     val signaturesLabel: String
@@ -196,6 +198,36 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
+    /** Called when Trezor callback reports user cancellation. */
+    fun onTrezorCancelled() {
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            awaitingTrezor = false,
+            error = null
+        )
+    }
+
+    /** Called when Trezor callback reports a non-cancel failure. */
+    fun onTrezorFailed(message: String) {
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            awaitingTrezor = false,
+            error = message
+        )
+    }
+
+    /** Called by the UI after it has acted on broadcastSuccess (navigated away). */
+    fun consumeBroadcastSuccess() {
+        if (_uiState.value.broadcastSuccess) {
+            _uiState.value = _uiState.value.copy(broadcastSuccess = false)
+        }
+    }
+
+    /** Called right before launching the Trezor deeplink for signing. */
+    fun markAwaitingTrezor() {
+        _uiState.value = _uiState.value.copy(awaitingTrezor = true, error = null)
+    }
+
     /**
      * Handle Trezor Connect signing result for multisig from PSBT detail screen.
      * Submits per-input signatures to backend.
@@ -207,7 +239,7 @@ class PsbtDetailViewModel : ViewModel() {
             val fingerprint = SessionStore.session?.user?.trezorFingerprint ?: "unknown"
             val trezorSigs = SessionStore.pendingTrezorSignatures.value
 
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            _uiState.value = _uiState.value.copy(isLoading = true, error = null, awaitingTrezor = false)
 
             try {
                 if (trezorSigs != null && trezorSigs.isNotEmpty()) {

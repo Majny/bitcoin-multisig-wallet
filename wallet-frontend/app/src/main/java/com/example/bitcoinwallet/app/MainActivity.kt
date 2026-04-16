@@ -14,6 +14,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
+import com.example.bitcoinwallet.core.session.SessionPersistence
+import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.ui.theme.BitcoinWalletTheme
 import com.example.bitcoinwallet.ui.theme.DarkBackground
 
@@ -24,6 +26,13 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+
+        // Rehydrate the session from disk so a previously-signed-in user is
+        // not booted back to the Trezor login screen after a process kill.
+        SessionPersistence.init(applicationContext)
+        if (SessionStore.session == null) {
+            SessionStore.restoreFromPersistence()
+        }
 
         if (intent.getBooleanExtra("trezor_connected", false)) connectTrigger++
 

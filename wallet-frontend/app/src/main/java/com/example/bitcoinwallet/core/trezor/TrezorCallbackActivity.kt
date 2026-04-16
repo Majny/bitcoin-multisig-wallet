@@ -26,6 +26,21 @@ class TrezorCallbackActivity : ComponentActivity() {
         Log.d("TrezorCallback", "Full URI: $data")
         Log.d("TrezorCallback", "Query params: ${data.queryParameterNames}")
 
+        // Validate the id matches the request we launched. Guards against stale
+        // callbacks (app was killed and an old intent gets redelivered) and
+        // against callbacks spoofed by another app — the id is generated from
+        // SecureRandom so an attacker cannot guess it.
+        val callbackId = data.getQueryParameter("id")
+        val expectedId = SessionStore.pendingRequestId
+        if (expectedId == null || callbackId == null || callbackId != expectedId) {
+            Log.w("TrezorCallback",
+                "Rejected callback: id='$callbackId' does not match pending='$expectedId'")
+            finish()
+            return
+        }
+        // One-shot: consume the id so it cannot be replayed.
+        SessionStore.pendingRequestId = null
+
         val responseParam = data.getQueryParameter("response")
             ?: data.getQueryParameter("result")
             ?: data.getQueryParameter("payload")
@@ -44,6 +59,10 @@ class TrezorCallbackActivity : ComponentActivity() {
 
         when (action) {
             "sign" -> handleSignCallback(responseParam)
+            "showAddress" -> {
+                Log.d("TrezorCallback", "Address verification completed")
+                finish()
+            }
             else -> handleAuthCallback(responseParam)
         }
     }
@@ -93,7 +112,16 @@ class TrezorCallbackActivity : ComponentActivity() {
     private fun handleSignCallback(responseJson: String) {
         val result = parseSignResult(responseJson)
         if (result == null) {
-            Log.e("TrezorCallback", "Failed to parse sign response")
+            // Classify the failure so UI can distinguish user cancel from protocol error.
+            // Trezor Connect error codes (user cancel): "Failure_ActionCancelled", "CANCELLED",
+            // "Method_Cancel", or error message containing "cancel"/"reject".
+            val sentinel = classifyFailure(responseJson)
+            Log.e("TrezorCallback", "Sign response failed: classified as $sentinel")
+            SessionStore.setPendingSignedPsbt(sentinel)
+            startActivity(
+                Intent(this@TrezorCallbackActivity, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            )
             finish()
             return
         }
@@ -106,6 +134,25 @@ class TrezorCallbackActivity : ComponentActivity() {
                 .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         )
         finish()
+    }
+
+    /**
+     * Inspect a failed Trezor response JSON and decide whether it looks like a
+     * user cancel or a protocol/parse error. Used so the UI can show an
+     * appropriate message instead of always reporting "cancelled".
+     */
+    private fun classifyFailure(responseJson: String): String {
+        return try {
+            val root = JSONObject(responseJson)
+            val payload = root.optJSONObject("payload")
+            val code = payload?.optString("code", "") ?: ""
+            val msg = (payload?.optString("error") ?: root.optString("error", "")).lowercase()
+            val looksCancelled = code.contains("Cancel", ignoreCase = true) ||
+                msg.contains("cancel") || msg.contains("reject") || msg.contains("denied")
+            if (looksCancelled) "CANCELLED" else "ERROR"
+        } catch (_: Exception) {
+            "ERROR"
+        }
     }
 
     /**

@@ -55,8 +55,10 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                     }
                 },
                 runResolve = {
-                    // Use batch xpubs if available, otherwise fall back to single identity
-                    val identities = SessionStore.pendingBatchXpubs.toList().ifEmpty {
+                    // Use batch xpubs if available, otherwise fall back to single identity.
+                    // Copy to local list to avoid ConcurrentModificationException
+                    // (clearAuth may reset the volatile MutableList on another thread).
+                    val identities = ArrayList(SessionStore.pendingBatchXpubs).ifEmpty {
                         val single = SessionStore.pendingIdentity
                             ?: run {
                                 navController.navigate(TrezorRoutes.Connect) {
@@ -68,13 +70,21 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                         listOf(single)
                     }
 
-                    // Login with all collected xpubs — backend scans and creates wallets for active accounts
-                    val session = signer.loginWithTrezor(identities)
-                    SessionStore.session = session
+                    if (identities.isEmpty()) {
+                        throw Exception("No identities received from Trezor")
+                    }
+
+                    // Login with all collected xpubs — backend scans and creates wallets for active accounts.
+                    // Store the refresh token BEFORE the session so persistSession() picks it up.
+                    val loginResult = signer.loginWithTrezor(identities)
+                    SessionStore.refreshToken = loginResult.refreshToken
+                    SessionStore.session = loginResult.session
+                    val session = loginResult.session
 
                     // Check if any wallets were found for the connected network
-                    val connectedNetwork = identities.first().derivationPath
-                        .let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
+                    val connectedNetwork = identities.firstOrNull()?.derivationPath
+                        ?.let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
+                        ?: "testnet"
                     SessionStore.selectedNetwork = connectedNetwork
                     val networkWallets = session.user.wallets.filter { it.network == connectedNetwork }
 
@@ -92,10 +102,12 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
 
         composable(TrezorRoutes.SelectAccount) {
             // Zobraz jen wallety sítě, se kterou se právě přihlásilo.
-            // pendingIdentity.derivationPath: "m/84'/1'/0'" = testnet, "m/84'/0'/0'" = mainnet
+            // pendingIdentity.derivationPath: "m/84'/1'/0'" = testnet, "m/84'/0'/0'" = mainnet.
+            // Po restartu aplikace je pendingIdentity null; v takovém případě použijeme
+            // SessionStore.selectedNetwork, který se persistuje s~session.
             val connectedNetwork = SessionStore.pendingIdentity?.derivationPath
                 ?.let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
-                ?: "mainnet"
+                ?: SessionStore.selectedNetwork
             val wallets = SessionStore.session?.user?.wallets
                 .orEmpty()
                 .filter { it.network == connectedNetwork }
