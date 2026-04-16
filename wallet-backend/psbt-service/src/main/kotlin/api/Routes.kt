@@ -40,7 +40,13 @@ fun Route.psbtRoutes(
          */
         post("/create") {
             val appCall = call
-            val request = appCall.receive<CreatePsbtRequest>()
+            val request = try {
+                appCall.receive<CreatePsbtRequest>()
+            } catch (e: Exception) {
+                appCall.respond(HttpStatusCode.BadRequest,
+                    mapOf("error" to "Invalid request body: ${e.message}"))
+                return@post
+            }
             log.info("Creating PSBT for wallet: {}", request.walletId)
 
             // Input validation
@@ -217,7 +223,8 @@ fun Route.psbtRoutes(
                 return@get
             }
             val addressIndex = call.request.queryParameters["index"]?.toIntOrNull() ?: 0
-            val cosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
+            val rawCosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
+            val signerAccountIndex = call.request.queryParameters["signerAccountIndex"]?.toIntOrNull()
 
             try {
                 val wallet = registryClient.getWallet(walletId)
@@ -227,6 +234,17 @@ fun Route.psbtRoutes(
                 if (wallet.type == "MULTI_SIG") {
                     val m = wallet.m ?: 2
                     val sortedCosigners = wallet.cosigners.sortedBy { it.idx }
+                    // Prefer resolving via signerAccountIndex (the caller's BIP-48 account)
+                    // so a cosigner who is not cosigner[0] still gets their own origin path.
+                    // Falls back to the explicit cosignerIndex for backwards compat.
+                    val cosignerIndex = if (signerAccountIndex != null) {
+                        val match = sortedCosigners.indexOfFirst { cos ->
+                            val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
+                            val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
+                            cosAccount == signerAccountIndex
+                        }
+                        if (match >= 0) match else rawCosignerIndex
+                    } else rawCosignerIndex
                     val signerCosigner = sortedCosigners.getOrNull(cosignerIndex)
                     if (signerCosigner == null) {
                         call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid cosignerIndex"))
@@ -367,7 +385,13 @@ fun Route.psbtRoutes(
                 return@post
             }
 
-            val request = appCall.receive<AddTrezorSignaturesRequest>()
+            val request = try {
+                appCall.receive<AddTrezorSignaturesRequest>()
+            } catch (e: Exception) {
+                appCall.respond(HttpStatusCode.BadRequest,
+                    mapOf("error" to "Invalid request body: ${e.message}"))
+                return@post
+            }
 
             val existing = repository.findById(uuid)
             if (existing == null) {
@@ -450,6 +474,11 @@ fun Route.psbtRoutes(
                         resolvedCosignerIndex.coerceIn(0, ms.signatures.size - 1)
                     }
 
+                    if (sigIdx >= updatedSigs.size) {
+                        log.error("sign-trezor: sigIdx {} out of bounds for signatures list of size {} in input {}",
+                            sigIdx, updatedSigs.size, inputIndex)
+                        return@mapIndexed input
+                    }
                     updatedSigs[sigIdx] = derSig
                     input.copy(multisig = ms.copy(signatures = updatedSigs))
                 }
@@ -466,12 +495,20 @@ fun Route.psbtRoutes(
                 serializedTx = if (request.serializedTx != null) request.serializedTx else null
             )
 
-            repository.addSignature(
-                psbtId = uuid,
-                deviceId = request.fingerprint,
-                fingerprint = request.fingerprint,
-                cosignerIndex = resolvedCosignerIndex
-            )
+            try {
+                repository.addSignature(
+                    psbtId = uuid,
+                    deviceId = request.fingerprint,
+                    fingerprint = request.fingerprint,
+                    cosignerIndex = resolvedCosignerIndex
+                )
+            } catch (e: Exception) {
+                log.error("Failed to record signature for PSBT {} cosigner {}: {}",
+                    id, resolvedCosignerIndex, e.message)
+                appCall.respond(HttpStatusCode.InternalServerError,
+                    mapOf("error" to "Signature applied but failed to record: ${e.message}"))
+                return@post
+            }
 
             log.info("Trezor signatures added: psbtId={} cosigner={} newSigs={}/{} status={}",
                 id, resolvedCosignerIndex, newSigCount, existing.requiredSigs, newStatus)
@@ -527,7 +564,13 @@ fun Route.psbtRoutes(
                 return@post
             }
 
-            val request = appCall.receive<BroadcastRawTxRequest>()
+            val request = try {
+                appCall.receive<BroadcastRawTxRequest>()
+            } catch (e: Exception) {
+                appCall.respond(HttpStatusCode.BadRequest,
+                    mapOf("error" to "Invalid request body: ${e.message}"))
+                return@post
+            }
 
             val existing = repository.findById(uuid)
             if (existing == null) {
