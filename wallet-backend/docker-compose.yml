@@ -57,6 +57,16 @@ services:
       JWT_ISSUER: wallet-auth
       JWT_AUDIENCE: wallet-gateway
       JWT_KID: "dev-kid-1"
+      # ---------------------------------------------------------------
+      # DEV-ONLY JWT KEYS — DO NOT USE IN PRODUCTION.
+      # Kept in-repo so `docker compose up` works out-of-the-box for the
+      # thesis reviewer. For any real deployment:
+      #   1) remove JWT_RSA_PRIVATE_PEM / JWT_RSA_PUBLIC_PEM from this file
+      #   2) set them in an override file (docker-compose.override.yml or .env,
+      #      both are in .gitignore), or
+      #   3) set JWT_DEV_ALLOW_GENERATE_KEYS=true so auth-service generates
+      #      ephemeral keys at startup (tokens will not survive restart).
+      # ---------------------------------------------------------------
       JWT_RSA_PRIVATE_PEM: |
         -----BEGIN PRIVATE KEY-----
         MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCXNLukkPFnBMQ6
