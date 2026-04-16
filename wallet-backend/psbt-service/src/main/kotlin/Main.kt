@@ -16,10 +16,15 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import io.ktor.http.*
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 import org.slf4j.LoggerFactory
+import java.time.OffsetDateTime
 
 internal val log = LoggerFactory.getLogger("PsbtService")
 
@@ -46,9 +51,36 @@ fun main() {
     log.info("Registry service: {}", registryUrl)
     log.info("Explorer service: {}", explorerUrl)
 
+    // Background cleanup: remove pending/signed PSBTs older than PSBT_TTL_DAYS
+    // (default 7 days) so abandoned multisig drafts stop reserving UTXOs forever.
+    // Disable with PSBT_CLEANUP_ENABLED=false.
+    startStalePsbtCleanup(repository)
+
     embeddedServer(Netty, port = port) {
         configureApp(repository, blockchainClient, registryClient, explorerClient)
     }.start(wait = true)
+}
+
+private fun startStalePsbtCleanup(repository: PsbtRepository) {
+    val enabled = (System.getenv("PSBT_CLEANUP_ENABLED") ?: "true").equals("true", true)
+    if (!enabled) {
+        log.info("PSBT cleanup disabled via PSBT_CLEANUP_ENABLED")
+        return
+    }
+    val ttlDays = (System.getenv("PSBT_TTL_DAYS") ?: "7").toLongOrNull() ?: 7L
+    val intervalMinutes = (System.getenv("PSBT_CLEANUP_INTERVAL_MINUTES") ?: "60").toLongOrNull() ?: 60L
+    CoroutineScope(Dispatchers.IO).launch {
+        while (true) {
+            try {
+                val cutoff = OffsetDateTime.now().minusDays(ttlDays)
+                val removed = repository.deleteStale(cutoff)
+                if (removed > 0) log.info("Cleaned up {} stale pending/signed PSBTs older than {}", removed, cutoff)
+            } catch (e: Exception) {
+                log.warn("PSBT cleanup failed", e)
+            }
+            delay(intervalMinutes * 60_000L)
+        }
+    }
 }
 
 fun Application.configureApp(
