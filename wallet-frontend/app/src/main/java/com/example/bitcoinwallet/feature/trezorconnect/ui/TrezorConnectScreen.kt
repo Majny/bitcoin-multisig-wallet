@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,6 +24,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.ui.theme.*
 
 @Composable
@@ -30,6 +32,7 @@ fun TrezorConnectScreen(
     onConnect: (network: String) -> Unit
 ) {
     var selectedNetwork by remember { mutableStateOf("testnet") }
+    val logoutReason by SessionStore.pendingLogoutReason.collectAsState()
 
     Column(
         modifier = Modifier
@@ -44,6 +47,24 @@ fun TrezorConnectScreen(
             style = MaterialTheme.typography.headlineSmall,
             color = TextPrimary
         )
+
+        logoutReason?.let { reason ->
+            Spacer(Modifier.height(16.dp))
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color(0xFF3A1F1F))
+                    .padding(horizontal = 14.dp, vertical = 12.dp)
+            ) {
+                Text(
+                    text = reason,
+                    color = Color(0xFFFFB4A8),
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Start
+                )
+            }
+        }
 
         Spacer(Modifier.weight(0.35f))
 
@@ -82,7 +103,12 @@ fun TrezorConnectScreen(
         Spacer(Modifier.weight(0.8f))
 
         Button(
-            onClick = { onConnect(selectedNetwork) },
+            onClick = {
+                // Acknowledge & dismiss the security banner once the user
+                // proactively starts the new login.
+                if (logoutReason != null) SessionStore.setPendingLogoutReason(null)
+                onConnect(selectedNetwork)
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),

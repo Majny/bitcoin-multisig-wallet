@@ -110,11 +110,26 @@ class TrezorCallbackActivity : ComponentActivity() {
      * Legacy PSBT signing returns signedPsbt.
      */
     private fun handleSignCallback(responseJson: String) {
+        // Defense-in-depth: reject before forwarding the signature if Trezor Suite
+        // identifies the responding device as a different one than what the JWT
+        // session is bound to. Catches the "user swapped Trezor between login and
+        // signing" case earlier than broadcast failure (singlesig) or backend
+        // signature verification (multisig).
+        if (isResponseFromDifferentDevice(responseJson)) {
+            Log.w("TrezorCallback", "Sign response from a Trezor whose fingerprint differs from session — rejecting")
+            SessionStore.setPendingSignedPsbt("WRONG_DEVICE")
+            startActivity(
+                Intent(this@TrezorCallbackActivity, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            )
+            finish()
+            return
+        }
+
         val result = parseSignResult(responseJson)
         if (result == null) {
-            // Classify the failure so UI can distinguish user cancel from protocol error.
-            // Trezor Connect error codes (user cancel): "Failure_ActionCancelled", "CANCELLED",
-            // "Method_Cancel", or error message containing "cancel"/"reject".
+            // Classify the failure so UI can distinguish user cancel from protocol error
+            // and from the wrong-Trezor case (firmware refuses unknown paths).
             val sentinel = classifyFailure(responseJson)
             Log.e("TrezorCallback", "Sign response failed: classified as $sentinel")
             SessionStore.setPendingSignedPsbt(sentinel)
@@ -138,8 +153,8 @@ class TrezorCallbackActivity : ComponentActivity() {
 
     /**
      * Inspect a failed Trezor response JSON and decide whether it looks like a
-     * user cancel or a protocol/parse error. Used so the UI can show an
-     * appropriate message instead of always reporting "cancelled".
+     * user cancel, a wrong-device path rejection, or a generic protocol error.
+     * The classification drives the message the UI shows.
      */
     private fun classifyFailure(responseJson: String): String {
         return try {
@@ -147,12 +162,47 @@ class TrezorCallbackActivity : ComponentActivity() {
             val payload = root.optJSONObject("payload")
             val code = payload?.optString("code", "") ?: ""
             val msg = (payload?.optString("error") ?: root.optString("error", "")).lowercase()
+            // Firmware rejects when the requested derivation has no matching key on
+            // the connected device — practically means a different Trezor than the
+            // one that produced the wallet's xpub is plugged in.
+            val looksWrongDevice = msg.contains("forbidden key path") ||
+                msg.contains("path not allowed") ||
+                msg.contains("invalid public key") ||
+                msg.contains("device fingerprint mismatch")
             val looksCancelled = code.contains("Cancel", ignoreCase = true) ||
                 msg.contains("cancel") || msg.contains("reject") || msg.contains("denied")
-            if (looksCancelled) "CANCELLED" else "ERROR"
+            when {
+                looksWrongDevice -> "WRONG_DEVICE"
+                looksCancelled -> "CANCELLED"
+                else -> "ERROR"
+            }
         } catch (_: Exception) {
             "ERROR"
         }
+    }
+
+    /**
+     * Returns true when the Trezor that produced this response identifies itself
+     * with a different master fingerprint than the one we authenticated with.
+     * Returns false if either fingerprint is missing — we cannot verify, so we
+     * fall through to the existing error paths (firmware key check, broadcast).
+     */
+    private fun isResponseFromDifferentDevice(responseJson: String): Boolean {
+        return try {
+            val root = JSONObject(responseJson)
+            val payload = root.optJSONObject("payload") ?: return false
+            val responseFp = extractDeviceFingerprint(payload) ?: return false
+            val sessionFp = SessionStore.session?.user?.trezorFingerprint?.takeIf { it.isNotBlank() }
+                ?: return false
+            !responseFp.equals(sessionFp, ignoreCase = true)
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun extractDeviceFingerprint(payload: JSONObject): String? {
+        return payload.optJSONObject("device")?.optString("fingerprint", "")?.ifBlank { null }
+            ?: payload.optString("device_fingerprint", "").ifBlank { null }
     }
 
     /**

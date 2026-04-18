@@ -211,6 +211,20 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         SessionStore.setActiveSignFlow(null)
                         viewModel.resetTrezorState()
                     }
+                    signedData == "WRONG_DEVICE" -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setPendingSignType(null)
+                        SessionStore.setActiveSignFlow(null)
+                        SessionStore.setPendingLogoutReason(
+                            "Signed out for security: connected Trezor did not match the one you signed in with."
+                        )
+                        SessionStore.clearAuth()
+                        navController.navigate(
+                            com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.Connect
+                        ) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
                     signedData == "ERROR" -> {
                         SessionStore.setPendingSignedPsbt(null)
                         SessionStore.setPendingSignType(null)
@@ -752,6 +766,19 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         SessionStore.setPendingSignedPsbt(null)
                         SessionStore.setActiveSignFlow(null)
                         viewModel.onTrezorCancelled()
+                    }
+                    signedData == "WRONG_DEVICE" -> {
+                        SessionStore.setPendingSignedPsbt(null)
+                        SessionStore.setActiveSignFlow(null)
+                        SessionStore.setPendingLogoutReason(
+                            "Signed out for security: connected Trezor did not match the one you signed in with."
+                        )
+                        SessionStore.clearAuth()
+                        navController.navigate(
+                            com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.Connect
+                        ) {
+                            popUpTo(0) { inclusive = true }
+                        }
                     }
                     signedData == "ERROR" -> {
                         SessionStore.setPendingSignedPsbt(null)

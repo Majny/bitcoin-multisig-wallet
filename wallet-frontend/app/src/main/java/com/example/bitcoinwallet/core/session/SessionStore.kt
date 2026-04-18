@@ -102,6 +102,20 @@ object SessionStore {
         SessionPersistence.updatePreferredCurrency(currency)
     }
 
+    /**
+     * One-shot reason shown on the Trezor connect screen after a forced logout
+     * (e.g. wrong-device sign attempt). Set this *before* calling [clearAuth] —
+     * [clearAuth] intentionally does NOT wipe it, otherwise the user would see
+     * the login screen with no explanation. The connect screen consumes the
+     * value via [setPendingLogoutReason] (null) once it has been shown.
+     */
+    private val _pendingLogoutReason = MutableStateFlow<String?>(null)
+    val pendingLogoutReason: StateFlow<String?> = _pendingLogoutReason.asStateFlow()
+
+    fun setPendingLogoutReason(value: String?) {
+        _pendingLogoutReason.value = value
+    }
+
     fun clearAuth() {
         pendingIdentity = null
         session = null
