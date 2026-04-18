@@ -31,7 +31,21 @@ data class CosignerInWallet(
 
 @Serializable
 data class UpdateCosignerLabelRequest(
+    val label: String,
+    val deviceId: String
+)
+
+@Serializable
+data class CosignerLabelEntry(
+    val idx: Int,
     val label: String
+)
+
+@Serializable
+data class CosignerLabelsResponse(
+    val walletId: String,
+    val deviceId: String,
+    val labels: List<CosignerLabelEntry>
 )
 
 @Serializable

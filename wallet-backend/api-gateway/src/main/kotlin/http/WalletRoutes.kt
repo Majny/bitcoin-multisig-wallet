@@ -149,9 +149,13 @@ fun Route.walletRoutes() {
 
         /**
          * PUT /wallets/{walletId}/cosigners/{idx}/label
-         * Updates the display label for a cosigner in a multisig wallet.
+         * Upserts the per-device label for a cosigner position.
+         * device_id comes from JWT — each Trezor keeps its own labels so they
+         * don't leak to other members of the same wallet.
          */
         put("/wallets/{walletId}/cosigners/{idx}/label") {
+            val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
+            val deviceId = principal.payload.getClaim("device_id").asString()
             val walletId = call.parameters["walletId"]
                 ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing walletId"))
             val idx = call.parameters["idx"]?.toIntOrNull()
@@ -159,7 +163,18 @@ fun Route.walletRoutes() {
             val body = call.receive<Map<String, String>>()
             val label = body["label"]
                 ?: return@put call.respond(HttpStatusCode.BadRequest, mapOf("error" to "missing label"))
-            call.application.deps.registry.updateCosignerLabel(walletId, idx, label)
+
+            // Verify the caller is actually a member of this wallet.
+            val wallet = try {
+                call.application.deps.registry.getWallet(walletId)
+            } catch (e: Exception) {
+                return@put call.respond(HttpStatusCode.NotFound, mapOf("error" to "wallet not found"))
+            }
+            if (wallet.members.none { it.deviceId == deviceId }) {
+                return@put call.respond(HttpStatusCode.Forbidden, mapOf("error" to "access denied"))
+            }
+
+            call.application.deps.registry.updateCosignerLabel(walletId, idx, label, deviceId)
             call.respond(HttpStatusCode.OK, mapOf("ok" to true))
         }
     }

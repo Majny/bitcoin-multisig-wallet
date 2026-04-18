@@ -125,7 +125,9 @@ fun Application.configureRoutes(repo: Repository) {
 
             /*
              * PUT /registry/wallets/{id}/cosigners/{idx}/label
-             * Updates the display label for a cosigner (e.g. "Alice's key").
+             * Upserts the per-device label for a cosigner position.
+             * Each Trezor (device_id from JWT, forwarded by api-gateway) keeps its
+             * own labels so they don't leak to other members of the same wallet.
              */
             put("/wallets/{id}/cosigners/{idx}/label") {
                 val id = call.parameters["id"]
@@ -133,8 +135,31 @@ fun Application.configureRoutes(repo: Repository) {
                 val idx = call.parameters["idx"]?.toIntOrNull()
                     ?: return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse("invalid idx"))
                 val req = call.receive<UpdateCosignerLabelRequest>()
-                repo.updateCosignerLabel(id, idx, req.label)
+                if (req.deviceId.isBlank()) {
+                    return@put call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing deviceId"))
+                }
+                repo.upsertCosignerLabel(req.deviceId, id, idx, req.label)
                 call.respondText("ok")
+            }
+
+            /*
+             * GET /registry/wallets/{id}/cosigner-labels?device_id=xxx
+             * Returns the caller device's labels for cosigner positions in a wallet.
+             * Called by api-gateway to layer per-device labels onto the signer response.
+             */
+            get("/wallets/{id}/cosigner-labels") {
+                val id = call.parameters["id"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing id"))
+                val deviceId = call.request.queryParameters["device_id"]
+                    ?: return@get call.respond(HttpStatusCode.BadRequest, ErrorResponse("missing device_id"))
+                val labels = repo.getCosignerLabels(deviceId, id)
+                call.respond(
+                    CosignerLabelsResponse(
+                        walletId = id,
+                        deviceId = deviceId,
+                        labels = labels.map { (idx, label) -> CosignerLabelEntry(idx, label) }
+                    )
+                )
             }
 
             /*

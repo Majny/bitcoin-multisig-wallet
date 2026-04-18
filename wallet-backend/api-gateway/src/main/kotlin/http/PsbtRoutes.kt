@@ -69,15 +69,26 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // GET /psbt/{id}/signers - stav podpisů (kdo podepsal, kdo chybí)
+            // GET /psbt/{id}/signers - stav podpisů (kdo podepsal, kdo chybí) + per-device labely
             get("/{id}/signers") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
                 val id = call.parameters["id"] ?: error("id missing")
                 val psbt = call.application.deps.psbt.getById(id)
                 if (!verifyWalletAccess(deviceId, psbt.walletId)) return@get
+
                 val resp = call.application.deps.psbt.getSigners(id)
-                call.respond(resp)
+                // Layer the caller's per-device labels on top of the psbt-service response.
+                val labels = try {
+                    call.application.deps.registry.getCosignerLabels(psbt.walletId, deviceId)
+                } catch (e: Exception) {
+                    call.application.log.warn("Failed to load cosigner labels: {}", e.message)
+                    emptyMap()
+                }
+                val enriched = resp.copy(
+                    signers = resp.signers.map { s -> s.copy(label = labels[s.cosignerIndex]) }
+                )
+                call.respond(enriched)
             }
 
             // GET /psbt/verify-address - Trezor Connect getAddress params for on-device verification

@@ -652,7 +652,9 @@ fun Route.psbtRoutes(
                         signed = sig != null,
                         deviceId = sig?.deviceId,
                         signedAt = sig?.signedAt,
-                        label = cosigner.label
+                        // Labels are per-device and are layered in by api-gateway
+                        // via registry's /cosigner-labels endpoint — see PsbtRoutes.
+                        label = null
                     )
                 }
 

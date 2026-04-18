@@ -150,3 +150,24 @@ data class WalletAddressResponse(
     val type: String    // "receive" or "change"
 )
 
+// ---- Per-device cosigner labels ----
+
+@Serializable
+data class UpdateCosignerLabelRegistryRequest(
+    val label: String,
+    val deviceId: String
+)
+
+@Serializable
+data class CosignerLabelEntry(
+    val idx: Int,
+    val label: String
+)
+
+@Serializable
+data class CosignerLabelsResponse(
+    val walletId: String,
+    val deviceId: String,
+    val labels: List<CosignerLabelEntry> = emptyList()
+)
+

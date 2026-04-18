@@ -27,7 +27,9 @@ interface RegistryClient {
 
     suspend fun deriveAddresses(descriptor: String, network: String, count: Int = 5): List<String>
 
-    suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String)
+    suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String, deviceId: String)
+
+    suspend fun getCosignerLabels(walletId: String, deviceId: String): Map<Int, String>
 }
 
 class RegistryClientImpl(
@@ -104,10 +106,22 @@ class RegistryClientImpl(
         return resp.addresses
     }
 
-    override suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String) {
+    override suspend fun updateCosignerLabel(
+        walletId: String,
+        cosignerIdx: Int,
+        label: String,
+        deviceId: String
+    ) {
         client().put("$baseUrl/registry/wallets/$walletId/cosigners/$cosignerIdx/label") {
             contentType(ContentType.Application.Json)
-            setBody(mapOf("label" to label))
+            setBody(UpdateCosignerLabelRegistryRequest(label = label, deviceId = deviceId))
         }
+    }
+
+    override suspend fun getCosignerLabels(walletId: String, deviceId: String): Map<Int, String> {
+        val resp: CosignerLabelsResponse = client().get("$baseUrl/registry/wallets/$walletId/cosigner-labels") {
+            url { parameters.append("device_id", deviceId) }
+        }.body()
+        return resp.labels.associate { it.idx to it.label }
     }
 }

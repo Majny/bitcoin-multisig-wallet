@@ -35,8 +35,17 @@ object WalletCosignersTable : Table("wallet_cosigners") {
     val walletId = text("wallet_id").references(WalletsTable.walletId)
     val idx = integer("idx")
     val cosignerId = text("cosigner_id").references(CosignersTable.cosignerId)
-    val label = text("label").nullable()
     override val primaryKey = PrimaryKey(walletId, idx)
+}
+
+/* Per-device cosigner labels — each Trezor (device_id from JWT) has its own labels. */
+object CosignerLabelsTable : Table("cosigner_labels") {
+    val deviceId = text("device_id")
+    val walletId = text("wallet_id").references(WalletsTable.walletId)
+    val idx = integer("idx")
+    val label = text("label")
+    val updatedAt = timestampWithTimeZone("updated_at")
+    override val primaryKey = PrimaryKey(deviceId, walletId, idx)
 }
 
 /* Links devices to wallets. account_index tracks which BIP-48 account imported it. */

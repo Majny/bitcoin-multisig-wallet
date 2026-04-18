@@ -159,7 +159,6 @@ class Repository {
         val cosigners = (WalletCosignersTable innerJoin CosignersTable)
             .select(
                 WalletCosignersTable.idx,
-                WalletCosignersTable.label,
                 CosignersTable.cosignerId,
                 CosignersTable.fingerprint,
                 CosignersTable.originPath,
@@ -167,13 +166,16 @@ class Repository {
             )
             .where { WalletCosignersTable.walletId eq walletId }
             .map { row ->
+                // label is null here by design — per-device labels are fetched
+                // separately via getCosignerLabels(deviceId, walletId) and layered
+                // in by the api-gateway. See cosigner_labels table.
                 CosignerInWallet(
                     idx = row[WalletCosignersTable.idx],
                     cosignerId = row[CosignersTable.cosignerId],
                     fingerprint = row[CosignersTable.fingerprint],
                     originPath = row[CosignersTable.originPath],
                     xpubRoot = row[CosignersTable.xpubRoot],
-                    label = row[WalletCosignersTable.label]
+                    label = null
                 )
             }
             .sortedBy { it.idx }
@@ -205,14 +207,50 @@ class Repository {
         )
     }
 
-    /* Updates the display label for a cosigner in a specific wallet. */
-    fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String) = transaction {
-        WalletCosignersTable.update({
-            (WalletCosignersTable.walletId eq walletId) and
-                (WalletCosignersTable.idx eq cosignerIdx)
+    /*
+     * Upserts the per-device label for a cosigner position.
+     * Each Trezor (device_id from JWT) keeps its own labels so they don't leak
+     * to other members of the same multisig wallet.
+     */
+    fun upsertCosignerLabel(
+        deviceId: String,
+        walletId: String,
+        cosignerIdx: Int,
+        label: String
+    ) = transaction {
+        val updated = CosignerLabelsTable.update({
+            (CosignerLabelsTable.deviceId eq deviceId) and
+                (CosignerLabelsTable.walletId eq walletId) and
+                (CosignerLabelsTable.idx eq cosignerIdx)
         }) {
-            it[WalletCosignersTable.label] = label
+            it[CosignerLabelsTable.label] = label
+            it[updatedAt] = OffsetDateTime.now()
         }
+        if (updated == 0) {
+            CosignerLabelsTable.insert {
+                it[CosignerLabelsTable.deviceId] = deviceId
+                it[CosignerLabelsTable.walletId] = walletId
+                it[CosignerLabelsTable.idx] = cosignerIdx
+                it[CosignerLabelsTable.label] = label
+                it[updatedAt] = OffsetDateTime.now()
+            }
+        }
+    }
+
+    /* Returns the caller device's labels for all cosigner positions in a wallet. */
+    fun getCosignerLabels(
+        deviceId: String,
+        walletId: String
+    ): List<Pair<Int, String>> = transaction {
+        CosignerLabelsTable
+            .selectAll()
+            .where {
+                (CosignerLabelsTable.deviceId eq deviceId) and
+                    (CosignerLabelsTable.walletId eq walletId)
+            }
+            .map { row ->
+                row[CosignerLabelsTable.idx] to row[CosignerLabelsTable.label]
+            }
     }
 
     /* Derives addresses from a descriptor and stores them in wallet_addresses table. */
