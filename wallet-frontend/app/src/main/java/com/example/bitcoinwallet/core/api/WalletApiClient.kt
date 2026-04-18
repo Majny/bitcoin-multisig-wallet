@@ -25,6 +25,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * API client for wallet data.
@@ -400,7 +402,19 @@ class WalletApiClient(
                                 SessionStore.clearAuth()
                                 throw SessionExpiredException("Session expired. Please reconnect your Trezor.")
                             }
-                            throw Exception("Request failed (${response.status.value}). Please try again.")
+                            // Surface the backend's "error" field if present so screens can
+                            // show the actual reason ("Account #1 is not a cosigner...")
+                            // instead of a generic "Request failed (NNN)".
+                            val backendError = try {
+                                Json.parseToJsonElement(body).jsonObject["error"]
+                                    ?.jsonPrimitive
+                                    ?.content
+                                    ?.takeIf { it.isNotBlank() }
+                            } catch (_: Exception) { null }
+                            throw Exception(
+                                backendError
+                                    ?: "Request failed (${response.status.value}). Please try again."
+                            )
                         }
                     }
                 }

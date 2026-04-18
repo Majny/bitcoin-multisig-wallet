@@ -6,10 +6,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -120,16 +122,10 @@ fun ImportWalletScreen(
             textStyle = LocalTextStyle.current.copy(fontSize = 14.sp)
         )
 
-        /* ── Error message ── */
+        /* ── Error card ── */
         if (state.error != null) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Text(
-                text = state.error,
-                color = ErrorRed,
-                fontSize = 12.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+            Spacer(modifier = Modifier.height(16.dp))
+            ImportErrorCard(message = state.error)
         }
 
         Spacer(modifier = Modifier.weight(1f))
@@ -143,6 +139,69 @@ fun ImportWalletScreen(
                 .fillMaxWidth()
                 .padding(bottom = 24.dp)
         )
+    }
+}
+
+/**
+ * Inline card shown when the import fails. Maps a few well-known backend
+ * error messages to a friendlier title + actionable hint; falls back to the
+ * raw message when no pattern matches so we never hide information from the
+ * user.
+ */
+@Composable
+private fun ImportErrorCard(message: String) {
+    val title = when {
+        message.contains("not a cosigner", ignoreCase = true) ->
+            "Wallet doesn't include this account"
+        message.contains("parse error", ignoreCase = true) ||
+            message.contains("descriptor", ignoreCase = true) ->
+            "Invalid descriptor"
+        else -> "Cannot import wallet"
+    }
+    val hint = when {
+        message.contains("not a cosigner", ignoreCase = true) ->
+            "Switch to the account that is part of this multisig, " +
+                "or sign in with the Trezor that holds one of the cosigner xpubs."
+        else -> null
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(ErrorRed.copy(alpha = 0.10f))
+            .padding(14.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Icon(
+            imageVector = Icons.Default.Warning,
+            contentDescription = null,
+            tint = ErrorRed,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                color = ErrorRed,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = message,
+                color = TextSecondary,
+                fontSize = 13.sp
+            )
+            if (hint != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = hint,
+                    color = TextMuted,
+                    fontSize = 12.sp
+                )
+            }
+        }
     }
 }
 
