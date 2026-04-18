@@ -260,6 +260,29 @@ fun PsbtDetailScreen(
                             fontWeight = FontWeight.SemiBold, fontSize = 16.sp
                         )
                     }
+                } else if (state.currentUserSigned && !state.isBroadcast) {
+                    // This device already signed — re-signing crashes Trezor Suite.
+                    // Show a disabled placeholder until enough cosigners have signed.
+                    Button(
+                        onClick = { },
+                        enabled = false,
+                        colors = ButtonDefaults.buttonColors(
+                            disabledContainerColor = DarkCard,
+                            disabledContentColor = TextMuted
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
+                    ) {
+                        val remaining = state.remainingSigs
+                        Text(
+                            text = if (remaining <= 1)
+                                "Signed · waiting for 1 more signature"
+                            else
+                                "Signed · waiting for $remaining more signatures",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
+                        )
+                    }
                 } else if (state.canSign && !state.isBroadcast) {
                     Button(
                         onClick = onSignPsbt,

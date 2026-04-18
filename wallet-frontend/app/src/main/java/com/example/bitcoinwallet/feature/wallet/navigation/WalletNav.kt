@@ -857,8 +857,9 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         // Keep the JWT session alive — only the wallet selection is cleared
                         // so the user lands on SelectAccount and can switch to another
                         // BIP-48 account on the same Trezor without re-authenticating.
+                        // activeAccountIndex is intentionally kept so SelectAccount can
+                        // pre-select the account the user is switching away from.
                         SessionStore.activeWalletId = null
-                        SessionStore.activeAccountIndex = null
                         navController.navigate(
                             com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes.SelectAccount
                         ) {

@@ -14,6 +14,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.font.FontWeight
+import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.signer.WalletSummary
 import com.example.bitcoinwallet.ui.theme.*
 
@@ -23,7 +24,18 @@ fun SelectAccountScreen(
     onClose: () -> Unit,
     onConfirm: (WalletSummary) -> Unit
 ) {
-    var selectedIndex by remember { mutableStateOf(0) }
+    // Pre-select the account the user was last on. Match by wallet id if we still
+    // have one, otherwise fall back to BIP-48 account index (preserved across
+    // Switch Account so the previous row stays highlighted).
+    var selectedIndex by remember(wallets) {
+        val preferredWalletId = SessionStore.activeWalletId
+        val preferredAccount = SessionStore.activeAccountIndex
+        val initial = wallets.indexOfFirst { w ->
+            (!preferredWalletId.isNullOrBlank() && w.id == preferredWalletId) ||
+                (preferredAccount != null && w.accountIndex == preferredAccount)
+        }
+        mutableStateOf(if (initial >= 0) initial else 0)
+    }
 
     LaunchedEffect(wallets.size) {
         if (selectedIndex !in wallets.indices) selectedIndex = 0

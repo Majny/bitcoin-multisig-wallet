@@ -5,9 +5,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.bitcoinwallet.core.api.PsbtDetailDto
 import com.example.bitcoinwallet.core.api.SignerDetailDto
+import com.example.bitcoinwallet.core.api.SignerStatusResponseDto
 import com.example.bitcoinwallet.core.api.TrezorConnectParamsDto
 import com.example.bitcoinwallet.core.api.WalletApi
 import com.example.bitcoinwallet.core.session.SessionStore
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -79,6 +82,17 @@ data class PsbtDetailUiState(
     val canSign: Boolean
         get() = status == "pending" || (status == "signed" && !isFullySigned)
 
+    /**
+     * True when this device already contributed its signature.
+     * Used to hide the Sign button once the user has signed — re-signing with the
+     * same key crashes Trezor Suite and cannot add a new signature anyway.
+     */
+    val currentUserSigned: Boolean
+        get() = cosigners.any { it.isMe && it.status == SignerStatus.SIGNED }
+
+    val remainingSigs: Int
+        get() = (requiredSigs - currentSigs).coerceAtLeast(0)
+
     val isBroadcast: Boolean
         get() = status == "broadcast"
 
@@ -133,11 +147,37 @@ class PsbtDetailViewModel : ViewModel() {
 
             try {
                 Log.d(TAG, "Loading PSBT detail: $psbtId")
-                val dto = WalletApi.client.getPsbtDetail(psbtId, accessToken)
-                _uiState.value = mapDtoToState(dto)
-                // Load cosigners eagerly so the Signatures card and rename flow
-                // share the same label source of truth.
-                loadCosigners()
+                // Fetch PSBT detail, signers, and wallet list in parallel. Cosigners
+                // must be populated before we flip isLoading=false so custom labels
+                // never flash absent on re-entry.
+                coroutineScope {
+                    val detailDeferred = async {
+                        WalletApi.client.getPsbtDetail(psbtId, accessToken)
+                    }
+                    val signersDeferred = async {
+                        runCatching {
+                            WalletApi.client.getSignerStatus(psbtId, accessToken)
+                        }.onFailure { Log.w(TAG, "Failed to load signers", it) }.getOrNull()
+                    }
+                    val walletsDeferred = async {
+                        runCatching {
+                            WalletApi.client.listWallets(accessToken)
+                        }.onFailure { Log.w(TAG, "Failed to fetch wallet list for isMe resolution", it) }
+                            .getOrNull()
+                    }
+
+                    val dto = detailDeferred.await()
+                    val signersResp = signersDeferred.await()
+                    val wallets = walletsDeferred.await()
+
+                    val walletId = signersResp?.walletId ?: dto.walletId
+                    val myAccountIndex = wallets
+                        ?.firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
+                        ?.accountIndex ?: SessionStore.activeAccountIndex
+
+                    val cosigners = buildCosignerList(signersResp, dto.status, myAccountIndex)
+                    _uiState.value = mapDtoToState(dto).copy(cosigners = cosigners)
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Error loading PSBT detail", e)
                 _uiState.value = _uiState.value.copy(
@@ -285,6 +325,10 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
+    /**
+     * Defensive re-fetch when the signers dialog opens and cosigners are unexpectedly empty.
+     * The happy path populates cosigners eagerly during fetchPsbtDetail.
+     */
     private suspend fun loadCosigners() {
         val accessToken = SessionStore.session?.accessToken ?: return
         val psbtId = _uiState.value.psbtId
@@ -292,39 +336,8 @@ class PsbtDetailViewModel : ViewModel() {
         try {
             Log.d(TAG, "Loading signers for PSBT: $psbtId")
             val response = WalletApi.client.getSignerStatus(psbtId, accessToken)
-
-            // For multisig, "my account index" comes from the wallet list — each
-            // multisig wallet carries the member accountIndex for the current device.
-            // Falls back to the singlesig session account when the lookup fails.
-            val walletId = response.walletId
-            val myAccountIndex = try {
-                WalletApi.client.listWallets(accessToken)
-                    .firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
-                    ?.accountIndex
-            } catch (e: Exception) {
-                Log.w(TAG, "Failed to fetch wallet list for isMe resolution", e)
-                null
-            } ?: SessionStore.activeAccountIndex
-
-            val cosigners = response.signers.map { signer ->
-                val status = when {
-                    signer.signed -> SignerStatus.SIGNED
-                    _uiState.value.status == "pending" || _uiState.value.status == "signed" ->
-                        SignerStatus.PENDING
-                    else -> SignerStatus.MISSING
-                }
-                CosignerUiInfo(
-                    fingerprint = signer.fingerprint,
-                    cosignerIndex = signer.cosignerIndex,
-                    originPath = signer.originPath,
-                    xpub = signer.xpub,
-                    status = status,
-                    deviceId = signer.deviceId,
-                    isMe = isCurrentUser(signer, myAccountIndex),
-                    label = signer.label
-                )
-            }
-
+            val myAccountIndex = resolveMyAccountIndex(response.walletId, accessToken)
+            val cosigners = buildCosignerList(response, _uiState.value.status, myAccountIndex)
             _uiState.value = _uiState.value.copy(
                 cosigners = cosigners,
                 signersLoading = false
@@ -334,6 +347,40 @@ class PsbtDetailViewModel : ViewModel() {
             _uiState.value = _uiState.value.copy(signersLoading = false)
         }
     }
+
+    private suspend fun resolveMyAccountIndex(walletId: String, accessToken: String): Int? {
+        val fromWallets = try {
+            WalletApi.client.listWallets(accessToken)
+                .firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
+                ?.accountIndex
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to fetch wallet list for isMe resolution", e)
+            null
+        }
+        return fromWallets ?: SessionStore.activeAccountIndex
+    }
+
+    private fun buildCosignerList(
+        signersResp: SignerStatusResponseDto?,
+        psbtStatus: String,
+        myAccountIndex: Int?
+    ): List<CosignerUiInfo> = signersResp?.signers?.map { signer ->
+        val status = when {
+            signer.signed -> SignerStatus.SIGNED
+            psbtStatus == "pending" || psbtStatus == "signed" -> SignerStatus.PENDING
+            else -> SignerStatus.MISSING
+        }
+        CosignerUiInfo(
+            fingerprint = signer.fingerprint,
+            cosignerIndex = signer.cosignerIndex,
+            originPath = signer.originPath,
+            xpub = signer.xpub,
+            status = status,
+            deviceId = signer.deviceId,
+            isMe = isCurrentUser(signer, myAccountIndex),
+            label = signer.label
+        )
+    } ?: emptyList()
 
     private fun isCurrentUser(
         signer: SignerDetailDto,
