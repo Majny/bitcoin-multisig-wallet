@@ -139,7 +139,7 @@ class SendTransactionViewModel : ViewModel() {
                     0L
                 }
 
-                if (fees != null) {
+                if (fees != null) { 
                     Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: fast=${fees.fastestFee} med=${fees.halfHourFee} low=${fees.hourFee}")
                 } else {
                     Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: unavailable")
