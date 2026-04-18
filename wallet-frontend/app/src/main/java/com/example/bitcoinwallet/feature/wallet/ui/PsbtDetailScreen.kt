@@ -262,13 +262,15 @@ fun PsbtDetailScreen(
                     }
                 } else if (state.currentUserSigned && !state.isBroadcast) {
                     // This device already signed — re-signing crashes Trezor Suite.
-                    // Show a disabled placeholder until enough cosigners have signed.
+                    // Tinted with ReceiveGreen to mirror the "Signed" status colour
+                    // used in the Signatures card; the disabled button reads as a
+                    // success-in-progress, not an error.
                     Button(
                         onClick = { },
                         enabled = false,
                         colors = ButtonDefaults.buttonColors(
-                            disabledContainerColor = DarkCard,
-                            disabledContentColor = TextMuted
+                            disabledContainerColor = ReceiveGreen.copy(alpha = 0.12f),
+                            disabledContentColor = ReceiveGreen
                         ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
