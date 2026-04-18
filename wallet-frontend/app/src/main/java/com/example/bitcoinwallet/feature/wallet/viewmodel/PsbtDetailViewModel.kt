@@ -476,10 +476,13 @@ class PsbtDetailViewModel : ViewModel() {
                     cosignerIndex = it.cosignerIndex
                 )
             },
-            // Preserve UI-only state that should survive a data refresh
+            // Preserve UI-only state that should survive a data refresh.
+            // broadcastSuccess is an *action* signal (user just broadcast) — never
+            // derive it from dto.status, otherwise opening an already-broadcast PSBT
+            // bounces the user to the "Transaction Sent" screen as if they just sent it.
             showSignersDialog = current.showSignersDialog,
             cosigners = current.cosigners,
-            broadcastSuccess = current.broadcastSuccess || dto.status == "broadcast",
+            broadcastSuccess = current.broadcastSuccess,
             isLoading = false
         )
     }

@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
@@ -25,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -115,19 +117,30 @@ fun PsbtDetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                // Signature progress badge
-                val progressColor = if (state.isFullySigned || state.canBroadcast) ReceiveGreen else AccentTeal
+                // Status badge — shows "Broadcasted" for already-sent PSBTs,
+                // otherwise the signature progress (e.g. "2 of 3 required").
+                val badgeColor = if (state.isBroadcast || state.isFullySigned || state.canBroadcast)
+                    ReceiveGreen else AccentTeal
                 Row(
                     modifier = Modifier
                         .padding(vertical = 12.dp)
                         .clip(RoundedCornerShape(20.dp))
-                        .background(progressColor.copy(alpha = 0.12f))
+                        .background(badgeColor.copy(alpha = 0.12f))
                         .padding(horizontal = 16.dp, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    if (state.isBroadcast) {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            tint = badgeColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                    }
                     Text(
-                        text = state.signaturesLabel,
-                        color = progressColor,
+                        text = if (state.isBroadcast) "Broadcasted" else state.signaturesLabel,
+                        color = badgeColor,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -246,7 +259,33 @@ fun PsbtDetailScreen(
                     .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                if ((state.isFullySigned || state.canBroadcast) && !state.isBroadcast) {
+                if (state.isBroadcast) {
+                    // Already-broadcast PSBT: no action, just show the txid.
+                    val txid = state.txid
+                    if (!txid.isNullOrBlank()) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(DarkSurface)
+                                .padding(14.dp)
+                        ) {
+                            Text(
+                                text = "Transaction ID",
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = txid,
+                                color = TextSecondary,
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                } else if ((state.isFullySigned || state.canBroadcast) && !state.isBroadcast) {
                     Button(
                         onClick = onBroadcast,
                         enabled = !state.isLoading,

@@ -116,6 +116,33 @@ object SessionStore {
         _pendingLogoutReason.value = value
     }
 
+    /**
+     * One-shot signal that the backend rejected the session (401 + refresh
+     * failed). Observed at the nav-host level so the UI can route the user
+     * back to the Trezor connect screen from anywhere, rather than leaving
+     * them on a broken screen with a generic error. Mirrors the WRONG_DEVICE
+     * flow. Consumers call [consumeSessionExpired] after acting.
+     */
+    private val _sessionExpired = MutableStateFlow(false)
+    val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
+
+    /**
+     * Called from the HTTP layer when a 401 could not be recovered via refresh.
+     * Sets the banner reason, wipes auth, then raises the flag so the UI
+     * navigates. Safe to call from any thread — StateFlow writes are atomic.
+     */
+    fun signalSessionExpired(
+        reason: String = "Session expired. Please reconnect your Trezor."
+    ) {
+        setPendingLogoutReason(reason)
+        clearAuth()
+        _sessionExpired.value = true
+    }
+
+    fun consumeSessionExpired() {
+        _sessionExpired.value = false
+    }
+
     fun clearAuth() {
         pendingIdentity = null
         session = null

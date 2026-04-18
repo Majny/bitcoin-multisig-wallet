@@ -21,6 +21,7 @@ import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -367,6 +368,12 @@ class WalletApiClient(
                     SessionPersistence.updateTokens(resp.accessToken, resp.refreshToken)
                     Log.d("WalletApiClient", "Access token refreshed")
                     true
+                } catch (e: CancellationException) {
+                    // Honor structured concurrency — never swallow cancellation,
+                    // otherwise a crash can follow: an exception thrown later in
+                    // validateResponse would fire inside an already-cancelled
+                    // coroutine and bypass the caller's try/catch.
+                    throw e
                 } catch (e: Exception) {
                     Log.w("WalletApiClient", "Token refresh failed", e)
                     false
@@ -399,7 +406,10 @@ class WalletApiClient(
                                 if (refreshed) {
                                     throw SessionRefreshedException()
                                 }
-                                SessionStore.clearAuth()
+                                // Signal the nav-host to route the user to the
+                                // connect screen (mirrors WRONG_DEVICE). This
+                                // also clears auth and sets the logout banner.
+                                SessionStore.signalSessionExpired()
                                 throw SessionExpiredException("Session expired. Please reconnect your Trezor.")
                             }
                             // Surface the backend's "error" field if present so screens can

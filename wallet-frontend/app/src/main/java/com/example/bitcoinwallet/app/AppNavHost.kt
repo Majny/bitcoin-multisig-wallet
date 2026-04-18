@@ -2,6 +2,8 @@ package com.example.bitcoinwallet.app
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import com.example.bitcoinwallet.core.api.ApiConfig
@@ -37,6 +39,20 @@ fun AppNavHost(
             navController.navigate(TrezorRoutes.Resolve) {
                 popUpTo(TrezorRoutes.Graph) { inclusive = false }
                 launchSingleTop = true
+            }
+        }
+    }
+
+    // Route the user back to the connect screen when the backend rejects the
+    // session (401 + refresh failed). Without this, the user would stay on a
+    // broken screen with "Session expired..." and have to kill the app to
+    // recover. Matches the WRONG_DEVICE flow in WalletNav.
+    val sessionExpired by SessionStore.sessionExpired.collectAsState()
+    LaunchedEffect(sessionExpired) {
+        if (sessionExpired) {
+            SessionStore.consumeSessionExpired()
+            navController.navigate(TrezorRoutes.Connect) {
+                popUpTo(0) { inclusive = true }
             }
         }
     }
