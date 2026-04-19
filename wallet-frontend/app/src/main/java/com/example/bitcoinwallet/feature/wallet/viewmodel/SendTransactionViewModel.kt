@@ -39,11 +39,26 @@ enum class FeePriority {
 }
 
 /**
+ * Unit the user is entering the amount in. FIAT uses [SendTransactionUiState.fiatCurrency]
+ * (CZK/USD/EUR, picked from settings). BTC is the canonical unit — sats are
+ * always derived from [SendTransactionUiState.amountInput] so transaction value
+ * does not drift as the exchange rate moves.
+ */
+enum class AmountUnit { BTC, FIAT }
+
+/**
  * UI State for the Send Transaction screen.
  */
 data class SendTransactionUiState(
     val recipientAddress: String = "",
-    val amountBtc: String = "",
+    // Raw text the user typed. Interpreted in [amountUnit]. BTC is the source of
+    // truth for [amountSats]; when the user enters FIAT we convert via
+    // [btcFiatRate] but never round-trip — flipping the unit keeps the
+    // already-committed BTC value untouched so the satoshi amount is stable.
+    val amountInput: String = "",
+    val amountUnit: AmountUnit = AmountUnit.BTC,
+    val fiatCurrency: String = "CZK",
+    val btcFiatRate: Double? = null,   // price of 1 BTC in [fiatCurrency]
     val feePriority: FeePriority = FeePriority.MEDIUM,
     val autoSelect: Boolean = true,
     val customFeeRate: String = "",   // sat/vB — used when autoSelect is off
@@ -96,11 +111,16 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     /**
-     * Loads wallet balance and fee estimates in parallel.
+     * Loads wallet balance, fee estimates, and BTC/fiat rate in parallel.
      */
     private fun loadInitialData() {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, error = null)
+            val currency = SessionStore.preferredCurrency.value.uppercase()
+            _uiState.value = _uiState.value.copy(
+                isLoading = true,
+                error = null,
+                fiatCurrency = currency
+            )
 
             val accessToken = SessionStore.session?.accessToken
             val walletId = SessionStore.activeWalletId
@@ -122,6 +142,20 @@ class SendTransactionViewModel : ViewModel() {
                     null
                 }
 
+                // Fetch BTC price in the user's preferred currency. If price-service
+                // is down we simply disable fiat input (the toggle falls back to BTC).
+                val rate = try {
+                    val prices = WalletApi.client.getBitcoinPrices(accessToken, "czk,usd,eur")
+                    when (currency) {
+                        "USD" -> prices.usd
+                        "EUR" -> prices.eur
+                        else -> prices.czk
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to fetch BTC price — fiat input will be disabled", e)
+                    null
+                }
+
                 // Zjisti kolik sats je rezervováno v pending PSBTs.
                 // Rezervovaná částka = součet VSTUPNÍCH UTXO (celé UTXO je zamčené
                 // do potvrzení transakce, change se vrátí až jako nové UTXO).
@@ -139,7 +173,7 @@ class SendTransactionViewModel : ViewModel() {
                     0L
                 }
 
-                if (fees != null) { 
+                if (fees != null) { +
                     Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: fast=${fees.fastestFee} med=${fees.halfHourFee} low=${fees.hourFee}")
                 } else {
                     Log.d(TAG, "Balance: ${balance.balanceSats} sats, reserved: $reserved sats, fees: unavailable")
@@ -149,7 +183,8 @@ class SendTransactionViewModel : ViewModel() {
                     isLoading = false,
                     balanceSats = balance.balanceSats,
                     reservedSats = reserved,
-                    feeEstimates = fees
+                    feeEstimates = fees,
+                    btcFiatRate = rate
                 )
                 recalculate()
             } catch (e: Exception) {
@@ -205,15 +240,50 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     fun onAmountChanged(amount: String) {
-        // Allow only valid BTC decimal input
         val filtered = amount.filter { it.isDigit() || it == '.' }
         _uiState.value = _uiState.value.copy(
-            amountBtc = filtered,
+            amountInput = filtered,
             amountError = null,
             txCreatedId = null
         )
         recalculate()
     }
+
+    /**
+     * Flip the entry unit between BTC and the user's fiat currency.
+     * Converts the current input so the sats value stays stable across the
+     * toggle — the user sees the same amount denominated differently,
+     * not a reset field.
+     */
+    fun onAmountUnitToggled() {
+        val state = _uiState.value
+        val rate = state.btcFiatRate
+        if (rate == null || rate <= 0.0) return   // no rate → fiat input disabled
+
+        val newUnit = if (state.amountUnit == AmountUnit.BTC) AmountUnit.FIAT else AmountUnit.BTC
+        val current = state.amountInput.toDoubleOrNull()
+        val converted = when {
+            current == null || current == 0.0 -> state.amountInput
+            newUnit == AmountUnit.FIAT -> formatFiatInput(current * rate)
+            else -> formatBtcInput(current / rate)
+        }
+        _uiState.value = state.copy(
+            amountUnit = newUnit,
+            amountInput = converted,
+            amountError = null,
+            txCreatedId = null
+        )
+        recalculate()
+    }
+
+    private fun formatBtcInput(btc: Double): String =
+        // 8 decimals covers satoshi precision; trailing zeros stripped for readability.
+        String.format(java.util.Locale.US, "%.8f", btc).trimEnd('0').trimEnd('.')
+
+    private fun formatFiatInput(fiat: Double): String =
+        // 2 decimals matches the WalletBalance fiat display; no grouping so the
+        // field text stays parseable as a decimal.
+        String.format(java.util.Locale.US, "%.2f", fiat).trimEnd('0').trimEnd('.')
 
     fun onFeePriorityChanged(priority: FeePriority) {
         _uiState.value = _uiState.value.copy(feePriority = priority)
@@ -520,8 +590,19 @@ class SendTransactionViewModel : ViewModel() {
 
     private fun recalculate() {
         val state = _uiState.value
-        val btcAmount = state.amountBtc.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
-        val amountSats = btcAmount.multiply(java.math.BigDecimal("100000000")).toLong()
+        // Sats are always derived — user types in either BTC or fiat, we normalise here.
+        val amountSats = when (state.amountUnit) {
+            AmountUnit.BTC -> {
+                val btc = state.amountInput.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
+                btc.multiply(java.math.BigDecimal("100000000")).toLong()
+            }
+            AmountUnit.FIAT -> {
+                val fiat = state.amountInput.toDoubleOrNull() ?: 0.0
+                val rate = state.btcFiatRate
+                if (rate == null || rate <= 0.0) 0L
+                else (fiat / rate * 100_000_000.0).toLong()
+            }
+        }
 
         // Odhad vsize pro 1 vstup, 2 výstupy (stejný vzorec jako backend PsbtBuilder):
         //   overhead = 10, output = 31 * 2 = 62

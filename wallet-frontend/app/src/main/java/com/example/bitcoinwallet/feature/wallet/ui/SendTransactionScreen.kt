@@ -23,6 +23,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.bitcoinwallet.core.api.FeeEstimatesDto
+import com.example.bitcoinwallet.feature.wallet.viewmodel.AmountUnit
 import com.example.bitcoinwallet.feature.wallet.viewmodel.FeePriority
 import com.example.bitcoinwallet.feature.wallet.viewmodel.SendTransactionUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
@@ -34,6 +35,7 @@ fun SendTransactionScreen(
     onClose: () -> Unit,
     onRecipientChanged: (String) -> Unit,
     onAmountChanged: (String) -> Unit,
+    onAmountUnitToggled: () -> Unit,
     onFeePriorityChanged: (FeePriority) -> Unit,
     onAutoSelectChanged: (Boolean) -> Unit,
     onCustomFeeRateChanged: (String) -> Unit,
@@ -113,23 +115,34 @@ fun SendTransactionScreen(
             // ── Amount ──
             SectionLabel("Amount")
             Spacer(Modifier.height(6.dp))
+            val unitLabel = if (state.amountUnit == AmountUnit.BTC) "BTC" else state.fiatCurrency
+            val fiatEnabled = (state.btcFiatRate ?: 0.0) > 0.0
+            val placeholder = if (state.amountUnit == AmountUnit.BTC) "0.00000000" else "0.00"
             OutlinedTextField(
-                value = state.amountBtc,
+                value = state.amountInput,
                 onValueChange = onAmountChanged,
-                placeholder = { Text("0.00000000", color = TextMuted) },
+                placeholder = { Text(placeholder, color = TextMuted) },
                 isError = state.amountError != null,
-                supportingText = state.amountError?.let { err ->
-                    { Text(err, color = ErrorRed, fontSize = 12.sp) }
+                supportingText = {
+                    val err = state.amountError
+                    if (err != null) {
+                        Text(err, color = ErrorRed, fontSize = 12.sp)
+                    } else {
+                        // Equivalent in the other unit so the user always sees both
+                        // denominations. Empty for a blank input to avoid "≈ 0 CZK" noise.
+                        val equivalent = amountEquivalent(state)
+                        if (equivalent != null) {
+                            Text(equivalent, color = TextMuted, fontSize = 12.sp)
+                        }
+                    }
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 trailingIcon = {
-                    Text(
-                        text = "BTC",
-                        color = TextMuted,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Medium,
-                        modifier = Modifier.padding(end = 12.dp)
+                    AmountUnitPill(
+                        label = unitLabel,
+                        enabled = fiatEnabled,
+                        onClick = onAmountUnitToggled
                     )
                 },
                 modifier = Modifier.fillMaxWidth(),
@@ -437,6 +450,68 @@ private fun formatFee(sats: Long, rateSatVb: Double): String {
     return "$sats sats ($rateStr sat/vB)"
 }
 
+/**
+ * Clickable pill showing the current amount unit. Tapping flips BTC ↔ fiat.
+ * Disabled (no click + muted colour) when the BTC/fiat rate is unavailable,
+ * so the user isn't offered a toggle that would produce a 0 sats amount.
+ */
+@Composable
+private fun AmountUnitPill(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    val bg = if (enabled) AccentTeal.copy(alpha = 0.15f) else DarkCard.copy(alpha = 0.4f)
+    val fg = if (enabled) AccentTeal else TextMuted
+    Row(
+        modifier = Modifier
+            .padding(end = 8.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(bg)
+            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .padding(horizontal = 10.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = fg,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
+        if (enabled) {
+            Spacer(Modifier.width(4.dp))
+            Text(
+                text = "⇅",
+                color = fg,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+/**
+ * Human-readable representation of the amount in the *other* unit (the one the
+ * user is not currently typing in). Returns null when the input is empty or
+ * the rate is missing, so the supporting text stays empty instead of echoing "≈ 0".
+ */
+private fun amountEquivalent(state: SendTransactionUiState): String? {
+    val input = state.amountInput.toDoubleOrNull() ?: return null
+    if (input == 0.0) return null
+    val rate = state.btcFiatRate ?: return null
+    if (rate <= 0.0) return null
+    return when (state.amountUnit) {
+        AmountUnit.BTC -> {
+            val fiat = input * rate
+            "≈ ${String.format(java.util.Locale.US, "%,.2f", fiat)} ${state.fiatCurrency}"
+        }
+        AmountUnit.FIAT -> {
+            val btc = input / rate
+            "≈ ${String.format(java.util.Locale.US, "%.8f", btc)} BTC"
+        }
+    }
+}
+
 @Composable
 private fun fieldColors() = OutlinedTextFieldDefaults.colors(
     focusedTextColor = TextPrimary,
@@ -458,7 +533,7 @@ private fun SendTransactionScreenPreview() {
         SendTransactionScreen(
             state = SendTransactionUiState(
                 recipientAddress = "",
-                amountBtc = "0.00100000",
+                amountInput = "0.00100000",
                 feePriority = FeePriority.MEDIUM,
                 autoSelect = true,
                 balanceSats = 198_901_089L,
@@ -471,6 +546,7 @@ private fun SendTransactionScreenPreview() {
             onClose = {},
             onRecipientChanged = {},
             onAmountChanged = {},
+            onAmountUnitToggled = {},
             onFeePriorityChanged = {},
             onAutoSelectChanged = {},
             onCustomFeeRateChanged = {},
@@ -488,7 +564,7 @@ private fun SendTransactionScreenManualPreview() {
         SendTransactionScreen(
             state = SendTransactionUiState(
                 recipientAddress = "",
-                amountBtc = "0.00100000",
+                amountInput = "0.00100000",
                 autoSelect = false,
                 customFeeRate = "",
                 balanceSats = 198_901_089L,
@@ -501,6 +577,7 @@ private fun SendTransactionScreenManualPreview() {
             onClose = {},
             onRecipientChanged = {},
             onAmountChanged = {},
+            onAmountUnitToggled = {},
             onFeePriorityChanged = {},
             onAutoSelectChanged = {},
             onCustomFeeRateChanged = {},
