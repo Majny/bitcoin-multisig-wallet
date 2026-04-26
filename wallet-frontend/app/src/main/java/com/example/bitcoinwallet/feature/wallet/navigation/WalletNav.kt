@@ -868,6 +868,13 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 },
                 onRenameCosigner = { idx, label ->
                     viewModel.updateCosignerLabel(idx, label)
+                },
+                onCancelPsbt = {
+                    // Delete the draft on the backend (which releases the
+                    // reserved UTXOs) and pop back to the PSBT list.
+                    viewModel.cancelPsbt(onSuccess = {
+                        navController.popBackStack()
+                    })
                 }
             )
         }

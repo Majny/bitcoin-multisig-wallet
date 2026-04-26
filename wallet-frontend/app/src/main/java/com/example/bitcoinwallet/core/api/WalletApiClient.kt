@@ -10,6 +10,7 @@ import io.ktor.client.call.body
 import io.ktor.client.engine.android.Android
 import io.ktor.client.plugins.HttpResponseValidator
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
@@ -188,6 +189,19 @@ class WalletApiClient(
         return client.get("$baseUrl/psbt/wallet/$walletId") {
             header("Authorization", "Bearer $accessToken")
         }.body()
+    }
+
+    /* DELETE /psbt/{id} — cancels a pending or signed PSBT and releases its
+     * reserved UTXOs so they can be used in a new transaction. The backend
+     * rejects deletion of already-broadcast PSBTs (audit history). */
+    suspend fun deletePsbt(psbtId: String, accessToken: String) {
+        val response = client.delete("$baseUrl/psbt/$psbtId") {
+            header("Authorization", "Bearer $accessToken")
+        }
+        if (!response.status.isSuccess()) {
+            val body = response.bodyAsText()
+            throw RuntimeException("Failed to cancel PSBT (${response.status.value}): $body")
+        }
     }
 
     /* POST /psbt/{id}/sign-trezor — submit Trezor Connect signatures (one per

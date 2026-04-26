@@ -60,6 +60,9 @@ data class PsbtDetailUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val broadcastSuccess: Boolean = false,
+    // Set after the user successfully cancels a draft PSBT — UI uses it to
+    // navigate back to the PSBT list once.
+    val deleteSuccess: Boolean = false,
     // True while waiting for Trezor Suite to return a sign callback.
     val awaitingTrezor: Boolean = false
 ) {
@@ -261,6 +264,38 @@ class PsbtDetailViewModel : ViewModel() {
     fun consumeBroadcastSuccess() {
         if (_uiState.value.broadcastSuccess) {
             _uiState.value = _uiState.value.copy(broadcastSuccess = false)
+        }
+    }
+
+    /*
+     * Cancels the current PSBT — backend deletes the row and releases its
+     * UTXO reservations. Callable while the PSBT is pending or partially
+     * signed; refuses on already-broadcast PSBTs (audit history). On success
+     * the caller's [onSuccess] is invoked to drive navigation.
+     */
+    fun cancelPsbt(onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val accessToken = SessionStore.session?.accessToken ?: return@launch
+            if (state.psbtId.isBlank() || state.isBroadcast) return@launch
+
+            _uiState.value = state.copy(isLoading = true, error = null)
+
+            try {
+                Log.d(TAG, "Cancelling PSBT: ${state.psbtId}")
+                WalletApi.client.deletePsbt(state.psbtId, accessToken)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    deleteSuccess = true
+                )
+                onSuccess()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error cancelling PSBT", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoading = false,
+                    error = e.message ?: "Failed to cancel PSBT"
+                )
+            }
         }
     }
 

@@ -11,13 +11,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -61,14 +64,50 @@ fun PsbtDetailScreen(
     onShowRecipients: () -> Unit,
     onDismissRecipients: () -> Unit,
     onRenameCosigner: (cosignerIdx: Int, newLabel: String) -> Unit = { _, _ -> },
+    onCancelPsbt: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    var showCancelDialog by remember { mutableStateOf(false) }
+
     if (state.showSignersDialog) {
         SignersDialog(
             cosigners = state.cosigners,
             isLoading = state.signersLoading,
             onDismiss = onDismissRecipients,
             onRename = onRenameCosigner
+        )
+    }
+
+    if (showCancelDialog) {
+        AlertDialog(
+            onDismissRequest = { showCancelDialog = false },
+            containerColor = DarkCard,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            title = { Text("Cancel transaction?") },
+            text = {
+                Text(
+                    "This deletes the draft and frees the reserved UTXOs " +
+                        "so they can be spent in a new transaction. " +
+                        "Already-collected signatures are discarded. " +
+                        "This cannot be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showCancelDialog = false
+                        onCancelPsbt()
+                    }
+                ) {
+                    Text("Cancel PSBT", color = ErrorRed, fontWeight = FontWeight.SemiBold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCancelDialog = false }) {
+                    Text("Keep", color = TextSecondary)
+                }
+            }
         )
     }
 
@@ -336,6 +375,26 @@ fun PsbtDetailScreen(
                             if (state.isLoading) "Processing…" else "Sign with Trezor",
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold, fontSize = 16.sp
+                        )
+                    }
+                }
+
+                // Cancel PSBT — destructive secondary action, hidden once the
+                // tx is broadcast (audit history is preserved on the backend).
+                if (!state.isBroadcast) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { showCancelDialog = true },
+                        enabled = !state.isLoading,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                    ) {
+                        Text(
+                            "Cancel PSBT",
+                            color = ErrorRed,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 15.sp
                         )
                     }
                 }
