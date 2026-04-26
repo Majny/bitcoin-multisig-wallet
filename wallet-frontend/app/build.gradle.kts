@@ -1,9 +1,24 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
 }
+
+// Load `local.properties` (gitignored) for developer-specific overrides.
+// Used to inject the API gateway URL into BuildConfig without hardcoding it
+// into the source. If the file or the property is missing, the build falls
+// back to the default below — `10.0.2.2`, which is the Android emulator's
+// alias for the host machine's localhost. With the backend running via
+// `docker compose up`, that default makes the app work out-of-the-box.
+val localProperties = Properties().apply {
+    val file = rootProject.file("local.properties")
+    if (file.exists()) load(file.inputStream())
+}
+val apiGatewayBaseUrl: String = localProperties.getProperty("api.gateway.base.url")
+    ?: "http://10.0.2.2:8080/api/v1"
 
 android {
     namespace = "com.example.bitcoinwallet"
@@ -15,10 +30,13 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "API_GATEWAY_BASE_URL", "\"$apiGatewayBaseUrl\"")
     }
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     compileOptions {

@@ -1,0 +1,45 @@
+# Example `local.properties` for the Android frontend.
+#
+# Android Studio creates `local.properties` automatically on first project
+# open and writes the SDK location into it. The build also reads an optional
+# `api.gateway.base.url` key from the same file to inject the backend URL
+# into BuildConfig (see `app/build.gradle.kts`).
+#
+# `local.properties` is in `.gitignore`, so per-developer values stay local
+# and never end up in the repository.
+#
+# To use this template:
+#   1) Copy this file:  cp local.properties.example local.properties
+#   2) Adjust `sdk.dir` to point at your Android SDK installation.
+#   3) Pick / adapt one of the `api.gateway.base.url` examples below.
+#   4) In Android Studio: File -> Sync Project with Gradle Files, then Build.
+#
+# If `api.gateway.base.url` is missing or this whole file is missing, the
+# build falls back to http://10.0.2.2:8080/api/v1 — the Android emulator's
+# alias for the host machine's localhost. Combined with the backend running
+# via `docker compose up`, that default makes the app work in the emulator
+# without any edits. For a real device you must set the line below.
+
+# Path to your Android SDK installation (Android Studio fills this in
+# automatically when you open the project). Examples:
+#   sdk.dir=/home/<user>/Android/Sdk          # Linux
+#   sdk.dir=/Users/<user>/Library/Android/sdk # macOS
+#   sdk.dir=C\:\\Users\\<user>\\AppData\\Local\\Android\\Sdk  # Windows
+sdk.dir=/path/to/Android/Sdk
+
+# URL of the API gateway. Pick the variant that matches your setup:
+#
+#   - Android emulator + backend via `docker compose up` on the same host:
+#       (no need to set anything — the build default 10.0.2.2 already works)
+#       api.gateway.base.url=http://10.0.2.2:8080/api/v1
+#
+#   - Real Android device on the same LAN as the host running Docker:
+#       (replace 192.168.0.100 with the host's LAN IP — `ip addr show` /
+#       `ipconfig` will tell you)
+#       api.gateway.base.url=http://192.168.0.100:8080/api/v1
+#
+#   - Real device reaching the backend over Tailscale, ngrok, or another tunnel:
+#       api.gateway.base.url=http://<tailnet-or-tunnel-host>:8080/api/v1
+#
+# Pick one and uncomment it:
+#api.gateway.base.url=http://10.0.2.2:8080/api/v1
