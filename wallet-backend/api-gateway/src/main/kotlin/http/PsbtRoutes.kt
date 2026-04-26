@@ -13,7 +13,9 @@ import io.ktor.server.routing.*
 fun Route.psbtRoutes() {
     authenticate("auth-jwt") {
         route("/psbt") {
-            // POST /psbt - vytvoří nové PSBT (ownership checked via walletId in request)
+
+            /* POST /api/v1/psbt — creates a PSBT for the supplied walletId.
+             * Ownership is enforced: caller must be a member of that wallet. */
             post {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -23,7 +25,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // GET /psbt/{id} - detail PSBT
+            /* GET /api/v1/psbt/{id} — full PSBT detail. */
             get("/{id}") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -33,7 +35,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // GET /psbt/wallet/{walletId} - seznam PSBT pro wallet
+            /* GET /api/v1/psbt/wallet/{walletId} — PSBT list, optional ?status= filter. */
             get("/wallet/{walletId}") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -44,7 +46,8 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // POST /psbt/{id}/broadcast-raw - broadcastuje raw signed tx (z Trezor Connect)
+            /* POST /api/v1/psbt/{id}/broadcast-raw — propagates a complete signed
+             * tx (the one Trezor Connect returned as serializedTx) to the network. */
             post("/{id}/broadcast-raw") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -56,7 +59,8 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // POST /psbt/{id}/sign-trezor - přidá Trezor Connect podpisy (multisig)
+            /* POST /api/v1/psbt/{id}/sign-trezor — records a cosigner's signatures
+             * (multisig path). psbt-service handles BIP-67 placement server-side. */
             post("/{id}/sign-trezor") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -69,7 +73,9 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // GET /psbt/{id}/signers - stav podpisů (kdo podepsal, kdo chybí) + per-device labely
+            /* GET /api/v1/psbt/{id}/signers — per-cosigner signing state, enriched
+             * with the caller's private labels. Label lookup failures are
+             * non-fatal: we return the generic response without labels. */
             get("/{id}/signers") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -78,7 +84,6 @@ fun Route.psbtRoutes() {
                 if (!verifyWalletAccess(deviceId, psbt.walletId)) return@get
 
                 val resp = call.application.deps.psbt.getSigners(id)
-                // Layer the caller's per-device labels on top of the psbt-service response.
                 val labels = try {
                     call.application.deps.registry.getCosignerLabels(psbt.walletId, deviceId)
                 } catch (e: Exception) {
@@ -91,7 +96,9 @@ fun Route.psbtRoutes() {
                 call.respond(enriched)
             }
 
-            // GET /psbt/verify-address - Trezor Connect getAddress params for on-device verification
+            /* GET /api/v1/psbt/verify-address — returns Trezor Connect getAddress
+             * params for on-device verification of a receive address (Show On
+             * Trezor button). */
             get("/verify-address") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -108,7 +115,8 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            // DELETE /psbt/{id} - smaže PSBT
+            /* DELETE /api/v1/psbt/{id} — drops an unsent PSBT and releases its
+             * reserved UTXOs back into the available pool. */
             delete("/{id}") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -122,10 +130,9 @@ fun Route.psbtRoutes() {
     }
 }
 
-/**
- * Verify that the authenticated device is a member of the given wallet.
- * Responds with 403/404 and returns false on failure.
- */
+/* Shared guard for PSBT routes. Confirms the authenticated device is listed
+ * as a member of the wallet. Responds 404 (unknown wallet) or 403 (not a
+ * member) and returns false so the handler can bail out. */
 private suspend fun io.ktor.server.routing.RoutingContext.verifyWalletAccess(
     deviceId: String,
     walletId: String

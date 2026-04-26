@@ -6,6 +6,9 @@ import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
 import org.jetbrains.exposed.sql.Database
 
+/* Database bootstrap. Reads connection settings via Typesafe Config (so docker
+ * env can override application.conf), runs Flyway migrations and then starts
+ * a Hikari pool wired into Exposed. */
 object Db {
 
     data class DbConfig(
@@ -23,6 +26,7 @@ object Db {
         )
     }
 
+    /* Migrate first, then connect — guarantees Exposed never sees a half-applied schema. */
     fun init(db: DbConfig) {
         Flyway.configure()
             .dataSource(db.url, db.user, db.password)

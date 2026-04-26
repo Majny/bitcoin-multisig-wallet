@@ -11,6 +11,10 @@ import cz.majny.wallet.gateway.plugins.httpClient
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
 
+/*
+ * api-gateway entry point. Wires up Ktor plugins, constructs upstream clients,
+ * and starts the Netty server on the configured port (default 8080).
+ */
 fun main() {
     val cfg = AppConfig.fromEnv()
 
@@ -19,7 +23,7 @@ fun main() {
         configureErrorHandling()
         configureHttpClient()
 
-        val client = httpClient // Get the configured HttpClient
+        val client = httpClient
 
         val deps = GatewayDeps(
             config = cfg,

@@ -4,25 +4,23 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 
-/**
- * Persists the essential pieces of a user session across process death so the
- * app can resume instead of sending the user back to the Trezor login screen.
+/*
+ * Persists the essential pieces of a user session across process death so
+ * the app can resume instead of sending the user back to the Trezor login
+ * screen.
  *
- * NOT encrypted — uses a plain SharedPreferences file. That is acceptable for
- * the thesis demo because the tokens are short-lived and re-issued via the
- * refresh flow, but a production build should swap this for EncryptedSharedPreferences
- * (androidx.security:security-crypto) or store in the Android Keystore.
+ * NOT encrypted — plain SharedPreferences file. Acceptable for the thesis
+ * demo because tokens are short-lived and re-issued via the refresh flow;
+ * a production build should swap this for EncryptedSharedPreferences
+ * (androidx.security:security-crypto) or the Android Keystore.
  *
- * What we persist:
- *  - access + refresh tokens (needed to re-authenticate API calls)
- *  - user id / display name / trezor fingerprint (used across screens)
- *  - activeWalletId + activeAccountIndex (so the dashboard opens on the right wallet)
- *  - selectedNetwork and preferredCurrency
+ * Persisted: access + refresh tokens, user id / display name / fingerprint,
+ * active wallet id + account index, selected network and preferred currency.
  *
- * What we do NOT persist:
- *  - wallet list (re-fetched from backend on restore; the token is enough)
- *  - pendingSignedPsbt / pendingTrezorSignatures (ephemeral, flow-specific)
- *  - pendingRequestId (a stale request after process death must be rejected anyway)
+ * Not persisted: wallet list (re-fetched from backend on restore — the
+ * token is enough), pendingSignedPsbt / pendingTrezorSignatures (ephemeral
+ * per-flow state), pendingRequestId (a stale callback after process death
+ * must be rejected anyway).
  */
 object SessionPersistence {
 
@@ -64,7 +62,7 @@ object SessionPersistence {
         val preferredCurrency: String
     )
 
-    /** Returns the persisted session, or null if none / prefs not initialised. */
+    /* Returns the persisted session, or null if none / prefs not initialised. */
     fun load(): Snapshot? {
         val p = prefs ?: return null
         val accessToken = p.getString(KEY_ACCESS_TOKEN, null) ?: return null
@@ -110,7 +108,7 @@ object SessionPersistence {
         }.apply()
     }
 
-    /** Persist the new access token (and optional refresh) after a refresh call. */
+    /* Persist the new access token (and optional refresh) after a refresh call. */
     fun updateTokens(accessToken: String, refreshToken: String?) {
         val p = prefs ?: return
         p.edit().apply {

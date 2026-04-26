@@ -22,6 +22,13 @@ object TrezorRoutes {
     const val SelectAccount = "trezor_select_account"
 }
 
+/*
+ * Three-step onboarding: Connect (pick network, launch Trezor deeplink) →
+ * Resolve (exchange xpubs for a session, run discovery) → SelectAccount
+ * (pick which discovered wallet to open). Everything outside here treats
+ * "session with active wallet" as the only valid entry into the wallet
+ * graph — this graph is what establishes both.
+ */
 fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
     navigation(
         startDestination = TrezorRoutes.Connect,
@@ -101,10 +108,11 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
         }
 
         composable(TrezorRoutes.SelectAccount) {
-            // Zobraz jen wallety sítě, se kterou se právě přihlásilo.
-            // pendingIdentity.derivationPath: "m/84'/1'/0'" = testnet, "m/84'/0'/0'" = mainnet.
-            // Po restartu aplikace je pendingIdentity null; v takovém případě použijeme
-            // SessionStore.selectedNetwork, který se persistuje s~session.
+            // Show only wallets on the network the user just logged in on.
+            // pendingIdentity.derivationPath: "m/84'/1'/0'" = testnet,
+            // "m/84'/0'/0'" = mainnet. After a restart pendingIdentity is null,
+            // so fall back to SessionStore.selectedNetwork which is persisted
+            // alongside the session.
             val connectedNetwork = SessionStore.pendingIdentity?.derivationPath
                 ?.let { if (it.contains("'/1'/")) "testnet" else "mainnet" }
                 ?: SessionStore.selectedNetwork

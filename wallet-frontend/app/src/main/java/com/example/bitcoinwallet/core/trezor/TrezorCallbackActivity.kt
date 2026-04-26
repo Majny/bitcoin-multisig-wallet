@@ -11,6 +11,17 @@ import com.example.bitcoinwallet.core.session.SignResultType
 import com.example.bitcoinwallet.core.signer.TrezorDeviceIdentity
 import org.json.JSONObject
 
+/*
+ * Receives the deeplink callback from Trezor Suite Mobile after every
+ * Trezor Connect operation (login getPublicKey, signTransaction, getAddress).
+ * Validates the callback id against the one TrezorDeeplinkLauncher recorded,
+ * parses the payload by action, drops the result into SessionStore, and
+ * relaunches MainActivity so the in-flight Compose flow can pick it up.
+ *
+ * Defense-in-depth: also checks that the responding device's fingerprint
+ * matches the session — guards the "user logged in with Trezor A but tried
+ * to sign with Trezor B" case before the signature ever reaches the backend.
+ */
 class TrezorCallbackActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,7 +78,7 @@ class TrezorCallbackActivity : ComponentActivity() {
         }
     }
 
-    /**
+    /*
      * Handle getPublicKey callback — used for login/account discovery.
      * Supports bundle mode: Trezor returns all xpubs in a single callback.
      */
@@ -104,7 +115,7 @@ class TrezorCallbackActivity : ComponentActivity() {
         finish()
     }
 
-    /**
+    /*
      * Handle signTransaction callback — user confirmed tx on Trezor.
      * Trezor Connect returns serializedTx (raw signed tx hex).
      * Legacy PSBT signing returns signedPsbt.
@@ -151,7 +162,7 @@ class TrezorCallbackActivity : ComponentActivity() {
         finish()
     }
 
-    /**
+    /*
      * Inspect a failed Trezor response JSON and decide whether it looks like a
      * user cancel, a wrong-device path rejection, or a generic protocol error.
      * The classification drives the message the UI shows.
@@ -181,7 +192,7 @@ class TrezorCallbackActivity : ComponentActivity() {
         }
     }
 
-    /**
+    /*
      * Returns true when the Trezor that produced this response identifies itself
      * with a different master fingerprint than the one we authenticated with.
      * Returns false if either fingerprint is missing — we cannot verify, so we
@@ -205,11 +216,12 @@ class TrezorCallbackActivity : ComponentActivity() {
             ?: payload.optString("device_fingerprint", "").ifBlank { null }
     }
 
-    /**
-     * Parsuje Trezor sign response a rozliší serializedTx (Trezor Connect)
-     * od signedPsbt (legacy PSBT flow).
-     * Vrací Pair(data, type) nebo null.
-     * Pro multisig: také extrahuje `signatures` array a uloží do SessionStore.
+    /*
+     * Parses a Trezor sign response and distinguishes serializedTx
+     * (Trezor Connect signTransaction — singlesig fast-path) from signedPsbt
+     * (legacy PSBT flow — multisig). Returns Pair(data, type) or null on
+     * failure. For multisig also extracts the per-input `signatures` array
+     * and parks it in SessionStore for the multisig submit path.
      */
     private fun parseSignResult(responseJson: String): Pair<String, SignResultType>? {
         return try {
@@ -242,7 +254,8 @@ class TrezorCallbackActivity : ComponentActivity() {
                 SessionStore.setPendingTrezorSignatures(null)
             }
 
-            // Trezor Connect signTransaction vrací serializedTx (kompletní podepsaná tx)
+            // signTransaction returns serializedTx — the complete signed tx,
+            // already finalized — used for the singlesig broadcast-raw fast-path.
             val serializedTx = payload.optString("serializedTx", "")
             if (serializedTx.isNotBlank()) {
                 Log.d("TrezorCallback", "Received serializedTx (${serializedTx.length} chars)")
@@ -267,7 +280,7 @@ class TrezorCallbackActivity : ComponentActivity() {
         }
     }
 
-    /**
+    /*
      * Parses a bundle response where payload is a JSON array of xpub results.
      */
     private fun parseBundleResponse(responseJson: String): List<TrezorDeviceIdentity> {

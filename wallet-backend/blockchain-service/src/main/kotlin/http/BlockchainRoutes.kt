@@ -8,18 +8,20 @@ import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 
-/**
- * Routes for blockchain data via Mempool.space API.
+/*
+ * Thin REST facade over MempoolClient. Every endpoint picks between the
+ * mainnet and testnet4 backends based on the ?network query param (default
+ * mainnet) and otherwise just forwards the call. No business logic lives
+ * here — this service is intentionally a pass-through proxy.
  */
 fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
     fun clientFor(network: String?) = if (network?.lowercase() == "testnet") testnet else mainnet
 
     route("/api/v1/blockchain") {
 
-        /**
-         * GET /api/v1/blockchain/address/{address}?network=mainnet|testnet
-         * Get address info including balance and tx count.
-         */
+        /* GET /address/{address} — balance, tx count, UTXO count. Confirmed
+         * and unconfirmed are exposed separately so the wallet can flag
+         * mempool-only funds in the UI. */
         get("/address/{address}") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -36,10 +38,8 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
                         info.mempool_stats.funded_txo_count - info.mempool_stats.spent_txo_count
             ))
         }
-        
-        /**
-         * GET /api/v1/blockchain/address/{address}/utxos?network=mainnet|testnet
-         */
+
+        /* GET /address/{address}/utxos — full UTXO list, used by coin control. */
         get("/address/{address}/utxos") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -48,9 +48,7 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
             call.respond(utxos)
         }
 
-        /**
-         * GET /api/v1/blockchain/address/{address}/txs?network=mainnet|testnet
-         */
+        /* GET /address/{address}/txs — raw tx history, classified downstream. */
         get("/address/{address}/txs") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -59,9 +57,8 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
             call.respond(txs)
         }
 
-        /**
-         * GET /api/v1/blockchain/address/{address}/has-activity?network=mainnet|testnet
-         */
+        /* GET /address/{address}/has-activity — activity probe, used during
+         * BIP-44 gap-limit scanning where only the boolean matters. */
         get("/address/{address}/has-activity") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -70,27 +67,22 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
             call.respond(HasActivityResponse(address = address, hasActivity = hasActivity))
         }
 
-        /**
-         * GET /api/v1/blockchain/fees?network=mainnet|testnet
-         */
+        /* GET /fees — current sat/vB recommendations (fastest/30 min/1 h/…). */
         get("/fees") {
             val mempool = clientFor(call.request.queryParameters["network"])
             val fees = mempool.getFeeEstimates()
             call.respond(fees)
         }
 
-        /**
-         * GET /api/v1/blockchain/tip/height?network=mainnet|testnet
-         */
+        /* GET /tip/height — current chain tip, used to convert a tx's
+         * block_height into a confirmations count. */
         get("/tip/height") {
             val mempool = clientFor(call.request.queryParameters["network"])
             val height = mempool.getTipHeight()
             call.respond(TipHeightResponse(height))
         }
 
-        /**
-         * GET /api/v1/blockchain/tx/{txid}?network=mainnet|testnet
-         */
+        /* GET /tx/{txid} — single transaction detail. */
         get("/tx/{txid}") {
             val txid = call.parameters["txid"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing txid")
@@ -99,10 +91,9 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
             call.respond(tx)
         }
 
-        /**
-         * GET /api/v1/blockchain/tx/{txid}/hex?network=mainnet|testnet
-         * Vrátí raw hex transakce — potřebné pro PSBT_IN_NON_WITNESS_UTXO.
-         */
+        /* GET /tx/{txid}/hex — raw tx hex. Needed so psbt-service can fill
+         * PSBT_IN_NON_WITNESS_UTXO for every input; Trezor firmware 2.4+
+         * requires the full previous tx even for native segwit. */
         get("/tx/{txid}/hex") {
             val txid = call.parameters["txid"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing txid")
@@ -111,9 +102,9 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
             call.respond(mapOf("hex" to hex))
         }
 
-        /**
-         * POST /api/v1/blockchain/tx/broadcast?network=mainnet|testnet
-         */
+        /* POST /tx/broadcast — push a signed raw tx. MempoolBroadcastException
+         * is mapped to a 400 with the upstream body so the UI can surface the
+         * real reason (e.g. insufficient fee, double spend). */
         post("/tx/broadcast") {
             val request = call.receive<BroadcastRequest>()
             val mempool = clientFor(call.request.queryParameters["network"])

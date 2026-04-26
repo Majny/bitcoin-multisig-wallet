@@ -12,6 +12,8 @@ import io.ktor.server.routing.*
 
 fun Route.walletRoutes() {
     authenticate("auth-jwt") {
+
+        /* GET /api/v1/wallets — wallets the caller is a member of. */
         get("/wallets") {
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()
@@ -21,12 +23,9 @@ fun Route.walletRoutes() {
             call.respond(wallets)
         }
 
-        /**
-         * POST /api/v1/wallets
-         *
-         * Create a new wallet (single-sig or multisig).
-         * The request body is forwarded directly to wallet-registry.
-         */
+        /* POST /api/v1/wallets — creates a wallet (single-sig or multisig).
+         * The request body is forwarded to wallet-registry after ensuring the
+         * caller is listed as a member so they get access immediately. */
         post("/wallets") {
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()
@@ -52,15 +51,10 @@ fun Route.walletRoutes() {
             }
         }
 
-        /**
-         * POST /api/v1/wallets/import
-         *
-         * Import a wallet from an output descriptor (e.g. from Sparrow, Bitcoin Core).
-         * Supports both single-sig and multisig descriptors.
-         *
-         * Body: { descriptor, network?, label?, birthHeight? }
-         * The gateway enriches with deviceId and fingerprint from JWT.
-         */
+        /* POST /api/v1/wallets/import — imports a wallet from an output
+         * descriptor (typically produced in Sparrow). Gateway enriches the
+         * registry request with deviceId + fingerprint from the JWT so the
+         * registry knows who the caller is. */
         post("/wallets/import") {
             call.application.log.info("POST /wallets/import received")
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
@@ -102,16 +96,10 @@ fun Route.walletRoutes() {
             }
         }
 
-        /**
-         * GET /wallets/{walletId}/address
-         *
-         * Returns one or more derived addresses for the wallet.
-         * Proxies to wallet-registry which stores pre-derived addresses.
-         *
-         * Query params:
-         * - type:  "receive" (default) or "change"
-         * - index: address index (default 0). If omitted together with type, returns all addresses.
-         */
+        /* GET /api/v1/wallets/{walletId}/address — one derived address from the
+         * registry's pre-derived pool. Query params: type (receive/change,
+         * default receive), index (default 0). Enforces membership before
+         * proxying. */
         get("/wallets/{walletId}/address") {
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()
@@ -147,12 +135,10 @@ fun Route.walletRoutes() {
             call.respond(addressResponse)
         }
 
-        /**
-         * PUT /wallets/{walletId}/cosigners/{idx}/label
-         * Upserts the per-device label for a cosigner position.
-         * device_id comes from JWT — each Trezor keeps its own labels so they
-         * don't leak to other members of the same wallet.
-         */
+        /* PUT /api/v1/wallets/{walletId}/cosigners/{idx}/label — upserts the
+         * caller's own label for a cosigner position. Scoped by device_id from
+         * the JWT: labels are private to each Trezor and never leak between
+         * members of the same multisig wallet. */
         put("/wallets/{walletId}/cosigners/{idx}/label") {
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()

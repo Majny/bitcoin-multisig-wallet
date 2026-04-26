@@ -1,3 +1,5 @@
+/* DTOs for the auth surface (login + token refresh). Field names mirror what
+ * the frontend sends and what auth-service expects. */
 package cz.majny.wallet.gateway.dto
 
 import kotlinx.serialization.Serializable

@@ -35,11 +35,17 @@ private fun need(k: String): String =
 private fun opt(k: String): String? =
     System.getenv(k)
 
+/*
+ * Singleton client around bitcoind's JSON-RPC. Owns the HttpClient, the
+ * basic-auth header, and a tiny per-key rate-limiter. Every outbound call
+ * is gated by the allowlist so an attacker who finds the API key can't
+ * invoke wallet-mutating RPCs.
+ */
 object RpcClient {
     private val cfg = Config(
-        rpcUrl = need("RPC_URL"),          // např. http://127.0.0.1:8332/
-        rpcUser = need("RPC_USER"),        // backend
-        rpcPass = need("RPC_PASS"),        // heslo z rpcauth.py
+        rpcUrl  = need("RPC_URL"),           // e.g. http://127.0.0.1:8332/
+        rpcUser = need("RPC_USER"),          // bitcoind rpcauth username
+        rpcPass = need("RPC_PASS"),          // bitcoind rpcauth password
         apiKey  = opt("API_KEY"),
         connectTimeoutMs = (opt("UPSTREAM_CONNECT_TIMEOUT_MS") ?: "4000").toLong(),
         socketTimeoutMs  = (opt("UPSTREAM_SOCKET_TIMEOUT_MS")  ?: "8000").toLong(),
@@ -72,13 +78,18 @@ object RpcClient {
         }
     }
 
-    // jednoduchý per-key rate-limit: N req/min
+    // Crude per-key sliding-window: 60 req/min/key. Counters are
+    // process-local — fine for a single-instance proxy.
     private val windowMs = 1.minutes.inWholeMilliseconds
     private val limitPerWindow = 60
-    private val counters = ConcurrentHashMap<String, Pair<Long, AtomicInteger>>() // key -> (windowStart, count)
+    private val counters = ConcurrentHashMap<String, Pair<Long, AtomicInteger>>()
 
     fun requireApiKeyOrNull(): String? = cfg.apiKey
 
+    /*
+     * Returns true if the bucket is still within its quota. Resets the
+     * window on the first call in a new minute.
+     */
     fun allowRequest(bucketKey: String): Boolean {
         val now = System.currentTimeMillis()
         val entry = counters.compute(bucketKey) { _, old ->
@@ -95,6 +106,13 @@ object RpcClient {
         return if (now - start >= windowMs) true else count.get() <= limitPerWindow
     }
 
+    /*
+     * Forward a JSON-RPC request to bitcoind. Disallowed methods short-circuit
+     * with -32601 (method not found). Transport errors retry with linear
+     * backoff up to cfg.retries; an upstream non-2xx still returns a
+     * well-formed JsonRpcResponse so callers don't need a separate error
+     * channel.
+     */
     suspend fun call(req: JsonRpcRequest): JsonRpcResponse<Any?> {
         if (!Allowlist.isAllowed(req.method)) {
             return JsonRpcResponse(
@@ -111,7 +129,9 @@ object RpcClient {
                 val r: HttpResponse = http.post { setBody(body) }
                 val text = r.bodyAsText()
 
-                // zkus deserialize do JsonRpcResponse
+                // Try to parse as a real JSON-RPC envelope first; if Core
+                // returned text on success path, fall back to a synthetic
+                // -32000.
                 runCatching {
                     return mapper.readValue<JsonRpcResponse<Any?>>(text)
                 }.onFailure {

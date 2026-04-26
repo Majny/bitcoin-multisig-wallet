@@ -23,7 +23,7 @@ import com.example.bitcoinwallet.ui.theme.*
 
 private val currencies = listOf("CZK", "USD", "EUR")
 
-/**
+/*
  * Settings screen — Trezor device status, currency picker, app info.
  */
 @Composable

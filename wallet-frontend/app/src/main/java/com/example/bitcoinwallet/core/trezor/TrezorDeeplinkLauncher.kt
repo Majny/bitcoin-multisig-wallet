@@ -12,15 +12,23 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.security.SecureRandom
 
+/*
+ * Builds Trezor Connect deeplinks and hands them to Trezor Suite Mobile via
+ * Intent.ACTION_VIEW. Every call generates a random request id, parks it in
+ * SessionStore, and embeds it in the callback URL — TrezorCallbackActivity
+ * checks the returned id against the stored one to reject stale or spoofed
+ * callbacks from other apps.
+ */
 class TrezorDeeplinkLauncher(
     private val connectBaseUrl: String = "https://connect.trezor.io/9/deeplink/1/",
-    private val callbackScheme: String = "bitcoinwallet", // callback for manifest
+    private val callbackScheme: String = "bitcoinwallet",
     private val callbackHost: String = "trezor-callback",
 ) {
 
-    /**
-     * Generates a cryptographically random id and records it in [SessionStore]
-     * so [TrezorCallbackActivity] can reject callbacks that don't match.
+    /*
+     * Cryptographically random id, stored in SessionStore so the matching
+     * callback can be authenticated. SecureRandom rather than UUID.random
+     * to make sure the id can't be guessed by another app on the device.
      */
     private fun newRequestId(): String {
         val bytes = ByteArray(16)
@@ -30,6 +38,9 @@ class TrezorDeeplinkLauncher(
         return id
     }
 
+    /* getPublicKey for a single derivation path — used during initial Trezor
+     * connect to grab one xpub. Returns false if Trezor Suite Mobile is not
+     * installed (no app handles the deeplink). */
     fun openGetPublicKey(
         context: Context,
         derivationPath: String = "m/84'/1'/0'",
@@ -63,12 +74,10 @@ class TrezorDeeplinkLauncher(
         }
     }
 
-    /**
-     * Opens Trezor Suite to sign a PSBT transaction.
-     * The user confirms on the Trezor device, then Trezor Suite calls back
-     * with the signed PSBT.
-     *
-     * Uses Trezor Connect deeplink method "signTransaction" with PSBT payload.
+    /*
+     * Sign a PSBT — opens Trezor Suite, user confirms on the device, callback
+     * carries the signed PSBT base64 back. Used by the multisig flow where
+     * the backend hands us a serialized PSBT to forward unchanged.
      */
     fun openSignTransaction(context: Context, psbtBase64: String, network: String = "testnet"): Boolean {
         val coin = if (network == "testnet") "Testnet" else "Bitcoin"
@@ -102,10 +111,12 @@ class TrezorDeeplinkLauncher(
         }
     }
 
-    /**
-     * Opens Trezor Suite to sign a transaction using structured Trezor Connect params.
-     * This is the correct format for Trezor Connect's signTransaction deeplink.
-     * Used for singlesig wallets where backend provides pre-built inputs/outputs.
+    /*
+     * Sign a tx using structured Trezor Connect params (inputs/outputs/refTxs)
+     * rather than a serialized PSBT. Required for singlesig — Trezor Connect
+     * deeplink does NOT accept tx_hex for refTxs, so the backend pre-parses
+     * each previous tx into version/inputs/bin_outputs/lock_time and we
+     * marshal the whole structure into JSON here.
      */
     fun openSignTransactionStructured(
         context: Context,
@@ -213,10 +224,11 @@ class TrezorDeeplinkLauncher(
         }
     }
 
-    /**
-     * Opens Trezor Suite to display an address on the Trezor device screen.
-     * This lets the user verify the receive address on the hardware device.
-     * For multisig wallets, the multisig object with all cosigner HD nodes is required.
+    /*
+     * Show an address on the Trezor screen so the user can compare it byte-by-byte
+     * with what the phone displays. For multisig, the full cosigner pubkey set
+     * (the `multisig` field) is required — without it firmware can't recompute
+     * the script and refuses to display the address.
      */
     fun openGetAddress(
         context: Context,
@@ -258,15 +270,11 @@ class TrezorDeeplinkLauncher(
         }
     }
 
-    /**
-     * Opens Trezor Suite to get public keys for multiple derivation paths
-     * in a single deeplink call using the Trezor Connect `bundle` parameter.
-     * Returns the request ID for tracking the callback.
-     */
-    /**
-     * Builds a JSONObject for the Trezor Connect `multisig` field.
-     * Backend provides pre-converted HDNodeType objects (depth, fingerprint, etc.)
-     * which firmware requires instead of raw xpub strings.
+    /*
+     * Builds the Trezor Connect `multisig` JSON. Firmware needs HDNodeType
+     * objects (depth, fingerprint, child_num, chain_code, public_key) — not
+     * raw xpub strings — so the backend pre-converts and we copy the fields
+     * across.
      */
     private fun buildMultisigJson(ms: TrezorConnectMultisigDto): JSONObject {
         return JSONObject().apply {
@@ -293,6 +301,12 @@ class TrezorDeeplinkLauncher(
         }
     }
 
+    /*
+     * Bundle getPublicKey — fetches multiple xpubs in a single deeplink so
+     * account discovery doesn't require N round-trips through Trezor Suite.
+     * Returns the request id for trace logging or null if the deeplink
+     * couldn't be launched.
+     */
     fun openGetPublicKeyBundle(
         context: Context,
         derivationPaths: List<String>,

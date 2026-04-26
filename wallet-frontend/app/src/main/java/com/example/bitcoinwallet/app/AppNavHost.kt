@@ -16,12 +16,22 @@ import com.example.bitcoinwallet.feature.wallet.navigation.WalletRoutes
 import com.example.bitcoinwallet.feature.wallet.navigation.walletGraph
 import android.util.Log
 
+/*
+ * Top-level Compose nav host. Mounts the trezor-connect graph and the
+ * wallet graph, and centralises the cross-graph signals that need to
+ * re-route the user from anywhere:
+ *   - connectTrigger: a fresh Trezor login callback was received
+ *   - sessionExpired: the backend rejected the JWT and refresh failed
+ *   - cold-start restore: rehydrate the wallet list / route to account
+ *     selection if a session was loaded from disk but no wallet is active
+ */
 @Composable
 fun AppNavHost(
     navController: NavHostController,
     connectTrigger: Int
 ) {
-    // Determine start destination based on session state
+    // If we already have an active session AND a selected wallet, jump
+    // straight into the wallet graph — otherwise start at the connect flow.
     val hasActiveSession = SessionStore.session != null && SessionStore.hasWalletSelected()
     val startDestination = if (hasActiveSession) WalletRoutes.Graph else TrezorRoutes.Graph
 

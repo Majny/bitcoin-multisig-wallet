@@ -27,7 +27,7 @@ import com.example.bitcoinwallet.ui.theme.*
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/**
+/*
  * Main wallet dashboard screen showing balance and transaction history.
  */
 @Composable

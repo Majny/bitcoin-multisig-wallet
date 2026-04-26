@@ -14,23 +14,26 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-/**
- * MobileSigner = klient pro backend z pohledu Android appky.
+/*
+ * Backend client used during the Trezor-login flow. Three responsibilities:
+ *   1. Trade an xpub set for a JWT session (loginWithTrezor).
+ *   2. Refresh that session via the rotating refresh token.
+ *   3. Account discovery — ask the backend which derivation paths actually
+ *      have on-chain activity so the user only sees real accounts.
  *
- * - login Trezorem (fingerprint/xpub)
- * - list wallets (GET /wallets)  <-- jediný "source of truth" pro network/scriptType
- * - account discovery (scan)
+ * Distinct from WalletApiClient: that one is the post-login HTTP surface,
+ * this one only deals with the auth bootstrap.
  */
 class MobileSigner(
     private val backendBaseUrl: String,
     private val client: HttpClient = defaultClient()
 ) {
 
-    /**
-     * Login with one or more Trezor account xpubs.
-     * Backend scans each account for blockchain activity and creates wallets for active ones.
-     * Returns the session plus the refresh token (which the caller should put
-     * into [com.example.bitcoinwallet.core.session.SessionStore.refreshToken]).
+    /*
+     * Trade Trezor xpubs for a session. The backend scans every supplied
+     * account for activity and auto-creates wallet rows for active ones.
+     * The refresh token returned here must be stashed into
+     * SessionStore.refreshToken — it is intentionally not part of UserSession.
      */
     suspend fun loginWithTrezor(identities: List<TrezorDeviceIdentity>): LoginResult {
         val primary = identities.first()
@@ -63,7 +66,7 @@ class MobileSigner(
         return LoginResult(session = session, refreshToken = loginResp.refreshToken)
     }
 
-    /** Exchanges a refresh token for a new access token. Returns null on failure. */
+    /* Exchanges a refresh token for a new access token. Returns null on failure. */
     suspend fun refreshTokens(refreshToken: String): RefreshResult? {
         return try {
             val resp: TokenRefreshResponse = client.post("$backendBaseUrl/auth/token/refresh") {
@@ -76,12 +79,10 @@ class MobileSigner(
         }
     }
 
-    /**
-     * GET {backendBaseUrl}/wallets
-     *
-     * [
-     *   { walletId, network, type, scriptType, m, n, label }
-     * ]
+    /*
+     * GET /wallets — list every wallet visible to the JWT. Maps the registry
+     * DTO into the UI-shaped WalletSummary so the rest of the app doesn't
+     * have to deal with the raw transport types.
      */
     suspend fun listWallets(accessToken: String): List<WalletSummary> {
         val resp: List<RegistryWalletSummaryDto> =
@@ -107,11 +108,10 @@ class MobileSigner(
     }
 
 
-    /**
-     * POST {backendBaseUrl}/accounts/scan
-     *
-     * Scans multiple derivation paths to find accounts with blockchain activity.
-     * Used during account discovery to show user which accounts have funds.
+    /*
+     * POST /accounts/scan — backend probes each derivation path for activity.
+     * Drives the post-Trezor-connect screen that lets the user pick an active
+     * account instead of starting from m/84'/0'/0' every time.
      */
     suspend fun scanAccounts(
         fingerprint: String,
@@ -147,13 +147,13 @@ class MobileSigner(
 
 /* ---------- MODELS ---------- */
 
-/** Return value of [MobileSigner.loginWithTrezor] — session plus one-time refresh token. */
+/* loginWithTrezor result — session plus the one-time refresh token. */
 data class LoginResult(
     val session: UserSession,
     val refreshToken: String?
 )
 
-/** Return value of [MobileSigner.refreshTokens]. */
+/* refreshTokens result — new access token + (optional) rotated refresh token. */
 data class RefreshResult(
     val accessToken: String,
     val refreshToken: String?

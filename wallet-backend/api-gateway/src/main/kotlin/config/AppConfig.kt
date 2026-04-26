@@ -1,5 +1,6 @@
 package cz.majny.wallet.gateway.config
 
+/* Upstream URLs and JWT settings loaded from environment at startup. */
 data class AppConfig(
     val port: Int,
     val authBaseUrl: String,
@@ -14,6 +15,8 @@ data class AppConfig(
     val jwksUrl: String,
 ) {
     companion object {
+        /* Reads env vars with localhost defaults (dev) — docker-compose provides
+         * the service-name URLs in production. */
         fun fromEnv(): AppConfig {
             fun env(name: String, default: String) = System.getenv(name) ?: default
             val authBase = env("AUTH_BASE_URL", "http://localhost:8081")

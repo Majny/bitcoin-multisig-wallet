@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "SendTransactionVM"
 
-/**
+/*
  * Represents a UTXO selected through Coin Control.
  */
 data class SelectedUtxoInfo(
@@ -29,7 +29,7 @@ data class SelectedUtxoInfo(
     val key: String get() = "$txid:$vout"
 }
 
-/**
+/*
  * Fee priority level — maps to different fee rate estimates.
  */
 enum class FeePriority {
@@ -38,7 +38,7 @@ enum class FeePriority {
     HIGH
 }
 
-/**
+/*
  * Unit the user is entering the amount in. FIAT uses [SendTransactionUiState.fiatCurrency]
  * (CZK/USD/EUR, picked from settings). BTC is the canonical unit — sats are
  * always derived from [SendTransactionUiState.amountInput] so transaction value
@@ -46,7 +46,7 @@ enum class FeePriority {
  */
 enum class AmountUnit { BTC, FIAT }
 
-/**
+/*
  * UI State for the Send Transaction screen.
  */
 data class SendTransactionUiState(
@@ -95,7 +95,7 @@ data class SendTransactionUiState(
     val amountError: String? = null
 )
 
-/**
+/*
  * ViewModel for the Send BTC screen.
  * Handles fee estimation, amount computation, and PSBT creation.
  */
@@ -110,7 +110,7 @@ class SendTransactionViewModel : ViewModel() {
         loadInitialData()
     }
 
-    /**
+    /*
      * Loads wallet balance, fee estimates, and BTC/fiat rate in parallel.
      */
     private fun loadInitialData() {
@@ -156,9 +156,9 @@ class SendTransactionViewModel : ViewModel() {
                     null
                 }
 
-                // Zjisti kolik sats je rezervováno v pending PSBTs.
-                // Rezervovaná částka = součet VSTUPNÍCH UTXO (celé UTXO je zamčené
-                // do potvrzení transakce, change se vrátí až jako nové UTXO).
+                // How many sats are locked by pending PSBTs? Reserved amount =
+                // sum of INPUT UTXOs (the whole UTXO is locked until the tx
+                // confirms — change only reappears as a new UTXO).
                 val reserved = try {
                     val psbts = WalletApi.client.listPsbtsForWallet(walletId, accessToken)
                     psbts.psbts
@@ -199,7 +199,7 @@ class SendTransactionViewModel : ViewModel() {
 
     // ========== User Actions ==========
 
-    /**
+    /*
      * Resets Trezor-related state when signing is cancelled or times out.
      * Call this when user returns from Trezor without a result.
      */
@@ -211,7 +211,7 @@ class SendTransactionViewModel : ViewModel() {
         )
     }
 
-    /**
+    /*
      * Called when Trezor Suite returned a failure that is NOT a user cancel
      * (malformed JSON, protocol error, etc.). Shows a distinct error.
      */
@@ -224,7 +224,7 @@ class SendTransactionViewModel : ViewModel() {
         )
     }
 
-    /** Called by the UI after it has acted on broadcastSuccess (navigated away). */
+    /* Called by the UI after it has acted on broadcastSuccess (navigated away). */
     fun consumeBroadcastSuccess() {
         if (_uiState.value.broadcastSuccess) {
             _uiState.value = _uiState.value.copy(broadcastSuccess = false)
@@ -249,7 +249,7 @@ class SendTransactionViewModel : ViewModel() {
         recalculate()
     }
 
-    /**
+    /*
      * Flip the entry unit between BTC and the user's fiat currency.
      * Converts the current input so the sats value stays stable across the
      * toggle — the user sees the same amount denominated differently,
@@ -301,7 +301,7 @@ class SendTransactionViewModel : ViewModel() {
         recalculate()
     }
 
-    /**
+    /*
      * Called from CoinControl screen when user confirms UTXO selection.
      */
     fun onUtxosSelected(utxos: List<SelectableUtxo>) {
@@ -315,13 +315,13 @@ class SendTransactionViewModel : ViewModel() {
         recalculate()
     }
 
-    /**
+    /*
      * Returns the set of currently selected UTXO keys for pre-selection in CoinControl.
      */
     fun getSelectedUtxoKeys(): Set<String> =
         _uiState.value.selectedUtxos.map { it.key }.toSet()
 
-    /**
+    /*
      * Create the PSBT transaction on the backend.
      * After creation, signals the caller to open Trezor for signing.
      *
@@ -376,7 +376,8 @@ class SendTransactionViewModel : ViewModel() {
 
                 Log.d(TAG, "PSBT created: id=${response.id}, fee=${response.estimatedFee} sats, vsize=${response.estimatedVsize}, trezorConnect=${response.trezorConnectParams != null}")
 
-                // Detailní log TrezorConnectParams pro debugging
+                // Verbose TrezorConnectParams dump — keeps the deeplink
+                // payload auditable when debugging firmware rejections.
                 response.trezorConnectParams?.let { tcp ->
                     Log.d(TAG, "=== TrezorConnectParams ===")
                     Log.d(TAG, "  coin=${tcp.coin}, version=${tcp.version}, locktime=${tcp.locktime}")
@@ -424,8 +425,10 @@ class SendTransactionViewModel : ViewModel() {
         }
     }
 
-    /**
-     * Dispatch na správný handler podle typu Trezor odpovědi a typu peněženky.
+    /*
+     * Route the Trezor result to the right handler based on the response
+     * type (serializedTx vs signed PSBT) and the wallet type (singlesig vs
+     * multisig). Callers upstream don't need to know the distinction.
      */
     fun onTrezorResult(
         signedData: String,
@@ -447,7 +450,7 @@ class SendTransactionViewModel : ViewModel() {
         }
     }
 
-    /**
+    /*
      * Handle Trezor Connect response for multisig wallet.
      * Submits per-input signatures to backend via /sign-trezor endpoint.
      * If enough signatures, broadcasts; otherwise shows status.
@@ -508,7 +511,7 @@ class SendTransactionViewModel : ViewModel() {
                         Log.d(TAG, "Multisig needs more signatures: ${result.currentSigs}/${result.requiredSigs}")
                         _uiState.value = _uiState.value.copy(
                             isSubmitting = false,
-                            error = "Podpis přidán (${result.currentSigs}/${result.requiredSigs}). Potřeba dalších podpisů."
+                            error = "Signature added (${result.currentSigs}/${result.requiredSigs}). More signatures required."
                         )
                     }
                 } else {
@@ -536,7 +539,7 @@ class SendTransactionViewModel : ViewModel() {
         }
     }
 
-    /**
+    /*
      * Handle raw serialized tx from Trezor Connect.
      * Skip addSignature/finalize — broadcast directly.
      */
@@ -604,10 +607,10 @@ class SendTransactionViewModel : ViewModel() {
             }
         }
 
-        // Odhad vsize pro 1 vstup, 2 výstupy (stejný vzorec jako backend PsbtBuilder):
-        //   overhead = 10, output = 31 * 2 = 62
-        //   P2WPKH (singlesig) vstup: 68 vB  → celkem 140
-        //   P2WSH m-of-n vstup: 41 + (5 + 73*m + 34*n)/4 vB (with SegWit witness discount)
+        // Estimate vsize for 1 input, 2 outputs (same formula as backend PsbtBuilder):
+        //   overhead = 10, outputs = 31 * 2 = 62
+        //   P2WPKH (singlesig) input: 68 vB → 140 total
+        //   P2WSH m-of-n input: 41 + (5 + 73*m + 34*n)/4 vB (SegWit witness discount)
         val walletId = SessionStore.activeWalletId
         val wallet = SessionStore.session?.user?.wallets?.find { it.id == walletId }
         val inputVsize = if (wallet?.type == WalletType.MULTI_SIG) {
@@ -717,7 +720,7 @@ class SendTransactionViewModel : ViewModel() {
         return !hasError
     }
 
-    /**
+    /*
      * Validates a Bitcoin address against the wallet network.
      * Returns null if valid, or a user-facing error message.
      *

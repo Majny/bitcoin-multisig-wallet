@@ -18,12 +18,12 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "PsbtDetailVM"
 
-/**
+/*
  * Signing status of a single cosigner.
  */
 enum class SignerStatus { SIGNED, PENDING, MISSING }
 
-/**
+/*
  * Single cosigner display info.
  */
 data class CosignerUiInfo(
@@ -37,7 +37,7 @@ data class CosignerUiInfo(
     val label: String? = null
 )
 
-/**
+/*
  * UI State for the PSBT Detail screen.
  */
 data class PsbtDetailUiState(
@@ -63,26 +63,27 @@ data class PsbtDetailUiState(
     // True while waiting for Trezor Suite to return a sign callback.
     val awaitingTrezor: Boolean = false
 ) {
-    /** e.g. "2 of 3 required" */
+    /* e.g. "2 of 3 required" */
     val signaturesLabel: String
         get() = "$currentSigs of $requiredSigs required"
 
     val isFullySigned: Boolean
         get() = currentSigs >= requiredSigs
 
-    /**
+    /*
      * True when the PSBT can be broadcast.
-     * "signed" = dost podpisů sesbíráno (backend finalizuje automaticky před broadcastem).
-     * "finalized" = PSBT byl explicitně finalizován.
+     *   "signed"    — enough signatures collected; backend finalises on
+     *                 broadcast so this counts as ready.
+     *   "finalized" — PSBT was explicitly finalised.
      */
     val canBroadcast: Boolean
         get() = (status == "finalized" || (status == "signed" && isFullySigned))
 
-    /** True when the PSBT still needs more signatures */
+    /* True when the PSBT still needs more signatures. */
     val canSign: Boolean
         get() = status == "pending" || (status == "signed" && !isFullySigned)
 
-    /**
+    /*
      * True when this device already contributed its signature.
      * Used to hide the Sign button once the user has signed — re-signing with the
      * same key crashes Trezor Suite and cannot add a new signature anyway.
@@ -118,7 +119,7 @@ data class SignatureUiInfo(
     val cosignerIndex: Int = 0
 )
 
-/**
+/*
  * ViewModel for the PSBT Detail screen.
  * Loads PSBT details, handles signing and broadcasting.
  */
@@ -140,7 +141,7 @@ class PsbtDetailViewModel : ViewModel() {
             if (accessToken == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Není přihlášen uživatel"
+                    error = "Not signed in"
                 )
                 return@launch
             }
@@ -188,7 +189,7 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
-    /**
+    /*
      * Broadcast the fully-signed transaction using the raw serializedTx from Trezor Connect.
      */
     fun broadcast(onSuccess: () -> Unit = {}) {
@@ -238,7 +239,7 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
-    /** Called when Trezor callback reports user cancellation. */
+    /* Called when Trezor callback reports user cancellation. */
     fun onTrezorCancelled() {
         _uiState.value = _uiState.value.copy(
             isLoading = false,
@@ -247,7 +248,7 @@ class PsbtDetailViewModel : ViewModel() {
         )
     }
 
-    /** Called when Trezor callback reports a non-cancel failure. */
+    /* Called when Trezor callback reports a non-cancel failure. */
     fun onTrezorFailed(message: String) {
         _uiState.value = _uiState.value.copy(
             isLoading = false,
@@ -256,19 +257,19 @@ class PsbtDetailViewModel : ViewModel() {
         )
     }
 
-    /** Called by the UI after it has acted on broadcastSuccess (navigated away). */
+    /* Called by the UI after it has acted on broadcastSuccess (navigated away). */
     fun consumeBroadcastSuccess() {
         if (_uiState.value.broadcastSuccess) {
             _uiState.value = _uiState.value.copy(broadcastSuccess = false)
         }
     }
 
-    /** Called right before launching the Trezor deeplink for signing. */
+    /* Called right before launching the Trezor deeplink for signing. */
     fun markAwaitingTrezor() {
         _uiState.value = _uiState.value.copy(awaitingTrezor = true, error = null)
     }
 
-    /**
+    /*
      * Handle Trezor Connect signing result for multisig from PSBT detail screen.
      * Submits per-input signatures to backend.
      */
@@ -311,7 +312,7 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
-    /**
+    /*
      * Open the signers dialog. Cosigners are loaded eagerly on detail fetch,
      * so this just flips the flag. If they were missed, refetch defensively.
      */
@@ -325,7 +326,7 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
-    /**
+    /*
      * Defensive re-fetch when the signers dialog opens and cosigners are unexpectedly empty.
      * The happy path populates cosigners eagerly during fetchPsbtDetail.
      */
@@ -424,7 +425,7 @@ class PsbtDetailViewModel : ViewModel() {
         }
     }
 
-    /**
+    /*
      * Adjust TrezorConnectParams address_n for the current signer's BIP-48 account.
      * Stored params may have a different signer's account in address_n[2].
      * BIP-48 path: [purpose', coinType', account', scriptType', chain, index]

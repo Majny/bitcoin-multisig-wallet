@@ -25,7 +25,7 @@ import com.example.bitcoinwallet.feature.wallet.viewmodel.PsbtListUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
+/*
  * PSBT list screen for a multisig wallet.
  * Shows "Create New PSBT" button, list of pending/signed PSBTs, and an "Import" button at the bottom.
  */

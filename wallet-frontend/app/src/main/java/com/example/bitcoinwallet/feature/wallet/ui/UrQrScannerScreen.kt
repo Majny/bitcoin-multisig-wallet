@@ -43,7 +43,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 
 private const val TAG = "UrQrScannerScreen"
 
-/**
+/*
  * Animated multi-part UR QR scanner for Sparrow/Keystone/Passport airgap wallet
  * exports. Accumulates frames into a [URDecoder] fountain decoder and converts
  * the completed UR into a BIP-380 descriptor string via [UrDescriptorDecoder].

@@ -11,6 +11,8 @@ import java.security.MessageDigest
 import java.time.OffsetDateTime
 import java.util.UUID
 
+/* Persistent, single-use refresh tokens. Only the SHA-256 hash is stored;
+ * the plaintext value exists just long enough to return it to the client. */
 object RefreshTokensTable : Table("refresh_tokens") {
     val tokenHash = text("token_hash")
     val deviceId = text("device_id")
@@ -21,10 +23,15 @@ object RefreshTokensTable : Table("refresh_tokens") {
     override val primaryKey = PrimaryKey(tokenHash)
 }
 
+/* Handle to the refresh_tokens table. Default TTL is 30 days; override via
+ * JWT_REFRESH_TTL_SECONDS in Main. */
 class RefreshStore(
-    private val ttlSeconds: Long = 30L * 24 * 60 * 60 // 30 days
+    private val ttlSeconds: Long = 30L * 24 * 60 * 60
 ) {
 
+    /* Creates a new refresh token and returns the plaintext value. Callers
+     * must hand it to the client immediately — the value is not recoverable
+     * from the DB (only the hash is kept). */
     fun issue(deviceId: String, fingerprint: String?): String = transaction {
         issueInternal(deviceId, fingerprint)
     }
@@ -64,6 +71,8 @@ class RefreshStore(
         Triple(deviceId, fingerprint, newToken)
     }
 
+    /* Inserts a new random UUID token and returns the plaintext. Must run
+     * inside an existing transaction (both issue and rotate wrap it). */
     private fun issueInternal(deviceId: String, fingerprint: String?): String {
         val token = UUID.randomUUID().toString()
         val hash = sha256Hex(token)
@@ -78,6 +87,8 @@ class RefreshStore(
         return token
     }
 
+    /* Hex-encoded SHA-256. Lowercase hex so the value is deterministic and
+     * can be compared straight against the PK column. */
     private fun sha256Hex(input: String): String {
         val bytes = MessageDigest.getInstance("SHA-256")
             .digest(input.toByteArray(Charsets.UTF_8))

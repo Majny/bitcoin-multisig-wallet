@@ -14,6 +14,9 @@ private val HttpClientKey = AttributeKey<HttpClient>("GatewayHttpClient")
 val Application.httpClient: HttpClient
     get() = attributes[HttpClientKey]
 
+/* Installs the shared CIO HttpClient used by every upstream client. Registered
+ * as an application attribute so clients can be attached after boot rather than
+ * being constructed inside a plugin. Closed on application shutdown. */
 fun Application.configureHttpClient() {
     if (attributes.contains(HttpClientKey)) return
 

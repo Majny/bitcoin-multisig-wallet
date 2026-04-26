@@ -21,7 +21,7 @@ import com.example.bitcoinwallet.feature.wallet.viewmodel.ImportWalletUiState
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
+/*
  * Import Multisig Wallet screen.
  * Matches mockup: X close, title, descriptor text area,
  * Import from file / Scan QR buttons, wallet name input, Import button.
@@ -142,7 +142,7 @@ fun ImportWalletScreen(
     }
 }
 
-/**
+/*
  * Inline card shown when the import fails. Maps a few well-known backend
  * error messages to a friendlier title + actionable hint; falls back to the
  * raw message when no pattern matches so we never hide information from the

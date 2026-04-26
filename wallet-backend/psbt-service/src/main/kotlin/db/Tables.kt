@@ -3,7 +3,11 @@ package cz.majny.wallet.psbt.db
 import org.jetbrains.exposed.sql.Table
 import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 
-/* PSBT records — stores transaction data, signing status, and Trezor Connect params. */
+/*
+ * Stores PSBTs in their various lifecycle states (pending, signed, broadcast).
+ * trezor_connect_params is a serialized JSON blob — we don't query into it,
+ * just hand the whole thing back to the client.
+ */
 object PsbtsTable : Table("psbts") {
     val id = uuid("id").autoGenerate()
     val walletId = varchar("wallet_id", 255)
@@ -25,7 +29,10 @@ object PsbtsTable : Table("psbts") {
     override val primaryKey = PrimaryKey(id)
 }
 
-/* Signature records — tracks which cosigners have signed each PSBT. */
+/*
+ * Per-cosigner audit trail. (psbt_id, cosigner_index) is unique so the same
+ * cosigner can't be recorded as having signed twice.
+ */
 object PsbtSignaturesTable : Table("psbt_signatures") {
     val id = uuid("id").autoGenerate()
     val psbtId = uuid("psbt_id").references(PsbtsTable.id)

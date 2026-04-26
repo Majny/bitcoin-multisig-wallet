@@ -14,6 +14,9 @@ import com.typesafe.config.ConfigFactory
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
 
+/* wallet-registry entry point. Boots the database (Flyway + Hikari), builds
+ * the shared Repository, and exposes the registry HTTP API on port 8082
+ * (default). */
 fun main() {
     val cfg = ConfigFactory.load()
     val host = cfg.getString("registry.host")

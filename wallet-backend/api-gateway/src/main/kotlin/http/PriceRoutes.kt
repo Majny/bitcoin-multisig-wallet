@@ -5,36 +5,21 @@ import io.ktor.server.auth.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-/**
- * Routes for price data - proxies to price-service.
- */
+/* Pass-through routes for price-service (CoinGecko proxy). */
 fun Route.priceRoutes() {
     authenticate("auth-jwt") {
     val priceClient by lazy { application.deps.price }
-    
+
     route("/price") {
-        
-        /**
-         * GET /api/v1/price
-         * Get current Bitcoin prices in various currencies.
-         * 
-         * Query params:
-         * - currencies (optional): Comma-separated currency codes (default: czk,usd,eur)
-         */
+
+        /* GET /api/v1/price — BTC prices in CZK/USD/EUR (or whatever ?currencies= asks). */
         get {
             val currencies = call.request.queryParameters["currencies"] ?: "czk,usd,eur"
             val prices = priceClient.getBitcoinPrices(currencies)
             call.respond(prices)
         }
 
-        /**
-         * GET /api/v1/price/convert
-         * Convert satoshis to fiat value.
-         *
-         * Query params:
-         * - sats (required): Amount in satoshis
-         * - currency (optional): Target currency (default: czk)
-         */
+        /* GET /api/v1/price/convert?sats=N&currency=czk — sats → fiat. */
         get("/convert") {
             val sats = call.request.queryParameters["sats"]?.toLongOrNull()
             if (sats == null) {

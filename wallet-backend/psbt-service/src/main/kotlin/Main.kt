@@ -28,15 +28,18 @@ import java.time.OffsetDateTime
 
 internal val log = LoggerFactory.getLogger("PsbtService")
 
+/*
+ * psbt-service entry point. Boots the database, wires the upstream service
+ * clients (blockchain, registry, explorer) and starts the Ktor server on
+ * port 8085 (default). Also kicks off the background stale-PSBT cleanup job.
+ */
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8085
-    
-    // Database setup
+
     val ds = createDataSource()
     runMigrations(ds)
     Database.connect(ds)
-    
-    // External service clients
+
     val blockchainUrl = System.getenv("BLOCKCHAIN_SERVICE_URL") ?: "http://localhost:8086"
     val registryUrl = System.getenv("REGISTRY_URL") ?: "http://localhost:8082"
     val explorerUrl = System.getenv("EXPLORER_SERVICE_URL") ?: "http://localhost:8083"
@@ -51,9 +54,6 @@ fun main() {
     log.info("Registry service: {}", registryUrl)
     log.info("Explorer service: {}", explorerUrl)
 
-    // Background cleanup: remove pending/signed PSBTs older than PSBT_TTL_DAYS
-    // (default 7 days) so abandoned multisig drafts stop reserving UTXOs forever.
-    // Disable with PSBT_CLEANUP_ENABLED=false.
     startStalePsbtCleanup(repository)
 
     embeddedServer(Netty, port = port) {
@@ -61,6 +61,12 @@ fun main() {
     }.start(wait = true)
 }
 
+/*
+ * Background coroutine that periodically deletes pending/signed PSBTs older
+ * than PSBT_TTL_DAYS (default 7d). Without this, an abandoned multisig draft
+ * would lock its UTXOs forever via the reservation set. Cleanup can be turned
+ * off with PSBT_CLEANUP_ENABLED=false.
+ */
 private fun startStalePsbtCleanup(repository: PsbtRepository) {
     val enabled = (System.getenv("PSBT_CLEANUP_ENABLED") ?: "true").equals("true", true)
     if (!enabled) {
@@ -76,6 +82,8 @@ private fun startStalePsbtCleanup(repository: PsbtRepository) {
                 val removed = repository.deleteStale(cutoff)
                 if (removed > 0) log.info("Cleaned up {} stale pending/signed PSBTs older than {}", removed, cutoff)
             } catch (e: Exception) {
+                // Single-iteration failure shouldn't kill the cleanup loop —
+                // log and try again on the next tick.
                 log.warn("PSBT cleanup failed", e)
             }
             delay(intervalMinutes * 60_000L)
@@ -115,9 +123,14 @@ fun Application.configureApp(
     }
 }
 
+/*
+ * Hikari pool with REPEATABLE_READ isolation — needed because the
+ * sign-trezor flow does a "read current_sigs, decide status, write back"
+ * sequence that must observe a stable snapshot.
+ */
 private fun createDataSource(): HikariDataSource {
     val config = HikariConfig().apply {
-        jdbcUrl = System.getenv("DATABASE_URL") 
+        jdbcUrl = System.getenv("DATABASE_URL")
             ?: "jdbc:postgresql://localhost:5432/wallet_psbt"
         username = System.getenv("DATABASE_USER") ?: "wallet"
         password = System.getenv("DATABASE_PASSWORD") ?: "wallet"

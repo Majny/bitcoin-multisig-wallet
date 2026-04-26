@@ -13,7 +13,7 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "CoinControlVM"
 
-/**
+/*
  * Sort order for UTXO list.
  */
 enum class UtxoSortOrder(val label: String) {
@@ -23,7 +23,7 @@ enum class UtxoSortOrder(val label: String) {
     ADDRESS("Address")
 }
 
-/**
+/*
  * A UTXO item with selection state for coin control.
  */
 data class SelectableUtxo(
@@ -46,7 +46,7 @@ data class SelectableUtxo(
         if (address.length > 16) "${address.take(12)}..." else address
 }
 
-/**
+/*
  * UI State for the Coin Control screen.
  */
 data class CoinControlUiState(
@@ -65,7 +65,7 @@ data class CoinControlUiState(
         else String.format(java.util.Locale.US, "%.8f BTC", selectedBtc)
 }
 
-/**
+/*
  * ViewModel for the Coin Control (UTXO selection) screen.
  */
 class CoinControlViewModel : ViewModel() {
@@ -113,7 +113,7 @@ class CoinControlViewModel : ViewModel() {
                 val response = repository.getWalletUtxos(walletId, accessToken)
                 Log.d(TAG, "Loaded ${response.utxos.size} UTXOs, total: ${response.totalSats} sats")
 
-                // Zjisti které UTXOs jsou rezervované v pending/signed PSBTs
+                // Identify which UTXOs are currently reserved by pending/signed PSBTs.
                 val reservedKeys = try {
                     val psbts = WalletApi.client.listPsbtsForWallet(walletId, accessToken)
                     psbts.psbts
@@ -182,7 +182,7 @@ class CoinControlViewModel : ViewModel() {
         )
     }
 
-    /**
+    /*
      * Returns the list of selected UTXO keys (txid:vout).
      */
     fun getSelectedUtxos(): List<SelectableUtxo> =

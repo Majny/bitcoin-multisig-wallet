@@ -1,5 +1,10 @@
 package cz.majny.wallet.blockchain.config
 
+/*
+ * Runtime config. Defaults point at Blockstream for mainnet and
+ * Mempool.space/testnet4 for testnet — both expose the same Esplora API,
+ * so only the base URL differs. Overridable via env for local mocking.
+ */
 data class AppConfig(
     val port: Int,
     val mainnetMempoolUrl: String,

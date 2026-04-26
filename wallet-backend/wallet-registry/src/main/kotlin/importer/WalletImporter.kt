@@ -4,33 +4,21 @@ import cz.majny.wallet.registry.Repository
 import cz.majny.wallet.registry.api.*
 import org.slf4j.LoggerFactory
 
-/**
- * Wallet Importer — orchestrates the import of external wallet configurations.
- *
- * Supports importing from:
- *   - Raw output descriptor strings (from Sparrow, Bitcoin Core, etc.)
- *   - In future: BSMS JSON, Specter exports
- *
- * Flow:
- *   1. Parse descriptor → extract type, M/N, cosigners, script type
- *   2. BIP-67 sort cosigners (for sortedmulti)
- *   3. Validate: M ≤ N, valid xpubs, valid derivation paths
- *   4. Check for existing wallet (dedup by descriptor)
- *   5. Create wallet + cosigners in wallet-registry DB
- *   6. Auto-attach calling device's active account as a member
- *   7. Derive addresses (receive + change)
- */
+/* Orchestrates wallet import from an output descriptor. Steps:
+ *   1. Parse descriptor (type, M/N, cosigners, script type).
+ *   2. Validate that the caller's active account is actually a cosigner
+ *      (for multisig) — surfaces a friendly error to the UI otherwise.
+ *   3. Dedup: if a wallet with the same ID already exists, return it and
+ *      auto-attach the calling device as a new member.
+ *   4. Otherwise create wallet + cosigners and pre-derive addresses. */
 class WalletImporter(
     private val repo: Repository
 ) {
     private val log = LoggerFactory.getLogger(WalletImporter::class.java)
 
-    /**
-     * Import a wallet from a descriptor string.
-     *
-     * @param request The import request containing descriptor, network, device info
-     * @return [ImportResult] with the created/existing wallet details
-     */
+    /* Entry point. Returns ImportResult with success=false + error text for
+     * user-facing failures (bad descriptor, caller not a cosigner), throws
+     * for infrastructure errors. */
     fun importWallet(request: ImportWalletRequest): ImportResult {
         log.info("Importing wallet: network={}, deviceId={}, accountIndex={}",
             request.network, request.deviceId, request.accountIndex)

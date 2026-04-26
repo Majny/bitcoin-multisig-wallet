@@ -31,8 +31,13 @@ data class DeviceResponse(
     val label: String? = null
 )
 
+/* CRUD for the devices table. One row per Trezor (keyed by the deterministic
+ * device_id derived from the master fingerprint). */
 class DeviceRepository {
 
+    /* Insert if new, otherwise refresh model + label so a re-login can update
+     * the cached device metadata. fingerprint is also overwritten — should be
+     * stable, but defensively kept in sync with whatever the request supplies. */
     fun upsertDevice(req: UpsertDeviceRequest): DeviceResponse = transaction {
         val existing = DevicesTable
             .selectAll()
@@ -63,6 +68,7 @@ class DeviceRepository {
         )
     }
 
+    /* Single-row lookup by device_id. Returns null if not found. */
     fun getDevice(deviceId: String): DeviceResponse? = transaction {
         DevicesTable
             .selectAll()

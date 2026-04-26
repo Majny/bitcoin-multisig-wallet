@@ -8,54 +8,47 @@ import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-/**
- * Repository for wallet data.
- * Uses explorer-service (via gateway) for wallet-level aggregated data
- * and price-service for fiat conversions.
+/*
+ * Domain-shaped facade over WalletApiClient. Maps backend DTOs to the
+ * UI's model types (WalletBalance, Transaction) and folds in fiat
+ * conversion so callers don't need to know about price-service. Direct
+ * passthroughs are kept too — viewmodels that don't need mapping use
+ * those.
  */
 class WalletRepository(
     private val apiClient: WalletApiClient
 ) {
-    
-    /**
-     * Get wallet balance (aggregated across all addresses) with fiat conversion.
-     *
-     * @param walletId Wallet ID
-     * @param accessToken JWT access token
-     * @param fiatCurrency Target fiat currency (default: CZK)
+
+    /*
+     * Aggregated wallet balance + fiat conversion. Falls back to 0 fiat
+     * if price-service is unreachable rather than failing the dashboard
+     * load — the sats balance is what actually matters.
      */
     suspend fun getWalletBalance(
         walletId: String,
         accessToken: String,
         fiatCurrency: String = SessionStore.preferredCurrency.value
     ): WalletBalance {
-        // Explorer-service aggregates balance across all wallet addresses
         val balanceDto = apiClient.getWalletBalance(walletId, accessToken)
         val balanceSats = balanceDto.totalSats
-        
-        // Convert to fiat via price-service
+
         val conversion = try {
             apiClient.convertSatsToFiat(accessToken, balanceSats, fiatCurrency)
         } catch (e: Exception) {
-            // If price service is unavailable, show 0 fiat
             null
         }
-        
+
         return WalletBalance(
             balanceSats = balanceSats,
             balanceFiat = conversion?.fiatValue ?: 0.0,
             fiatCurrency = fiatCurrency.uppercase()
         )
     }
-    
-    /**
-     * Get transaction history for the entire wallet.
-     * Explorer-service already classifies each tx as SENT/RECEIVED with correct amount.
-     *
-     * @param walletId Wallet ID
-     * @param accessToken JWT access token
-     * @param limit Max transactions to fetch
-     * @param offset Pagination offset
+
+    /*
+     * Tx history mapped to the UI Transaction model. Explorer-service
+     * already pre-classifies SENT/RECEIVED with the correct net amount,
+     * so this is a straight projection.
      */
     suspend fun getTransactionHistory(
         walletId: String,
@@ -64,13 +57,15 @@ class WalletRepository(
         offset: Int = 0
     ): List<Transaction> {
         val response = apiClient.getWalletTransactions(walletId, accessToken, limit, offset)
-        
+
         return response.transactions.map { tx ->
             val type = when (tx.type) {
                 "SENT" -> TransactionType.SENT
                 else   -> TransactionType.RECEIVED
             }
-            
+
+            // Unconfirmed txs have no blockTime — push them to a sentinel
+            // far-future date so they sort to the top of the history list.
             val dateTime = tx.blockTime?.let { timestamp ->
                 Instant.ofEpochSecond(timestamp)
                     .atZone(ZoneId.systemDefault())
@@ -88,43 +83,29 @@ class WalletRepository(
             )
         }
     }
-    
-    /**
-     * Get the first unused receive address for a wallet.
-     *
-     * @param walletId Wallet ID
-     * @param accessToken JWT access token
-     * @return Bitcoin receive address string
-     */
+
+    /* First unused receive address — backend handles gap-limit derivation. */
     suspend fun getReceiveAddress(walletId: String, accessToken: String): String {
         val dto = apiClient.getReceiveAddress(walletId, accessToken)
         return dto.address
     }
-    
-    /**
-     * Get all UTXOs for the wallet (coin control).
-     */
+
+    /* Wallet UTXOs (passthrough) — coin control screen consumes the DTO directly. */
     suspend fun getWalletUtxos(walletId: String, accessToken: String): WalletUtxosDto {
         return apiClient.getWalletUtxos(walletId, accessToken)
     }
-    
-    /**
-     * Get current Bitcoin prices.
-     */
+
+    /* Current BTC prices (passthrough). */
     suspend fun getBitcoinPrices(accessToken: String, currencies: String = "czk,usd,eur"): BitcoinPricesDto {
         return apiClient.getBitcoinPrices(accessToken, currencies)
     }
-    
-    /**
-     * Get recommended fee rates.
-     */
+
+    /* Current fee recommendations (passthrough). */
     suspend fun getFeeEstimates(accessToken: String): FeeEstimatesDto {
         return apiClient.getFeeEstimates(accessToken)
     }
-    
-    /**
-     * Get detailed transaction info (inputs/outputs).
-     */
+
+    /* Detailed tx with inputs/outputs (passthrough). */
     suspend fun getTransactionDetail(
         txid: String,
         accessToken: String,

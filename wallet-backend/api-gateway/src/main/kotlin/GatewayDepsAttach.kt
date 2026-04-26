@@ -9,7 +9,9 @@ import cz.majny.wallet.gateway.clients.SignerClientImpl
 import cz.majny.wallet.gateway.plugins.httpClient
 import io.ktor.server.application.Application
 
-
+/* Late-binds the shared Ktor HttpClient into each upstream client. Separate from
+ * construction because the HttpClient is configured by a Ktor plugin that only
+ * becomes available after the Application is started. */
 fun GatewayDeps.attachHttpClients(application: Application) {
     val http = application.httpClient
 

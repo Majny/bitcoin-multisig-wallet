@@ -9,6 +9,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.example.bitcoinwallet.ui.theme.*
 
+/*
+ * Intermediate loading screen while runResolve (typically MobileSigner.loginWithTrezor
+ * + account discovery) is in flight. Shows a spinner on success-path, a
+ * back button on failure — the caller's navigation handles the actual
+ * routing in both cases.
+ */
 @Composable
 fun ResolveWalletScreen(
     runResolve: suspend () -> Unit,

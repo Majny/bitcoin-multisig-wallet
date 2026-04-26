@@ -85,7 +85,7 @@ class JwtIssuerTest {
         assertTrue(fp.isMissing, "fp claim should be missing when fingerprint is null")
         assertNull(fp.asString(), "fp.asString() should be null when claim is missing")
 
-        // extra přísná kontrola (doporučuju):
+        // Extra strict check — guard against fp claim leaking back in.
         assertFalse(decoded.claims.containsKey("fp"))
     }
 
@@ -150,7 +150,7 @@ class JwtIssuerTest {
 
         val token = jwtIssuer.issueAccessToken("dev-1", null)
 
-        // počkej, až token expiroje (minimal, ale stabilní)
+        // Wait until the token expires — minimal but stable sleep.
         Thread.sleep(1200)
 
         val verifier = JWT.require(Algorithm.RSA256(pub, null))

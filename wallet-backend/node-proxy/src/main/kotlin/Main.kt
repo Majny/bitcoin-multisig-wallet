@@ -14,6 +14,15 @@ import io.ktor.server.plugins.callloging.CallLogging
 import org.example.nodeproxy.dto.JsonRpcRequest
 import java.time.Instant
 
+/*
+ * node-proxy entry point. Thin JSON-RPC facade in front of a Bitcoin Core
+ * node: exposes only a curated allowlist of methods (see dto/AllowList.kt)
+ * and layers a shared-secret X-API-Key check + per-key rate limit on top.
+ *
+ * Standalone Gradle module — deliberately not in the main settings.gradle
+ * or docker-compose; it runs next to the Core node, not in the service
+ * mesh.
+ */
 fun main() {
     val port = (System.getenv("PORT") ?: "8088").toInt()
     val host = System.getenv("BIND_HOST") ?: "0.0.0.0"
@@ -25,6 +34,8 @@ fun Application.module() {
     install(ContentNegotiation) { jackson() }
     install(StatusPages) {
         exception<Throwable> { call, cause ->
+            // Return a JSON-RPC shaped error rather than a generic Ktor 400
+            // — clients always expect the {jsonrpc, error, id} envelope.
             call.respond(
                 HttpStatusCode.BadRequest,
                 mapOf(
@@ -36,7 +47,11 @@ fun Application.module() {
         }
     }
 
-    // API key guard + rate-limit
+    /*
+     * Auth + rate-limit interceptor. Runs before routing; if API_KEY is
+     * unset the whole thing is bypassed (useful for local dev against a
+     * regtest node).
+     */
     intercept(ApplicationCallPipeline.Setup) {
         RpcClient.requireApiKeyOrNull()?.let { expected ->
             val got = call.request.headers["X-API-Key"]
@@ -53,14 +68,17 @@ fun Application.module() {
     }
 
     routing {
-        // JSON-RPC passthrough
+        /* POST /rpc — generic JSON-RPC passthrough. The method is still
+         * checked against the allowlist inside RpcClient.call. */
         post("/rpc") {
             val req = call.receive<JsonRpcRequest>()
             val out = RpcClient.call(req)
             call.respond(HttpStatusCode.OK, out)
         }
 
-        // testmempoolaccept
+        /* POST /tx/test — convenience wrapper around testmempoolaccept.
+         * Guards against absurdly large payloads up front so upstream
+         * doesn't have to. */
         post("/tx/test") {
             data class TxReq(val hex: String, val id: Any? = 1)
             val b = call.receive<TxReq>()
@@ -71,7 +89,7 @@ fun Application.module() {
             call.respond(out)
         }
 
-        // sendrawtransaction
+        /* POST /tx/broadcast — convenience wrapper around sendrawtransaction. */
         post("/tx/broadcast") {
             data class TxReq(val hex: String, val id: Any? = 1)
             val b = call.receive<TxReq>()
@@ -82,7 +100,9 @@ fun Application.module() {
             call.respond(out)
         }
 
-        // Healthcheck – jednoduchý, nesahá na Core
+        /* GET /healthz — local liveness only. Intentionally does not touch
+         * Core so orchestrators can still see the proxy as "up" during a
+         * node restart. */
         get("/healthz") {
             call.respond(
                 HttpStatusCode.OK,

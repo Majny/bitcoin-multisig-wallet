@@ -13,11 +13,19 @@ import java.time.OffsetDateTime
 import java.time.format.DateTimeFormatter
 import java.util.*
 
+/*
+ * Persistence for PSBTs and the per-cosigner signature audit trail. Every
+ * method runs in its own Exposed transaction; callers don't need to wrap.
+ */
 class PsbtRepository {
 
     private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
 
-    /* Creates a new PSBT record in the database. Stores TrezorConnectParams without refTxs (too large). */
+    /*
+     * Inserts a new PSBT row. TrezorConnectParams are stripped of `refTxs`
+     * before storage — refTxs (full previous transactions) can be tens of KB
+     * each and we can re-fetch them from blockchain-service when needed.
+     */
     fun create(
         walletId: String,
         psbtBase64: String,
@@ -100,10 +108,11 @@ class PsbtRepository {
         }
     }
 
-    /**
-     * Atomically increments currentSigs and updates PSBT in a single transaction.
-     * Returns the new sig count. Uses SQL-level increment to prevent race conditions
-     * when two cosigners sign concurrently.
+    /*
+     * Adds one signature to a PSBT and bumps the status if the threshold was
+     * just reached. Increment is done at SQL level (`current_sigs = current_sigs + 1`)
+     * so two concurrent cosigner sign requests can't both observe the same
+     * starting count and end up with one missed increment.
      */
     fun atomicSignAndUpdate(
         id: UUID,
@@ -112,7 +121,7 @@ class PsbtRepository {
         trezorConnectParams: TrezorConnectParams? = null,
         serializedTx: String? = null
     ): Pair<Int, String> = transaction {
-        // Atomic increment: current_sigs = current_sigs + 1
+        // Atomic increment + payload update in one statement.
         PsbtsTable.update({ PsbtsTable.id eq id }) {
             with(SqlExpressionBuilder) {
                 it.update(PsbtsTable.currentSigs, PsbtsTable.currentSigs + 1)
@@ -129,12 +138,12 @@ class PsbtRepository {
             }
         }
 
-        // Read back the new value and determine status
+        // Re-read to see the post-increment count and decide the new status.
         val row = PsbtsTable.selectAll().where { PsbtsTable.id eq id }.single()
         val newSigs = row[PsbtsTable.currentSigs]
         val newStatus = if (newSigs >= requiredSigs) "signed" else "pending"
 
-        // Update status based on new sig count
+        // Status flips at most once (pending → signed); skip the write if no change.
         if (newStatus != row[PsbtsTable.status]) {
             PsbtsTable.update({ PsbtsTable.id eq id }) {
                 it[status] = newStatus
@@ -175,11 +184,11 @@ class PsbtRepository {
         PsbtsTable.deleteWhere { PsbtsTable.id eq id }
     }
 
-    /**
-     * Deletes pending/signed PSBTs whose createdAt is older than [olderThan].
-     * Used by the scheduled cleanup to release stale UTXO reservations left
-     * behind when a user abandons a multisig signing flow. Returns the
-     * number of rows removed.
+    /*
+     * Drops pending/signed PSBTs older than the cutoff. Used by the
+     * background cleanup loop to free UTXO reservations from abandoned
+     * multisig drafts. Already-broadcast PSBTs are kept indefinitely
+     * because they're audit history. Returns the number of rows removed.
      */
     fun deleteStale(olderThan: OffsetDateTime): Int = transaction {
         PsbtsTable.deleteWhere {
@@ -189,10 +198,12 @@ class PsbtRepository {
     }
 
     /*
-     * Returns the set of "txid:vout" UTXO keys reserved by pending/signed PSBTs
-     * for the given wallet (not yet broadcast). Used to prevent double-spending.
-     * Only multisig PSBTs reserve UTXOs — singlesig flow is atomic
-     * (create → sign → broadcast in one user interaction) so reservation is unnecessary.
+     * Returns "txid:vout" keys for UTXOs locked into pending/signed multisig
+     * PSBTs. The Send screen uses this to skip already-reserved UTXOs and
+     * surface "X BTC reserved in pending PSBTs" so the user can't accidentally
+     * double-spend. Singlesig PSBTs are excluded because their flow is
+     * synchronous (create → sign → broadcast in one user interaction) so
+     * there's never a window where they can be double-spent.
      */
     fun getReservedUtxos(walletId: String): Set<String> = transaction {
         PsbtsTable.selectAll()
@@ -205,6 +216,8 @@ class PsbtRepository {
                     val params = json.decodeFromString(TrezorConnectParams.serializer(), paramsJson)
                     params.inputs.map { "${it.prev_hash}:${it.prev_index}" }
                 } catch (_: Exception) {
+                    // Corrupt params row shouldn't break reservation calculation
+                    // for the rest of the wallet's PSBTs.
                     emptyList()
                 }
             }

@@ -17,8 +17,15 @@ data class RsaKeyMaterial(
     val publicKey: RSAPublicKey,
 )
 
+/* RSA-2048 key material for RS256 JWT signing. Production keys are injected
+ * via JWT_RSA_PRIVATE_PEM / JWT_RSA_PUBLIC_PEM env vars; dev convenience flag
+ * JWT_DEV_ALLOW_GENERATE_KEYS=true generates ephemeral keys at startup
+ * (tokens won't survive a restart, only useful for local hacking). */
 object RsaKeys {
 
+    /* Loads PEM-encoded keys from env, or generates an ephemeral pair if the
+     * dev opt-in flag is set. Throws otherwise — we don't silently fall back
+     * to generated keys in production. */
     fun fromEnvOrGenerate(): RsaKeyMaterial {
         val kid = System.getenv("JWT_KID") ?: "dev-kid"
         val privPem = System.getenv("JWT_RSA_PRIVATE_PEM")
@@ -76,6 +83,8 @@ object RsaKeys {
         return Base64.getDecoder().decode(clean)
     }
 
+    /* Renders the public key as a JWKS document for the api-gateway's JWKS
+     * endpoint. The gateway caches this and uses it to verify JWT signatures. */
     fun toJwksJson(kid: String, publicKey: RSAPublicKey): String {
         val n = base64Url(publicKey.modulus.toUnsignedBytes())
         val e = base64Url(publicKey.publicExponent.toUnsignedBytes())

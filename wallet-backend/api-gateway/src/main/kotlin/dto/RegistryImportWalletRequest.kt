@@ -1,15 +1,12 @@
+/* DTOs around wallet import, member/cosigner attach, and the small helpers
+ * (toGatewayWalletSummary) that translate registry responses into the
+ * frontend-facing shape. */
 package cz.majny.wallet.gateway.dto
 
 import kotlinx.serialization.Serializable
 
-
-
-// ========== Wallet Import DTOs ==========
-
-/**
- * Gateway request for importing a wallet via descriptor.
- * The gateway enriches this with device info from JWT before forwarding to registry.
- */
+/* What the frontend posts on import. Gateway adds deviceId + fingerprint
+ * from the JWT before forwarding to registry. */
 @Serializable
 data class ImportWalletFromAppRequest(
     val descriptor: String,
@@ -19,9 +16,6 @@ data class ImportWalletFromAppRequest(
     val accountIndex: Int? = null
 )
 
-/**
- * Request forwarded to wallet-registry's /wallets/import endpoint.
- */
 @Serializable
 data class ImportWalletGatewayRequest(
     val descriptor: String,
@@ -33,9 +27,6 @@ data class ImportWalletGatewayRequest(
     val accountIndex: Int? = null
 )
 
-/**
- * Response from wallet-registry's /wallets/import endpoint.
- */
 @Serializable
 data class ImportWalletGatewayResponse(
     val success: Boolean,
@@ -102,12 +93,15 @@ data class WalletDetail(
 )
 
 
+/* Adapter from the registry-shaped summary to the frontend-shaped one.
+ * Balance is intentionally 0 here — the dashboard fetches it lazily from
+ * explorer-service so that the wallet list endpoint stays cheap. */
 fun RegistryWalletSummary.toGatewayWalletSummary(): WalletSummarySerializable =
     WalletSummarySerializable(
         id = walletId,
         label = label ?: walletId,
         type = type,
-        balanceSats = 0L // TODO: placeholder
+        balanceSats = 0L
     )
 
 

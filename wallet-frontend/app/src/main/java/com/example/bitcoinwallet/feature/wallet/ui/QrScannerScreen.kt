@@ -124,7 +124,7 @@ fun QrScannerScreen(
             )
 
             Text(
-                text = "Namiřte foťák na QR kód Bitcoin adresy",
+                text = "Point the camera at a Bitcoin address QR code",
                 color = Color.White,
                 fontSize = 14.sp,
                 modifier = Modifier
@@ -140,14 +140,14 @@ fun QrScannerScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Potřebné oprávnění ke kameře",
+                    text = "Camera permission required",
                     color = TextPrimary,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    text = "Povolte přístup ke kameře v nastavení systému pro skenování QR kódů.",
+                    text = "Allow camera access in system settings to scan QR codes.",
                     color = TextSecondary,
                     fontSize = 14.sp
                 )
@@ -162,7 +162,7 @@ fun QrScannerScreen(
         ) {
             Icon(
                 imageVector = Icons.Default.Close,
-                contentDescription = "Zavřít",
+                contentDescription = "Close",
                 tint = Color.White
             )
         }

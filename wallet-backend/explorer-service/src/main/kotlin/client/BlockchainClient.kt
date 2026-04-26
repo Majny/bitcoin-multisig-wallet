@@ -12,9 +12,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger("BlockchainClient")
 
-/**
- * HTTP client pro blockchain-service.
- * Získává on-chain data: UTXOs, transakce, fee odhady.
+/*
+ * HTTP client for blockchain-service. Pulls on-chain data (UTXOs,
+ * transactions, fee estimates) and caches AddressInfo to collapse the
+ * balance-then-tx-history double fetch that the dashboard triggers.
  */
 class BlockchainClient(
     private val baseUrl: String,
@@ -22,25 +23,26 @@ class BlockchainClient(
 ) {
     private val addressInfoCache = ConcurrentHashMap<String, Pair<Long, AddressInfo>>()
 
-    // Deduplication map: balance + transactions fire 30 getAddressInfo calls each
-    // at the same instant. ConcurrentHashMap.putIfAbsent ensures only ONE network
-    // request is made per address; the other coroutine awaits the same Deferred.
+    // In-flight deduplication: balance + transactions fan out ~30
+    // getAddressInfo calls each at the same instant. putIfAbsent makes sure
+    // only one network request actually flies; the rest await the same
+    // CompletableDeferred.
     private val pendingInfoRequests = ConcurrentHashMap<String, CompletableDeferred<AddressInfo>>()
 
-    /**
-     * Vrátí info o adrese. Výsledek je cachován na 60 s.
-     * Souběžné requesty na stejnou adresu jsou deduplikovány — druhý čeká
-     * na výsledek prvního místo toho, aby spustil vlastní HTTP request.
-     */
     private companion object {
         const val CACHE_TTL = 60_000L
     }
 
+    /*
+     * Address info (tx count, balance, UTXO count). Cached for 60 s,
+     * concurrent duplicate requests are coalesced into one HTTP call.
+     */
     suspend fun getAddressInfo(address: String, network: String = "mainnet"): AddressInfo {
         val cacheKey = "$network:$address"
         val now = System.currentTimeMillis()
 
-        // Evict stale entries to prevent unbounded memory growth
+        // Lazy eviction — good enough for a dev-scale service. The 10k
+        // threshold is a rough guardrail against unbounded memory growth.
         if (addressInfoCache.size > 10_000) {
             addressInfoCache.entries.removeIf { now - it.value.first > CACHE_TTL }
         }
@@ -71,9 +73,7 @@ class BlockchainClient(
         }
     }
 
-    /**
-     * Vrátí UTXOs pro danou adresu.
-     */
+    /* UTXO list for a single address. */
     suspend fun getAddressUtxos(address: String, network: String = "mainnet"): List<UtxoInfo> {
         val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/utxos") {
             parameter("network", network)
@@ -84,9 +84,7 @@ class BlockchainClient(
         return response.body()
     }
 
-    /**
-     * Vrátí transakce pro danou adresu.
-     */
+    /* Raw tx history for a single address. */
     suspend fun getAddressTransactions(address: String, network: String = "mainnet"): List<RawTransaction> {
         val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/txs") {
             parameter("network", network)
@@ -97,9 +95,7 @@ class BlockchainClient(
         return response.body()
     }
 
-    /**
-     * Zjistí, zda adresa má aktivitu (pro gap limit).
-     */
+    /* Lightweight activity probe, used during gap-limit scanning. */
     suspend fun hasActivity(address: String, network: String = "mainnet"): Boolean {
         val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/address/$address/has-activity") {
             parameter("network", network)
@@ -111,9 +107,7 @@ class BlockchainClient(
         return resp.hasActivity
     }
 
-    /**
-     * Vrátí detail jedné transakce.
-     */
+    /* Single transaction detail. */
     suspend fun getTransaction(txid: String, network: String = "mainnet"): RawTransaction {
         val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/tx/$txid") {
             parameter("network", network)
@@ -124,9 +118,7 @@ class BlockchainClient(
         return response.body()
     }
 
-    /**
-     * Vrátí doporučené fee rates.
-     */
+    /* Current sat/vB recommendations (low/medium/high). */
     suspend fun getFeeEstimates(network: String = "mainnet"): FeeEstimates {
         val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/fees") {
             parameter("network", network)
@@ -137,9 +129,9 @@ class BlockchainClient(
         return response.body()
     }
 
-    /**
-     * Vrátí výšku aktuálního nejlepšího bloku.
-     * Používá se pro výpočet reálného počtu konfirmací.
+    /*
+     * Current chain tip height. Needed to convert a tx's block_height into
+     * a real confirmations count.
      */
     suspend fun getTipHeight(network: String = "mainnet"): Int {
         val response: HttpResponse = client.get("$baseUrl/api/v1/blockchain/tip/height") {

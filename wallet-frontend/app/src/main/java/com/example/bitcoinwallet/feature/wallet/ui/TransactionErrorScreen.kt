@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
+/*
  * Transaction Error screen.
  * Shows a red X icon, error title, detail message, and a "Return" button.
  */

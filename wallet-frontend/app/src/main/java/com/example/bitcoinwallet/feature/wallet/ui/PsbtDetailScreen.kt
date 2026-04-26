@@ -48,7 +48,7 @@ import com.example.bitcoinwallet.ui.theme.TextMuted
 import com.example.bitcoinwallet.ui.theme.TextPrimary
 import com.example.bitcoinwallet.ui.theme.TextSecondary
 
-/**
+/*
  * PSBT Detail screen showing transaction summary, signatures status,
  * and context-dependent action buttons (Sign or Broadcast).
  */

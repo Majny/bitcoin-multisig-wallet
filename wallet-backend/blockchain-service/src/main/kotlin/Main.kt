@@ -21,10 +21,19 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 import org.slf4j.event.Level
 
+/*
+ * blockchain-service entry point. Wires two MempoolClientImpl instances
+ * (mainnet = Blockstream, testnet4 = Mempool.space) around a single OkHttp
+ * client, and exposes them through blockchainRoutes on port 8086 by default.
+ *
+ * OkHttp engine was picked over CIO after repeated "Connection reset" errors
+ * against mempool.space/testnet4 — see memory/bug #19.
+ */
 fun main() {
     val cfg = AppConfig.fromEnv()
-    
-    // Create HTTP client for Mempool.space API
+
+    // Shared HTTP client for both mainnet and testnet — upstream APIs are
+    // Esplora-compatible so only the base URL differs.
     val httpClient = HttpClient(OkHttp) {
         install(ClientContentNegotiation) {
             json(Json {
@@ -36,11 +45,13 @@ fun main() {
             level = LogLevel.INFO
         }
         install(HttpTimeout) {
-            requestTimeoutMillis = 15_000   // fail fast if Blockstream hangs
+            // Fail fast when Blockstream/mempool hangs — MempoolClient retries
+            // once anyway, so a 15 s ceiling is enough.
+            requestTimeoutMillis = 15_000
             connectTimeoutMillis = 10_000
         }
     }
-    
+
     val mainnetClient = MempoolClientImpl(
         baseUrl = cfg.mainnetMempoolUrl,
         client = httpClient
@@ -51,18 +62,17 @@ fun main() {
     )
 
     embeddedServer(Netty, host = "0.0.0.0", port = cfg.port) {
-        // Plugins
         install(ServerContentNegotiation) {
             json(Json {
                 ignoreUnknownKeys = true
                 prettyPrint = true
             })
         }
-        
+
         install(CallLogging) {
             level = Level.INFO
         }
-        
+
         install(StatusPages) {
             exception<Throwable> { call, cause ->
                 call.respond(
@@ -71,13 +81,12 @@ fun main() {
                 )
             }
         }
-        
-        // Routes
+
         routing {
-            get("/health") { 
-                call.respondText("ok") 
+            get("/health") {
+                call.respondText("ok")
             }
-            
+
             blockchainRoutes(mainnetClient, testnetClient)
         }
     }.start(wait = true)

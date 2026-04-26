@@ -12,13 +12,13 @@ import java.math.BigInteger
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 
-/**
+/*
  * Converts a decoded UR (from Sparrow / Keystone / Passport / etc.) into a
  * BIP-380 output descriptor string that our backend DescriptorParser accepts.
  *
- * Supports `crypto-output` (multisig + singlesig), `crypto-account`
- * (picks the first wpkh descriptor by default), and `crypto-hdkey`
- * (defaults to wpkh wrapper).
+ * Supports `crypto-output` (multisig + singlesig), `crypto-account` (picks
+ * the first wpkh descriptor by default), and `crypto-hdkey` (defaults to
+ * wpkh wrapper).
  *
  * Hummingbird decodes the UR + CBOR but does not rebuild the base58 xpub,
  * so we reconstruct the 78-byte BIP-32 serialization here.
@@ -97,7 +97,7 @@ object UrDescriptorDecoder {
         return "[$fingerprint/$originPath]$xpub$childrenPath"
     }
 
-    /**
+    /*
      * Rebuild the base58 xpub/tpub from CryptoHDKey fields.
      *
      * BIP-32 serialization: version(4) || depth(1) || parentFp(4) ||

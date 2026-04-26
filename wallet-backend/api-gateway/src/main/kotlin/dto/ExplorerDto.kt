@@ -1,3 +1,5 @@
+/* DTOs for the explorer surface (balance, transactions, UTXOs, fees). Mirror
+ * what explorer-service returns. */
 package cz.majny.wallet.gateway.dto
 
 import kotlinx.serialization.Serializable

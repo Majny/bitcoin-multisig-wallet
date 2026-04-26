@@ -15,6 +15,9 @@ import java.nio.channels.UnresolvedAddressException
 private fun rootCause(t: Throwable): Throwable =
     generateSequence(t) { it.cause }.last()
 
+/* Recognises common transport-level failures so we can translate them to a
+ * 502 Bad Gateway instead of letting them surface as a generic 500. Checks both
+ * the thrown exception and the root cause because Ktor likes to wrap. */
 private fun isNetworkFailure(e: Throwable): Boolean {
     val r = rootCause(e)
     return e is ConnectException ||
@@ -29,6 +32,9 @@ private fun isNetworkFailure(e: Throwable): Boolean {
             r is IOException
 }
 
+/* Wraps a downstream HTTP call. Network-level failures become
+ * UpstreamException(502); other throwables propagate unchanged for StatusPages
+ * to translate. Keeps each client call site free of boilerplate. */
 suspend fun upstreamRequest(
     upstream: String,
     block: suspend () -> HttpResponse
@@ -48,9 +54,11 @@ suspend fun upstreamRequest(
 }
 
 
+/* Throws UpstreamException for non-2xx responses, carrying the upstream's body
+ * text as the message. Uses runCatching to avoid ever failing while reading the
+ * body (the response may have been partially consumed). */
 suspend fun HttpResponse.ensureSuccess(upstream: String): HttpResponse {
     if (!status.isSuccess()) {
-        // co nejrobustnější získání textu těla (ať to nikdy nespadne na další výjimce)
         val text = runCatching { bodyAsText() }
             .recoverCatching { body<String>() }
             .getOrElse { "" }
@@ -60,6 +68,8 @@ suspend fun HttpResponse.ensureSuccess(upstream: String): HttpResponse {
     return this
 }
 
+/* Guard for clients that need the shared HttpClient attached at boot. Throws a
+ * clear message if attachHttpClients was forgotten. */
 fun requireAttached(isInitialized: Boolean, upstream: String) {
     if (!isInitialized) {
         throw IllegalStateException("HttpClient not attached for '$upstream' (deps.attachHttpClients(application) missing?)")

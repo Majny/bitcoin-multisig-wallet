@@ -9,32 +9,28 @@ import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("WalletExplorer")
 
-/**
- * Agregační vrstva — spojuje wallet-registry (adresy) s blockchain-service (on-chain data).
- *
- * Řeší N+1 problém: frontend volá 1 request s walletId,
- * WalletExplorer interně dotáže všechny adresy peněženky.
+/*
+ * Aggregation layer that joins registry (addresses) with blockchain-service
+ * (on-chain data). Hides the N+1 problem from callers: they pass one
+ * walletId and we fan out per-address requests internally.
  */
 class WalletExplorer(
     private val registry: RegistryClient,
     private val blockchain: BlockchainClient
 ) {
 
-    /**
-     * Vrátí množinu všech adres dané peněženky.
-     * Používá se pro isMine labeling v transaction detail.
+    /*
+     * Wallet address set, used for isMine flags on transaction detail.
      */
     suspend fun getWalletAddresses(walletId: String): Set<String> {
         return registry.getAddresses(walletId).map { it.address }.toSet()
     }
 
-    // ========================================================================
-    // BALANCE
-    // ========================================================================
-
-    /**
-     * Spočítá celkový zůstatek peněženky — sečte UTXOs ze všech adres.
-     * Vrací confirmed + unconfirmed zvlášť.
+    /*
+     * Wallet balance (confirmed + unconfirmed). Reads address-level info from
+     * blockchain-service in parallel and sums up balances. We deliberately use
+     * the lighter /address/{addr} endpoint (returns balance + tx_count) instead
+     * of pulling the full UTXO list per address, which would multiply API calls.
      */
     suspend fun getWalletBalance(walletId: String): WalletBalanceResponse = coroutineScope {
         log.info("Computing balance for wallet: {}", walletId)
@@ -53,9 +49,9 @@ class WalletExplorer(
 
         val network = detectNetwork(addresses)
 
-        // Paralelně získej AddressInfo pro všechny adresy.
-        // AddressInfo obsahuje přímo confirmed/unconfirmed zůstatek — nepotřebujeme
-        // načítat UTXOs jen kvůli výpočtu balance (to šetří ~30 API volání na mempool.space).
+        // AddressInfo carries confirmed/unconfirmed balances directly; no need
+        // to walk the UTXO set just to sum them up — saves ~30 mempool.space
+        // calls on a typical wallet.
         val infoList = addresses.map { addr ->
             async {
                 try {
@@ -84,18 +80,11 @@ class WalletExplorer(
     // TRANSACTIONS
     // ========================================================================
 
-    /**
-     * Získá historii transakcí pro celou peněženku.
-     *
-     * Algoritmus:
-     * 1. Načte všechny adresy z registry
-     * 2. Pro každou adresu stáhne transakce z blockchain-service
-     * 3. Deduplikuje podle txid (jedna tx může být na více adresách)
-     * 4. Klasifikuje jako SENT/RECEIVED:
-     *    - Pokud alespoň jeden input patří mým adresám → SENT
-     *    - Jinak → RECEIVED
-     * 5. Spočítá net amount (kolik přišlo/odešlo)
-     * 6. Seřadí chronologicky (unconfirmed first)
+    /*
+     * Wallet transaction history. Fans out per address, dedups by txid
+     * (a tx touching multiple wallet addresses shows up only once),
+     * classifies each as SENT (any input is ours) or RECEIVED (none are),
+     * computes net amount and sorts with unconfirmed txs on top then by time.
      */
     suspend fun getWalletTransactions(
         walletId: String,
@@ -119,8 +108,9 @@ class WalletExplorer(
 
         val network = detectNetwork(addresses)
 
-        // Krok 1: AddressInfo pro všechny adresy (výsledek je cachován 60 s —
-        // pokud frontend zavolal /balance těsně předtím, tato volání jsou zdarma).
+        // First pass: cheap AddressInfo call for every address. Results are
+        // cached in blockchain-service for ~60s, so if the user just hit
+        // /balance these calls are effectively free.
         val infoFetch = addresses.map { addr ->
             async {
                 try { blockchain.getAddressInfo(addr.address, network) to addr }
@@ -137,7 +127,8 @@ class WalletExplorer(
             }
         }
 
-        // Krok 2: stáhni tx jen pro adresy s alespoň jednou transakcí
+        // Only fetch full tx lists for addresses that actually have activity —
+        // skips ~80% of a fresh wallet's addresses.
         val activeAddresses = infoFetch.awaitAll()
             .filterNotNull()
             .filter { (info, _) -> info.txCount > 0 }
@@ -158,18 +149,16 @@ class WalletExplorer(
         txFetch.awaitAll().flatten().forEach { tx -> rawTxMap[tx.txid] = tx }
         val currentHeight = tipFetch.await()
 
-        // Klasifikuj a spočítej amount
         val classified = rawTxMap.values.map { tx ->
             classifyTransaction(tx, myAddressSet, currentHeight)
         }
 
-        // Seřaď: unconfirmed first, pak podle času (nejnovější first)
+        // Unconfirmed first (user cares about those most), then by block time desc.
         val sorted = classified.sortedWith(
             compareBy<WalletTransaction> { it.confirmed }
                 .thenByDescending { it.blockTime ?: Long.MAX_VALUE }
         )
 
-        // Paginate
         val total = sorted.size
         val page = sorted.drop(offset).take(limit)
 
@@ -182,12 +171,9 @@ class WalletExplorer(
         )
     }
 
-    // ========================================================================
-    // UTXOs (pro coin control)
-    // ========================================================================
-
-    /**
-     * Vrátí všechny UTXOs peněženky obohacené o adresu a derivation path info.
+    /*
+     * Wallet UTXOs enriched with derivation info. Powers the coin-control
+     * screen.
      */
     suspend fun getWalletUtxos(walletId: String): WalletUtxosResponse = coroutineScope {
         log.info("Getting UTXOs for wallet: {}", walletId)
@@ -196,15 +182,17 @@ class WalletExplorer(
 
         val network = detectNetwork(addresses)
 
-        // Pre-filter pomocí AddressInfo (cachováno 60 s — při přechodu z main menu zdarma).
-        // Adresy s utxoCount == 0 přeskočíme, abychom zbytečně nevolali /utxo endpoint.
+        // Pre-filter via AddressInfo (already cached, likely free on this pass):
+        // skip addresses with utxoCount == 0 so we don't waste a /utxo call.
         val activeAddresses = addresses.map { addr ->
             async {
                 try {
                     val info = blockchain.getAddressInfo(addr.address, network)
                     if (info.utxoCount > 0) addr else null
                 } catch (e: Exception) {
-                    addr  // při chybě fetchujeme UTXOs raději i tak
+                    // Err on the side of fetching — a failed info call
+                    // shouldn't hide real UTXOs.
+                    addr
                 }
             }
         }.awaitAll().filterNotNull()
@@ -232,7 +220,8 @@ class WalletExplorer(
             }
         }.awaitAll().flatten()
 
-        // Seřaď: potvrzené first, pak podle value desc
+        // Confirmed first, then by value desc — matches the coin-control
+        // display preference.
         val sorted = enrichedUtxos.sortedWith(
             compareByDescending<WalletUtxo> { it.confirmed }
                 .thenByDescending { it.valueSats }
@@ -246,39 +235,36 @@ class WalletExplorer(
         )
     }
 
-    // ========================================================================
-    // RECEIVE ADDRESS
-    // ========================================================================
-
-    /**
-     * Najde první nepoužitou receive adresu.
-     * Prochází adresy od indexu 0, hledá první bez aktivity.
+    /*
+     * First receive address with no on-chain activity. Scans from index 0
+     * and stops at the first clean one.
      */
     suspend fun getNextReceiveAddress(walletId: String): ReceiveAddressResponse {
         log.info("Finding next receive address for wallet: {}", walletId)
         return findNextUnusedAddress(walletId, type = "receive")
     }
 
-    /**
-     * Vrátí první nepoužitou change adresu (privacy invariant: nikdy nereusuje).
-     * Používá psbt-service při sestavování PSBT, aby každá tx měla nový change output.
+    /*
+     * First change address with no on-chain activity. Called by psbt-service
+     * during PSBT assembly — privacy invariant: every outgoing tx burns a
+     * fresh change output, never a reused one.
      */
     suspend fun getNextChangeAddress(walletId: String): ReceiveAddressResponse {
         log.info("Finding next change address for wallet: {}", walletId)
         return findNextUnusedAddress(walletId, type = "change")
     }
 
-    /**
-     * Sdílená logika: najde první adresu daného typu (receive/change) bez on-chain aktivity.
+    /*
+     * Shared logic for /receive-address and /change-address. If every
+     * pre-derived address already has activity, asks registry to derive a new
+     * one past the gap limit. A freshly derived address is normally clean —
+     * but we check anyway to defend against the odd race where someone sent
+     * to it before derivation (e.g. paper-trail recovery), and extend up to
+     * MAX_DERIVATION_ATTEMPTS times before giving up.
      *
-     * Když jsou všechny existující adresy v DB použité, požádá wallet-registry o odvození
-     * nové na dalším indexu a okamžitě ji vrátí. Nově odvozená adresa nemůže mít aktivitu
-     * v běžném scénáři, protože dosud neexistovala — ale pro paranoidní případy
-     * (adresář coincidentally dostal peníze před derivací) pokračujeme v derivaci dál
-     * dokud nenajdeme čistou, s tvrdým limitem MAX_DERIVATION_ATTEMPTS.
-     *
-     * IMPORTANT: výjimky z blockchain kontroly propagujeme — spolknutí chyby by vedlo
-     * k reuse adresy (privacy violation).
+     * We deliberately don't catch exceptions from the activity check —
+     * swallowing a blockchain error could let us return a dirty address and
+     * quietly break the no-reuse invariant.
      */
     private suspend fun findNextUnusedAddress(
         walletId: String,
@@ -287,7 +273,7 @@ class WalletExplorer(
         val addresses = registry.getAddresses(walletId, type).sortedBy { it.index }
         val network = detectNetwork(addresses)
 
-        // Paralelně zjisti aktivitu všech existujících adres.
+        // Activity check for all pre-derived addresses in parallel.
         val withActivity = addresses.map { addr ->
             async {
                 val hasActivity = blockchain.hasActivity(addr.address, network)
@@ -305,7 +291,7 @@ class WalletExplorer(
             )
         }
 
-        // Všechny existující adresy jsou použité — rozšíříme window přes registry.
+        // Every pre-derived address is used; extend the window via registry.
         val baseIndex = (addresses.maxOfOrNull { it.index } ?: -1) + 1
         log.info("All {} addresses up to index {} are used, deriving next for wallet {}",
             type, baseIndex - 1, walletId)
@@ -326,24 +312,21 @@ class WalletExplorer(
                 walletId, type, idx, derived.address)
         }
 
-        // Extrémně nepravděpodobné — vzdáváme to a signalizujeme chybu.
+        // Essentially never hit in practice — give up rather than loop forever.
         error("Failed to find unused $type address for wallet $walletId after " +
                 "$MAX_DERIVATION_ATTEMPTS derivation attempts starting at index $baseIndex")
     }
 
     companion object {
-        /** Horní limit pro kolikrát budeme opakovaně derivovat, pokud každá nová má aktivitu. */
+        /* How many freshly-derived addresses we're willing to check before
+         * giving up. 5 is a wide safety margin for what should normally take 1. */
         private const val MAX_DERIVATION_ATTEMPTS = 5
     }
 
-    // ========================================================================
-    // HELPERS
-    // ========================================================================
-
-    /**
-     * Detekuje síť z formátu první adresy.
-     * tb1 / 2 / m / n  → testnet
-     * bc1 / 1 / 3      → mainnet
+    /*
+     * Detects network from the first address prefix. tb1 / 2 / m / n →
+     * testnet, everything else → mainnet. Used so routes don't need to
+     * pass the network explicitly.
      */
     private fun detectNetwork(addresses: List<cz.majny.wallet.explorer.client.WalletAddress>): String {
         val first = addresses.firstOrNull()?.address ?: return "mainnet"
@@ -351,15 +334,14 @@ class WalletExplorer(
                    first.startsWith("m")   || first.startsWith("n")) "testnet" else "mainnet"
     }
 
-    /**
-     * Klasifikuje transakci z pohledu peněženky.
-     *
-     * SENT: alespoň jeden input patří mým adresám
-     * RECEIVED: žádný input nepatří mým adresám, ale alespoň jeden output ano
-     *
-     * Částka:
-     * - SENT: suma mých inputů - suma mých outputů (change) = skutečně odesláno + fee
-     * - RECEIVED: suma outputů na mé adresy
+    /*
+     * Classifies a raw transaction from the wallet's perspective.
+     *   SENT     — at least one input belongs to us
+     *   RECEIVED — no inputs are ours, at least one output is
+     * Amount semantics:
+     *   SENT     — sum(my inputs) − sum(my outputs, i.e. change) = what
+     *              actually left + fee
+     *   RECEIVED — sum(outputs paying us)
      */
     private fun classifyTransaction(
         tx: RawTransaction,
@@ -383,15 +365,15 @@ class WalletExplorer(
 
         if (isSent) {
             type = "SENT"
-            // Co jsem utratil = moje inputy - moje outputy (change)
-            // To zahrnuje fee + skutečně odeslanou částku
+            // What I spent = my inputs - my outputs (the change) — includes
+            // the fee plus the actual amount the counterparty received.
             amount = myInputSum - myOutputSum
         } else {
             type = "RECEIVED"
             amount = myOutputSum
         }
 
-        // Počet konfirmací: currentHeight - txBlockHeight + 1
+        // Confirmations: currentHeight - txBlockHeight + 1.
         val confirmations = if (tx.status.confirmed && tx.status.block_height != null) {
             if (currentBlockHeight > 0) maxOf(currentBlockHeight - tx.status.block_height + 1, 1)
             else 1

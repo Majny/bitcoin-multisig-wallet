@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "MultisigDetailVM"
 
-/**
+/*
  * UI State for the Multisig Wallet Detail screen.
  */
 data class MultisigDetailUiState(
@@ -31,7 +31,7 @@ data class MultisigDetailUiState(
     val mOfN: String get() = "Multisig: $m of $n"
 }
 
-/**
+/*
  * ViewModel for the Multisig Wallet Detail screen.
  * Loads balance and transaction history for a specific multisig wallet.
  */
@@ -42,7 +42,7 @@ class MultisigDetailViewModel : ViewModel() {
 
     private val repository = WalletApi.repository
 
-    /**
+    /*
      * Load multisig wallet detail data.
      *
      * @param walletId Wallet identifier
@@ -68,7 +68,7 @@ class MultisigDetailViewModel : ViewModel() {
             if (accessToken == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Není přihlášen uživatel"
+                    error = "Not signed in"
                 )
                 return@launch
             }
@@ -98,7 +98,7 @@ class MultisigDetailViewModel : ViewModel() {
                 Log.e(TAG, "Error loading multisig wallet data", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Neznámá chyba"
+                    error = e.message ?: "Unknown error"
                 )
             }
         }

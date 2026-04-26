@@ -1,3 +1,4 @@
+/* DTOs for the (currently unused) signer service path. */
 package cz.majny.wallet.gateway.dto
 
 import kotlinx.serialization.Serializable

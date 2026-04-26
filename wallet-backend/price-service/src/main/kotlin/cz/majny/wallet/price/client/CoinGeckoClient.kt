@@ -13,9 +13,13 @@ import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
 import java.util.concurrent.atomic.AtomicReference
 
-/**
- * Client for CoinGecko API - fetches Bitcoin prices in various fiat currencies.
- * Includes in-memory caching to respect rate limits and improve performance.
+/*
+ * CoinGecko client. Pulls BTC prices in multiple fiats from
+ * /simple/price and caches the full response in-memory for
+ * PRICE_CACHE_DURATION_MS (default 5 min) so the free-tier rate limit
+ * isn't the bottleneck. On upstream failure the client falls back to
+ * whatever stale entry is in the cache — better to serve a slightly old
+ * price than to crash the wallet dashboard.
  */
 class CoinGeckoClient {
 
@@ -35,27 +39,24 @@ class CoinGeckoClient {
         }
     }
 
-    // Thread-safe cache using AtomicReference
+    // Lock-free cache slot — a single AtomicReference is enough because we
+    // always replace the whole BitcoinPrices record atomically.
     private data class CacheEntry(val prices: BitcoinPrices, val timestamp: Long)
     private val cache = AtomicReference<CacheEntry?>(null)
-    
-    /**
-     * Get Bitcoin prices in specified currencies.
-     * Results are cached for [cacheDurationMs] milliseconds.
-     * 
-     * @param currencies List of currency codes (e.g., "czk", "usd", "eur")
-     * @return Bitcoin prices in requested currencies
+
+    /*
+     * Fetch current BTC prices. Returns the cached record if still fresh,
+     * otherwise goes to CoinGecko. Errors fall back to stale cache when
+     * available; only a cold-start failure actually throws.
      */
     suspend fun getBitcoinPrices(currencies: List<String> = listOf("czk", "usd", "eur")): BitcoinPrices {
         val now = System.currentTimeMillis()
         val cached = cache.get()
 
-        // Return cached data if still valid
         if (cached != null && (now - cached.timestamp) < cacheDurationMs) {
             return cached.prices
         }
 
-        // Fetch fresh data, fallback to stale cache on error
         return try {
             val currencyParam = currencies.joinToString(",") { it.lowercase() }
             val response: CoinGeckoResponse = httpClient.get("$baseUrl/simple/price") {
@@ -77,11 +78,11 @@ class CoinGeckoClient {
                 cachedAt = now
             )
 
-            // Update cache
             cache.set(CacheEntry(prices, now))
             prices
         } catch (e: Exception) {
-            // Fallback to stale cache if available
+            // Serve stale cache rather than failing — CoinGecko outages are
+            // common on the free tier and a slightly old price is fine.
             if (cached != null) {
                 log.warn("CoinGecko API failed, serving stale cache (age: {}s): {}",
                     (now - cached.timestamp) / 1000, e.message)
@@ -91,13 +92,11 @@ class CoinGeckoClient {
             }
         }
     }
-    
-    /**
-     * Convert satoshis to fiat value.
-     * 
-     * @param satoshis Amount in satoshis
-     * @param currency Target fiat currency code
-     * @return Fiat value or null if currency not available
+
+    /*
+     * Sats → fiat. Reuses the cached price record rather than hitting
+     * CoinGecko per call; returns null if the requested currency isn't one
+     * of the supported three.
      */
     suspend fun convertSatsToFiat(satoshis: Long, currency: String): Double? {
         val prices = getBitcoinPrices(listOf("czk", "usd", "eur"))
@@ -107,11 +106,11 @@ class CoinGeckoClient {
             "eur" -> prices.eur
             else -> null
         } ?: return null
-        
+
         val btcAmount = satoshis / 100_000_000.0
         return btcAmount * btcPrice
     }
-    
+
     fun close() {
         httpClient.close()
     }

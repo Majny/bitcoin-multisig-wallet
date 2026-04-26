@@ -2,14 +2,13 @@ package com.example.bitcoinwallet.feature.wallet.model
 
 import java.time.LocalDateTime
 
-/**
- * Represents a single transaction in history.
- */
+/* UI-shaped transaction row. Derived from WalletTransactionDto by
+ * WalletRepository — amount is the signed net effect on the wallet. */
 data class Transaction(
     val id: String,
     val txid: String,
     val type: TransactionType,
-    val amount: Long, // in satoshis
+    val amount: Long, // satoshis
     val dateTime: LocalDateTime,
     val confirmed: Boolean = true,
     val confirmations: Int = 6
@@ -20,9 +19,7 @@ enum class TransactionType {
     RECEIVED
 }
 
-/**
- * Wallet balance information.
- */
+/* UI-shaped wallet balance with fiat conversion already applied. */
 data class WalletBalance(
     val balanceSats: Long, // Balance in satoshis
     val balanceFiat: Double, // Balance in fiat currency

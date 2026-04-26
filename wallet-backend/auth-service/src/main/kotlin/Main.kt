@@ -7,6 +7,9 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import kotlinx.serialization.json.Json
 
+/* auth-service entry point. Boots the database (Flyway + Hikari), loads the
+ * signing keys, wires up DeviceRepository/RefreshStore/JwtIssuer, and starts
+ * Netty on port 8081 (default). */
 fun main() {
     val dbCfg = Db.loadConfig()
     Db.init(dbCfg)

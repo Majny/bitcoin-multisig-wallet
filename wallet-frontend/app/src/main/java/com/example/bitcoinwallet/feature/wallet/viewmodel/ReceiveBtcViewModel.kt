@@ -28,7 +28,7 @@ data class ReceiveBtcUiState(
     // on the next ON_RESUME of this screen (i.e. when the user returns to the app).
     val verifyingAddress: Boolean = false
 ) {
-    /** Truncated address for display (first 18 chars + "...") */
+    /* Truncated address for display (first 18 chars + "...") */
     val displayAddress: String
         get() = if (address.length > 20) "${address.take(18)}…" else address
 }
@@ -92,19 +92,19 @@ class ReceiveBtcViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(copiedToClipboard = true)
     }
 
-    /** Called right before the Trezor Suite deeplink is launched. */
+    /* Called right before the Trezor Suite deeplink is launched. */
     fun onShowOnTrezorStarted() {
         _uiState.value = _uiState.value.copy(verifyingAddress = true)
     }
 
-    /** Called when the user returns to the Receive screen from Trezor Suite. */
+    /* Called when the user returns to the Receive screen from Trezor Suite. */
     fun onShowOnTrezorFinished() {
         if (_uiState.value.verifyingAddress) {
             _uiState.value = _uiState.value.copy(verifyingAddress = false)
         }
     }
 
-    /**
+    /*
      * Generate a QR code Bitmap using ZXing.
      */
     private fun generateQrBitmap(content: String, size: Int): Bitmap {

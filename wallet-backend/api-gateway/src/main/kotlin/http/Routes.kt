@@ -4,6 +4,9 @@ import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
+/* Root router. Everything user-facing lives under /api/v1 so the gateway can
+ * evolve its public surface without breaking older clients on /api/v0, etc.
+ * Health endpoint stays at /health for docker-compose probes. */
 fun Application.configureRouting() {
     routing {
         get("/health") { call.respondText("ok") }
@@ -14,8 +17,8 @@ fun Application.configureRouting() {
             walletRoutes()
             explorerRoutes()
             psbtRoutes()
-            blockchainRoutes()  // Proxies to blockchain-service
-            priceRoutes()       // Proxies to price-service
+            blockchainRoutes()
+            priceRoutes()
             accountDiscoveryRoutes()
         }
     }

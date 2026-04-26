@@ -15,9 +15,14 @@ import io.ktor.server.routing.*
 import io.ktor.http.*
 import kotlinx.serialization.json.Json
 
+/*
+ * price-service entry point. Thin wrapper around CoinGeckoClient that
+ * exposes BTC prices in CZK/USD/EUR and a sats→fiat converter. Caches
+ * upstream responses to stay inside CoinGecko's free-tier rate limits.
+ */
 fun main() {
     val coinGeckoClient = CoinGeckoClient()
-    
+
     embeddedServer(Netty, port = AppConfig.PORT) {
         install(ContentNegotiation) {
             json(Json {
@@ -25,9 +30,9 @@ fun main() {
                 ignoreUnknownKeys = true
             })
         }
-        
+
         install(CallLogging)
-        
+
         install(StatusPages) {
             exception<Throwable> { call, cause ->
                 call.application.environment.log.error("Unhandled exception", cause)
@@ -37,15 +42,17 @@ fun main() {
                 )
             }
         }
-        
+
         routing {
             priceRoutes(coinGeckoClient)
         }
-        
+
+        // Release the upstream HttpClient on shutdown — otherwise CIO's
+        // worker threads keep the JVM from exiting cleanly in tests.
         environment.monitor.subscribe(ApplicationStopped) {
             coinGeckoClient.close()
         }
     }.start(wait = true)
-    
+
     println("Price Service started on port ${AppConfig.PORT}")
 }

@@ -9,18 +9,10 @@ import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("ExplorerRoutes")
 
-/**
- * REST API endpointy pro explorer-service.
- *
- * Wallet-level agregace:
- *   GET /explorer/wallet/{id}/balance
- *   GET /explorer/wallet/{id}/transactions
- *   GET /explorer/wallet/{id}/utxos
- *   GET /explorer/wallet/{id}/receive-address
- *
- * Transaction detail:
- *   GET /explorer/tx/{txid}
- *   GET /explorer/tx/{txid}/detail?walletId=...
+/*
+ * explorer-service routes. All endpoints are wallet-level aggregations on top
+ * of blockchain-service per-address calls — they hide the N+1 problem from
+ * the frontend by fanning out internally.
  */
 fun Route.explorerRoutes(
     explorer: WalletExplorer,
@@ -28,14 +20,11 @@ fun Route.explorerRoutes(
 ) {
     route("/explorer") {
 
-        // ========== Wallet-level endpoints ==========
-
         route("/wallet/{walletId}") {
 
-            /**
+            /*
              * GET /explorer/wallet/{walletId}/balance
-             *
-             * Vrátí celkový zůstatek peněženky (confirmed + unconfirmed).
+             * Confirmed + unconfirmed totals across every wallet address.
              */
             get("/balance") {
                 val walletId = call.parameters["walletId"]
@@ -51,11 +40,9 @@ fun Route.explorerRoutes(
                 }
             }
 
-            /**
+            /*
              * GET /explorer/wallet/{walletId}/transactions?limit=50&offset=0
-             *
-             * Vrátí historii transakcí seřazenou chronologicky.
-             * Podporuje paginaci.
+             * Chronological tx history with SENT/RECEIVED classification done here.
              */
             get("/transactions") {
                 val walletId = call.parameters["walletId"]
@@ -74,11 +61,10 @@ fun Route.explorerRoutes(
                 }
             }
 
-            /**
+            /*
              * GET /explorer/wallet/{walletId}/utxos
-             *
-             * Vrátí všechny UTXOs peněženky pro coin control.
-             * Každý UTXO je obohacen o adresu a derivation info.
+             * Full UTXO list enriched with derivation info, used by the
+             * coin-control screen.
              */
             get("/utxos") {
                 val walletId = call.parameters["walletId"]
@@ -94,10 +80,10 @@ fun Route.explorerRoutes(
                 }
             }
 
-            /**
+            /*
              * GET /explorer/wallet/{walletId}/receive-address
-             *
-             * Vrátí první nepoužitou receive adresu.
+             * First unused receive address. Derives a new one past the gap
+             * limit if every pre-derived address has on-chain activity.
              */
             get("/receive-address") {
                 val walletId = call.parameters["walletId"]
@@ -113,11 +99,11 @@ fun Route.explorerRoutes(
                 }
             }
 
-            /**
+            /*
              * GET /explorer/wallet/{walletId}/change-address
-             *
-             * Vrátí první nepoužitou change adresu. Používá psbt-service při sestavování PSBT.
-             * Privacy invariant: každá outgoing tx dostane nový change output.
+             * First unused change address. Called by psbt-service when
+             * building a new PSBT. Privacy invariant: every outgoing tx
+             * gets a fresh change output, never reused.
              */
             get("/change-address") {
                 val walletId = call.parameters["walletId"]
@@ -134,12 +120,10 @@ fun Route.explorerRoutes(
             }
         }
 
-        // ========== Transaction-level endpoints ==========
-
-        /**
+        /*
          * GET /explorer/tx/{txid}
-         *
-         * Vrátí detail transakce — raw data z blockchain.
+         * Raw transaction detail straight from blockchain-service, no
+         * wallet annotation.
          */
         get("/tx/{txid}") {
             val txid = call.parameters["txid"]
@@ -184,10 +168,11 @@ fun Route.explorerRoutes(
             }
         }
 
-        /**
+        /*
          * GET /explorer/tx/{txid}/detail?walletId={walletId}
-         *
-         * Detail transakce s označením "isMine" pro inputy/outputy.
+         * Same as /tx/{txid} but each input/output is annotated with isMine
+         * relative to the supplied wallet — drives the YOURS badge in the
+         * transaction-detail UI.
          */
         get("/tx/{txid}/detail") {
             val txid = call.parameters["txid"]
@@ -195,7 +180,9 @@ fun Route.explorerRoutes(
             val walletId = call.request.queryParameters["walletId"]
 
             try {
-                // Pokud je walletId, načti adresy pro "isMine" labeling a detekci sítě
+                // Pull the wallet's address set for isMine labeling. Network
+                // is detected from the address prefixes (tb1/m/n/2 → testnet)
+                // so callers don't have to pass it explicitly.
                 val myAddresses = if (walletId != null) {
                     try {
                         explorer.getWalletAddresses(walletId)
@@ -255,11 +242,7 @@ fun Route.explorerRoutes(
 
         // ========== Fee estimates (proxied) ==========
 
-        /**
-         * GET /explorer/fees
-         *
-         * Doporučené fee rates.
-         */
+        /* GET /explorer/fees — current sat/vB recommendations. */
         get("/fees") {
             try {
                 val fees = blockchainClient.getFeeEstimates()

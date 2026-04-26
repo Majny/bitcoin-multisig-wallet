@@ -450,7 +450,7 @@ private fun formatFee(sats: Long, rateSatVb: Double): String {
     return "$sats sats ($rateStr sat/vB)"
 }
 
-/**
+/*
  * Clickable pill showing the current amount unit. Tapping flips BTC ↔ fiat.
  * Disabled (no click + muted colour) when the BTC/fiat rate is unavailable,
  * so the user isn't offered a toggle that would produce a 0 sats amount.
@@ -490,7 +490,7 @@ private fun AmountUnitPill(
     }
 }
 
-/**
+/*
  * Human-readable representation of the amount in the *other* unit (the one the
  * user is not currently typing in). Returns null when the input is empty or
  * the rate is missing, so the supporting text stays empty instead of echoing "≈ 0".

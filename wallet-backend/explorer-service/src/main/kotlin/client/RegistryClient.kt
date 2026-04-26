@@ -9,19 +9,18 @@ import org.slf4j.LoggerFactory
 
 private val log = LoggerFactory.getLogger("RegistryClient")
 
-/**
- * HTTP client pro wallet-registry.
- * Získává seznam adres peněženky.
+/*
+ * HTTP client for wallet-registry from explorer-service's side. Only needs
+ * address lookups and on-demand derivation — we don't go near wallet
+ * creation from here.
  */
 class RegistryClient(
     private val baseUrl: String,
     private val client: HttpClient
 ) {
 
-    /**
-     * Vrátí všechny odvozené adresy peněženky.
-     * Volitelně filtrováno podle typu (receive/change).
-     */
+    /* All pre-derived addresses of the wallet, optionally filtered by
+     * type (receive/change). */
     suspend fun getAddresses(walletId: String, type: String? = null): List<WalletAddress> {
         log.debug("Getting addresses for wallet: {} type: {}", walletId, type)
         val response: WalletAddressesResponse = client.get("$baseUrl/registry/wallets/$walletId/addresses") {
@@ -30,13 +29,12 @@ class RegistryClient(
         return response.addresses
     }
 
-    /**
-     * Požádá registry o odvození nové adresy za existujícím gap limitem a zápis do DB.
-     * Používá se v privacy-critical flow (getNext*Address): když jsou všechny předem
-     * odvozené adresy spotřebované, musíme rozšířit okno bez reusování.
-     *
-     * Idempotentní — pokud už adresa na daném indexu existuje, registry ji vrátí.
-     */
+    /*
+     * Asks registry to derive (and persist) an address past the existing
+     * gap limit. Drives the privacy-critical getNext*Address flow: once
+     * every pre-derived address has on-chain activity we must extend the
+     * window instead of reusing. Idempotent — existing rows are returned
+     * as-is. */
     suspend fun deriveAdditionalAddress(
         walletId: String,
         type: String,

@@ -210,7 +210,7 @@ fun ReceiveBtcScreen(
     }
 }
 
-/**
+/*
  * Renders a ZXing-generated QR code bitmap in Compose.
  */
 @Composable

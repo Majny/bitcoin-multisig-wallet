@@ -18,6 +18,12 @@ import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.signer.WalletSummary
 import com.example.bitcoinwallet.ui.theme.*
 
+/*
+ * Post-discovery picker. Shows every wallet the user has on the connected
+ * network (singlesig only — multisig has its own management screen) and
+ * pre-selects the row they were last on so an account switch stays on
+ * the same visual position.
+ */
 @Composable
 fun SelectAccountScreen(
     wallets: List<WalletSummary>,

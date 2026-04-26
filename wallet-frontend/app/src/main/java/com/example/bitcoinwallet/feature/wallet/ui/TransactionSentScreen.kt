@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.sp
 import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
+/*
  * Transaction Sent success screen.
  * Shows a green checkmark, amount, fee, and a "Return To Wallet" button.
  */

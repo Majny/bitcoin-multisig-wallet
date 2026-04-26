@@ -16,7 +16,7 @@ import java.util.Locale
 
 private const val TAG = "PsbtListVM"
 
-/**
+/*
  * Single PSBT item for the list display.
  */
 data class PsbtListItem(
@@ -28,7 +28,7 @@ data class PsbtListItem(
     val createdAt: String,
     val label: String?
 ) {
-    /** e.g. "Waiting for 2 signatures" or "Ready to broadcast" or "Broadcast" */
+    /* e.g. "Waiting for 2 signatures" or "Ready to broadcast" or "Broadcast" */
     val statusLabel: String
         get() {
             val remaining = requiredSigs - currentSigs
@@ -40,14 +40,14 @@ data class PsbtListItem(
             }
         }
 
-    /** e.g. "0.00250000 BTC" */
+    /* e.g. "0.00250000 BTC" */
     val amountBtcFormatted: String
         get() {
             val btc = totalOutputSats / 100_000_000.0
             return "%.8f BTC".format(btc)
         }
 
-    /** Formatted date, e.g. "May 27" */
+    /* Formatted date, e.g. "May 27" */
     val dateFormatted: String
         get() = try {
             val odt = OffsetDateTime.parse(createdAt)
@@ -64,7 +64,7 @@ data class PsbtListUiState(
     val error: String? = null
 )
 
-/**
+/*
  * ViewModel for the PSBT list screen (per multisig wallet).
  */
 class PsbtListViewModel : ViewModel() {
@@ -85,7 +85,7 @@ class PsbtListViewModel : ViewModel() {
             if (accessToken == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Není přihlášen uživatel"
+                    error = "Not signed in"
                 )
                 return@launch
             }

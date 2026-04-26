@@ -24,7 +24,7 @@ import com.example.bitcoinwallet.ui.components.PrimaryButton
 import com.example.bitcoinwallet.ui.components.SecondaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
+/*
  * Coin Control screen — UTXO selection for advanced send.
  *
  * Layout based on mockup:

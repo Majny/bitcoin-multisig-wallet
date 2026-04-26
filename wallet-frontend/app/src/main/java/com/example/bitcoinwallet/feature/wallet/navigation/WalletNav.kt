@@ -51,6 +51,13 @@ import com.example.bitcoinwallet.ui.components.DrawerContent
 import com.example.bitcoinwallet.ui.components.DrawerItem
 import kotlinx.coroutines.launch
 
+/*
+ * Wallet-feature nav graph. Hosts every post-login screen — dashboard,
+ * send/coin-control, receive, PSBT list/detail, multisig management,
+ * settings — plus the Trezor sign callback plumbing that routes the
+ * pendingSignedPsbt StateFlow from SessionStore back into the correct
+ * flow (SEND vs PSBT_DETAIL, guarded by SessionStore.activeSignFlow).
+ */
 object WalletRoutes {
     const val Graph = "wallet_graph"
     const val Dashboard = "wallet_dashboard"
@@ -177,7 +184,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     ?.find { it.id == SessionStore.activeWalletId }?.network ?: "testnet"
             }
 
-            // Výsledek ze QR skeneru — QrScannerScreen ho uloží do savedStateHandle
+            // QR scan result — QrScannerScreen drops it into savedStateHandle.
             val qrAddress by backStackEntry.savedStateHandle
                 .getStateFlow<String?>("qr_address", null)
                 .collectAsState()
@@ -189,11 +196,12 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 }
             }
 
-            // Sleduj StateFlow — re-spustí se pokaždé, když Trezor vrátí podepsaný výsledek,
-            // včetně případu kdy activity přežila přes onNewIntent (FLAG_SINGLE_TOP).
-            // Nekontrolujeme awaitingTrezor — pokud signed data přijde, vždy ho zpracujeme.
-            // Předchozí gate na awaitingTrezor způsoboval race condition: 3s timeout resetoval
-            // stav dřív než user stihl podepsat na Trezoru (typicky 10-30s).
+            // Observe pendingSignedPsbt as a StateFlow — the handler re-runs
+            // every time Trezor returns, including after onNewIntent
+            // (FLAG_SINGLE_TOP). Deliberately no awaitingTrezor gate: a
+            // previous implementation had a 3 s timeout that reset the flag
+            // before the user could confirm on the device (10–30 s in
+            // practice), which dropped the signed result on the floor.
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
             val pendingSignType by SessionStore.pendingSignType.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
@@ -393,8 +401,9 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             }
             val sendVm: SendTransactionViewModel = viewModel(sendBackStackEntry)
 
-            // Pre-select UTXOs jednou při prvním zobrazení — nesmí být v těle composable,
-            // protože by se volalo při každé rekomposici a resetovalo uživatelův výběr.
+            // Pre-select UTXOs once on first entry. Must be inside LaunchedEffect —
+            // doing it in the composable body would re-run on every recomposition
+            // and overwrite the user's manual selection.
             LaunchedEffect(Unit) {
                 coinControlVm.setPreSelected(sendVm.getSelectedUtxoKeys())
             }
@@ -680,22 +689,24 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         composable(WalletRoutes.CreatePsbt) { backStackEntry ->
             val walletId = backStackEntry.arguments?.getString("walletId") ?: ""
 
-            // Ulož předchozí walletId pro obnovení při odchodu
+            // Snapshot the previous walletId so we can restore it on exit.
             val previousWalletId = remember { SessionStore.activeWalletId }
 
-            // Nastav activeWalletId SYNCHRONNĚ pomocí remember() — volá se před viewModel(),
-            // takže ViewModel.init() načte správnou peněženku. LaunchedEffect by byl příliš pozdě.
+            // Swap activeWalletId synchronously via remember() — it runs
+            // before viewModel() so ViewModel.init() picks the right wallet.
+            // LaunchedEffect would run after init() and the VM would see
+            // the old id.
             remember(walletId) { SessionStore.activeWalletId = walletId }
 
             val viewModel: SendTransactionViewModel = viewModel()
             val sendState by viewModel.uiState.collectAsState()
 
-            // Obnov walletId při opuštění composable (navigace zpět nebo jinam)
+            // Restore the previous walletId when the user leaves this composable.
             DisposableEffect(walletId) {
                 onDispose { SessionStore.activeWalletId = previousWalletId }
             }
 
-            // Výsledek ze QR skeneru
+            // QR scan result
             val qrAddress by backStackEntry.savedStateHandle
                 .getStateFlow<String?>("qr_address", null)
                 .collectAsState()
@@ -732,7 +743,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                             }
                         }
                     ) { _, _ ->
-                        // PSBT je uložen v DB — všichni cosigneři ho uvidí
+                        // PSBT is persisted — every cosigner will see it in their list.
                         navController.popBackStack()
                     }
                 }
@@ -755,7 +766,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 viewModel.loadPsbt(psbtId)
             }
 
-            // Sleduj StateFlow — funguje i při návratu přes onNewIntent (FLAG_SINGLE_TOP)
+            // Observe as StateFlow — also fires on return via onNewIntent (FLAG_SINGLE_TOP).
             val pendingSignedPsbt by SessionStore.pendingSignedPsbt.collectAsState()
             LaunchedEffect(pendingSignedPsbt) {
                 // Only process callbacks explicitly claimed by the PSBT detail flow.
@@ -902,7 +913,8 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         composable(WalletRoutes.QrScanner) {
             QrScannerScreen(
                 onResult = { address ->
-                    // Ulož naskenovanou adresu do savedStateHandle předchozí destinace (Send nebo CreatePsbt)
+                    // Stash the scanned address in the previous destination's
+                    // savedStateHandle (Send or CreatePsbt picks it up from there).
                     navController.previousBackStackEntry
                         ?.savedStateHandle
                         ?.set("qr_address", address)

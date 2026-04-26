@@ -51,6 +51,9 @@ data class RefreshTokenResponse(
     val refreshToken: String
 )
 
+/* auth-service HTTP surface. Everything lives under /auth except the
+ * /health probe. No authentication plugin here: clients talk to auth-service
+ * only through the gateway, which fronts the public routes. */
 fun Application.configureAuthRoutes(
     jwt: JwtIssuer,
     keys: RsaKeyMaterial,
@@ -62,11 +65,18 @@ fun Application.configureAuthRoutes(
 
         route("/auth") {
 
+            /* GET /auth/.well-known/jwks.json — public key published for the
+             * gateway's JWKS verifier so it can check RS256 signatures without
+             * sharing a secret. */
             get("/.well-known/jwks.json") {
                 val jwks = RsaKeys.toJwksJson(keys.keyId, keys.publicKey)
                 call.respondText(jwks, ContentType.Application.Json)
             }
 
+            /* POST /auth/trezor/login — creates/updates a device record and
+             * issues an initial access + refresh token pair. device_id is
+             * derived deterministically from the Trezor fingerprint so
+             * repeated logins from the same device resolve to the same ID. */
             post("/trezor/login") {
                 val req = call.receive<TrezorLoginRequest>()
 
@@ -98,12 +108,16 @@ fun Application.configureAuthRoutes(
                 )
             }
 
+            /* POST /auth/device — upserts extended device metadata (model, label).
+             * The login flow calls this right after issuing the token so that
+             * the Trezor Suite model/label make it into the devices row. */
             post("/device") {
                 val req = call.receive<UpsertDeviceRequest>()
                 val out = deviceRepo.upsertDevice(req)
                 call.respond(out)
             }
 
+            /* GET /auth/device/{id} — single-row device lookup. */
             get("/device/{id}") {
                 val id = call.parameters["id"] ?: return@get call.respond(
                     HttpStatusCode.BadRequest, mapOf("error" to "missing device id")
@@ -116,6 +130,10 @@ fun Application.configureAuthRoutes(
                 }
             }
 
+            /* POST /auth/token/refresh — single-use refresh token rotation.
+             * Delegates atomicity to RefreshStore.rotate, which makes sure
+             * concurrent rotations of the same token don't hand out two
+             * valid replacements. */
             post("/token/refresh") {
                 val req = call.receive<RefreshTokenRequest>()
 
@@ -139,6 +157,10 @@ fun Application.configureAuthRoutes(
     }
 }
 
+/* Builds a stable device_id from a Trezor fingerprint. Uses Java's
+ * UUID.nameUUIDFromBytes (type 3, MD5-based) with a "trezor:" prefix so
+ * the same fingerprint maps to the same UUID across logins and the prefix
+ * leaves room for different hardware categories in the future. */
 private fun deterministicDeviceId(fingerprint: String): String {
     val name = "trezor:$fingerprint"
     return UUID.nameUUIDFromBytes(name.toByteArray(StandardCharsets.UTF_8)).toString()

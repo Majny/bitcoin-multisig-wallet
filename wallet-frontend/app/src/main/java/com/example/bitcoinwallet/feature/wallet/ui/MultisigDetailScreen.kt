@@ -31,7 +31,7 @@ import com.example.bitcoinwallet.ui.theme.*
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-/**
+/*
  * Multisig Wallet Detail screen – dashboard for a single multisig wallet.
  * Shows wallet name, M-of-N, balance, PSBTs + Receive buttons, transaction history.
  */

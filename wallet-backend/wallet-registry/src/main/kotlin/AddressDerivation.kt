@@ -9,13 +9,16 @@ import org.bitcoinj.crypto.HDKeyDerivation
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
+/* BIP-32 / BIP-67 address derivation from output descriptors. Handles both
+ * singlesig (wpkh/tr) and P2WSH sortedmulti. BitcoinJ gives us the singlesig
+ * bech32 path for free; multisig we build manually because BitcoinJ lacks a
+ * public segwit-to-bech32 encoder and P2WSH witness-script handling. */
 object AddressDerivation {
 
     private val log = LoggerFactory.getLogger(AddressDerivation::class.java)
 
     private val XPUB_RE = Regex("""([xtX]pub[1-9A-HJ-NP-Za-km-z]{79,120})""")
     private val MULTI_M_RE = Regex("""(?:sorted)?multi\((\d+)\s*,""")
-    // TODO: if we run out of 20, generate more
     const val DEFAULT_GAP_LIMIT = 20
 
     /*

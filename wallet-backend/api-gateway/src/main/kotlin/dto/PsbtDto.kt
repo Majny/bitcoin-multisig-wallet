@@ -1,3 +1,6 @@
+/* DTOs for the PSBT surface. Mostly straight pass-through to psbt-service,
+ * with the bigger TrezorConnect* group mirroring the parameter shape that
+ * Trezor Connect expects on the device side. */
 package cz.majny.wallet.gateway.dto
 
 import kotlinx.serialization.Serializable
@@ -90,6 +93,12 @@ data class TrezorConnectRefTx(
     val bin_outputs: List<TrezorConnectRefTxBinOutput>
 )
 
+/* Bundle of params Trezor Connect needs to sign a transaction. Inputs include
+ * derivation paths so the device picks the right key; outputs may include
+ * derivation paths too so the device recognises change as its own. refTxs
+ * carries previous transactions in parsed form, required by Trezor firmware
+ * 2.4+ even for native-segwit inputs (it independently re-derives input
+ * amounts to defend against fee-spoofing). */
 @Serializable
 data class TrezorConnectParams(
     val coin: String,

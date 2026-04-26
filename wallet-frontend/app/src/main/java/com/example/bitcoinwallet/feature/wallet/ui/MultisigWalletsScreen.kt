@@ -22,7 +22,7 @@ import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletItem
 import com.example.bitcoinwallet.feature.wallet.viewmodel.MultisigWalletsUiState
 import com.example.bitcoinwallet.ui.theme.*
 
-/**
+/*
  * Multisig Wallets list screen.
  * Matches mockup: hamburger, title, "Import Wallet +" button, wallet list with name/M-of-N/balance.
  */

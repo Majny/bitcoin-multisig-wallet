@@ -9,29 +9,15 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
-/**
- * Account discovery routes - scan blockchain for wallet activity.
- * 
- * Uses blockchain-service for address activity checks.
- */
+/* Standalone account-discovery endpoints. The login flow embeds discovery
+ * inline in /auth/trezor/login; these routes exist for clients that want to
+ * re-scan without going through the full login. */
 fun Route.accountDiscoveryRoutes() {
     authenticate("auth-jwt") {
 
-    /**
-     * POST /api/v1/accounts/scan
-     *
-     * Scans multiple derivation paths to find accounts with activity.
-     * This is used during initial Trezor connection to discover all used accounts.
-     *
-     * Body: {
-     *   "fingerprint": "abcd1234",
-     *   "accounts": [
-     *     { "xpub": "xpub...", "derivationPath": "m/84'/0'/0'" },
-     *     { "xpub": "xpub...", "derivationPath": "m/84'/0'/1'" },
-     *     { "xpub": "xpub...", "derivationPath": "m/86'/0'/0'" }
-     *   ]
-     * }
-     */
+    /* POST /api/v1/accounts/scan — bulk scan for a list of (xpub, derivationPath)
+     * pairs, returning per-account activity metadata. Used during onboarding to
+     * surface which BIP-44 accounts are worth importing. */
     post("/accounts/scan") {
         val req = call.receive<ScanAccountsRequest>()
 
@@ -52,12 +38,8 @@ fun Route.accountDiscoveryRoutes() {
         )
     }
 
-    /**
-     * POST /api/v1/accounts/scan-single
-     *
-     * Scan a single account for activity.
-     * Useful for checking individual derivation paths.
-     */
+    /* POST /api/v1/accounts/scan-single — one-shot variant, fingerprint via
+     * ?fingerprint= query param. */
     post("/accounts/scan-single") {
         val account = call.receive<AccountToScan>()
         val fingerprint = call.request.queryParameters["fingerprint"] ?: ""
@@ -72,12 +54,9 @@ fun Route.accountDiscoveryRoutes() {
         call.respond(result)
     }
     
-    /**
-     * GET /api/v1/accounts/check-address/{address}
-     * 
-     * Check if a single address has any activity.
-     * Proxies to blockchain-service.
-     */
+    /* GET /api/v1/accounts/check-address/{address} — activity probe for a
+     * single derived address. Used by the frontend when it derives addresses
+     * itself and wants per-address checks. */
     get("/accounts/check-address/{address}") {
         val address = call.parameters["address"]
             ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address parameter")
@@ -88,16 +67,10 @@ fun Route.accountDiscoveryRoutes() {
     }
 }
 
-/**
- * Scans a single account by checking if addresses have activity via blockchain-service.
- * 
- * NOTE: This is a simplified implementation. For full account discovery with xpub,
- * the frontend should derive addresses and check them individually, or use a 
- * dedicated xpub indexer service.
- * 
- * Current implementation returns metadata about the account without scanning
- * (since we cannot derive addresses server-side without the xpub derivation library).
- */
+/* Returns account metadata without actually deriving + scanning addresses on
+ * the server. The real per-address scan happens client-side (frontend derives
+ * addresses from xpub and calls /accounts/check-address for each), so this
+ * function is essentially a derivation-path parser today. */
 private suspend fun scanSingleAccount(
     blockchain: BlockchainClient,
     fingerprint: String,
@@ -106,11 +79,6 @@ private suspend fun scanSingleAccount(
 ): ScannedAccount {
     val (scriptType, network) = parseDerivationPath(derivationPath)
 
-    // NOTE: Full xpub scanning requires address derivation from xpub.
-    // This would need a Bitcoin library like bitcoinj or BitcoinKit.
-    // For now, we return the account info and let the frontend
-    // derive addresses and call /accounts/check-address for each.
-    
     return ScannedAccount(
         derivationPath = derivationPath,
         xpub = xpub,
@@ -122,14 +90,8 @@ private suspend fun scanSingleAccount(
     )
 }
 
-/**
- * Parse derivation path to extract script type and network.
- * Examples:
- *   m/84'/0'/0' -> (WPKH, mainnet)
- *   m/84'/1'/0' -> (WPKH, testnet)
- *   m/86'/0'/0' -> (TR, mainnet)
- *   m/49'/0'/0' -> (SH_WPKH, mainnet)
- */
+/* Maps a BIP-44 path to (scriptType, network). Purpose 84 → WPKH, 86 → TR,
+ * 49 → SH_WPKH, 44 → PKH. Coin type 1 means testnet, anything else mainnet. */
 private fun parseDerivationPath(path: String): Pair<String, String> {
     val parts = path.removePrefix("m/").split("/")
     val purpose = parts.getOrNull(0)?.removeSuffix("'")?.toIntOrNull() ?: 84

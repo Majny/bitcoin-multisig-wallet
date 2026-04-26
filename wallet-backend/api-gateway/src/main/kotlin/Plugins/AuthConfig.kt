@@ -8,6 +8,10 @@ import io.ktor.server.auth.jwt.*
 import java.net.URL
 import java.util.concurrent.TimeUnit
 
+/* Installs JWT authentication. Public key is fetched from auth-service's JWKS
+ * endpoint and cached for 1 h to avoid re-fetching on every request. Tokens
+ * must match the configured issuer + audience and carry a non-empty
+ * device_id claim, which downstream routes rely on for authorization. */
 fun Application.configureAuth(cfg: AppConfig) {
     val jwkProvider = JwkProviderBuilder(URL(cfg.jwksUrl))
         .cached(10, 1, TimeUnit.HOURS)
@@ -16,7 +20,6 @@ fun Application.configureAuth(cfg: AppConfig) {
 
     install(Authentication) {
         jwt("auth-jwt") {
-            // issuer validuje verifier; kid vybírá provider
             verifier(jwkProvider, cfg.jwtIssuer)
 
             validate { cred ->

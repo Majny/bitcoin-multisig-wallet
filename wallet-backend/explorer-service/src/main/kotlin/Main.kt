@@ -25,6 +25,11 @@ import org.slf4j.event.Level
 
 private val logger = LoggerFactory.getLogger("ExplorerService")
 
+/*
+ * explorer-service entry point. Aggregates wallet-level data by joining
+ * registry (addresses, descriptors) with blockchain-service (on-chain
+ * balances, UTXOs, transactions). Default port 8083.
+ */
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8083
     val registryUrl = System.getenv("REGISTRY_URL") ?: "http://localhost:8082"

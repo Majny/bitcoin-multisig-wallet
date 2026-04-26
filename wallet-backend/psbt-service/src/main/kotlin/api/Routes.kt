@@ -23,6 +23,10 @@ import java.util.*
 
 private val log = LoggerFactory.getLogger("PsbtRoutes")
 
+/*
+ * psbt-service HTTP surface. All routes live under /psbt and are reached
+ * only via api-gateway, which already enforces JWT + wallet-membership.
+ */
 fun Route.psbtRoutes(
     repository: PsbtRepository,
     blockchainClient: BlockchainClient,
@@ -33,10 +37,13 @@ fun Route.psbtRoutes(
 
         /*
          * POST /psbt/create
-         * Creates a new PSBT transaction.
-         * Fetches wallet detail, selects UTXOs (auto or manual), builds PSBT binary,
-         * generates Trezor Connect params, and stores everything in DB.
-         * Called by api-gateway when user initiates a send transaction.
+         * Builds a new PSBT end-to-end:
+         *   1. Pull wallet detail (descriptors, cosigners) from registry.
+         *   2. Pick UTXOs — manual list from coin-control, or largest-first auto.
+         *   3. Fetch raw hex of every previous tx (Trezor 2.4+ requires it
+         *      as PSBT_IN_NON_WITNESS_UTXO even for native segwit inputs).
+         *   4. Reserve a fresh change address from explorer (no reuse).
+         *   5. Assemble PSBT binary + Trezor Connect params, persist, return.
          */
         post("/create") {
             val appCall = call
@@ -109,8 +116,11 @@ fun Route.psbtRoutes(
                     return@post
                 }
 
-                // 2b. Fetch raw hex of previous transactions for PSBT_IN_NON_WITNESS_UTXO.
-                // Trezor firmware 2.4+ requires this even for native segwit inputs.
+                // Trezor 2.4+ wants the full previous transaction even for
+                // native segwit inputs (it independently re-derives input
+                // amounts to defend against fee spoofing). Fetch them all
+                // in parallel; failures fall back to null and PsbtBuilder
+                // emits the input without NON_WITNESS_UTXO.
                 val rawTxMap: Map<String, String?> = coroutineScope {
                     utxos.map { it.txid }.distinct().map { txid ->
                         async {
@@ -131,8 +141,10 @@ fun Route.psbtRoutes(
                 log.info("UTXOs with prevTx: {}/{} have rawTxHex",
                     utxosWithPrevTx.count { it.rawTxHex != null }, utxosWithPrevTx.size)
 
-                // 3. Get next unused change address (privacy: never reuse, each tx gets fresh change)
-                // Explorer-service rozšíří gap limit automaticky, pokud je potřeba.
+                // Explorer derives a new change address past the gap limit
+                // if every pre-derived one is already used. We always burn
+                // a fresh change address per tx — no reuse, even if the
+                // previous one received nothing.
                 val changeAddress = explorerClient.getNextChangeAddress(request.walletId)
                 log.info("Next unused change address: addr={} index={}",
                     changeAddress.address, changeAddress.index)
@@ -148,7 +160,10 @@ fun Route.psbtRoutes(
                     rbf = request.rbf
                 )
 
-                // 5. Map signerAccountIndex to cosigner index for Trezor Connect
+                // The frontend passes the signing user's BIP-48 account index;
+                // Trezor Connect expects a position within the cosigner list
+                // sorted by idx. Walk the cosigner origin paths to find the
+                // entry whose `account'` segment matches.
                 val signerCosignerIdx = if (wallet.type == "MULTI_SIG" && request.signerAccountIndex != null) {
                     val sorted = wallet.cosigners.sortedBy { it.idx }
                     val match = sorted.indexOfFirst { cos ->
@@ -617,6 +632,14 @@ fun Route.psbtRoutes(
             }
         }
 
+        /*
+         * GET /psbt/{id}/signers
+         * Joins the wallet's cosigner roster with the per-cosigner signature
+         * audit trail and returns one SignerDetail per cosigner. Per-device
+         * labels are intentionally null here — the gateway layers them in
+         * via registry's /cosigner-labels endpoint so that each caller only
+         * sees their own labels.
+         */
         get("/{id}/signers") {
             val appCall = call
             val id = appCall.parameters["id"]

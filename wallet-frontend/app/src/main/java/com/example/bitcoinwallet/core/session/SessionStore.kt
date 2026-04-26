@@ -9,7 +9,7 @@ import kotlinx.coroutines.flow.asStateFlow
 
 enum class SignResultType { SIGNED_PSBT, SERIALIZED_TX }
 
-/**
+/*
  * Identifies which UI flow is awaiting a Trezor signing callback.
  * Prevents a callback meant for one flow (e.g. Send) from being consumed
  * by another flow (e.g. PSBT detail) when both composables observe
@@ -17,6 +17,16 @@ enum class SignResultType { SIGNED_PSBT, SERIALIZED_TX }
  */
 enum class SignFlow { SEND, PSBT_DETAIL }
 
+/*
+ * Process-wide singleton for everything tied to "the currently signed-in
+ * user". Holds the JWT/refresh pair, the active wallet selection, the
+ * UI flow that's currently waiting for a Trezor callback, and a handful
+ * of one-shot signals (logout banner reason, session-expired flag) that
+ * AppNavHost subscribes to so it can re-route the user from anywhere.
+ *
+ * Mutations also hit SessionPersistence so a process restart doesn't
+ * dump the user back to the connect screen.
+ */
 object SessionStore {
     @Volatile var pendingIdentity: TrezorDeviceIdentity? = null
     @Volatile var session: UserSession? = null
@@ -26,7 +36,7 @@ object SessionStore {
             if (value != null) persistSession(value)
         }
 
-    /** Refresh token is kept in memory alongside the session (never in UserSession DTO). */
+    /* Refresh token is kept in memory alongside the session (never in UserSession DTO). */
     @Volatile var refreshToken: String? = null
 
     @Volatile var activeWalletId: String? = null
@@ -41,10 +51,10 @@ object SessionStore {
         }
     @Volatile var selectedNetwork: String = "testnet"
 
-    /** Account discovery: collected xpubs from Trezor bundle callback. */
+    /* Account discovery: collected xpubs from Trezor bundle callback. */
     @Volatile var pendingBatchXpubs: MutableList<TrezorDeviceIdentity> = mutableListOf()
 
-    /**
+    /*
      * Signed PSBT base64 returned from Trezor after signing.
      * StateFlow so that composables automatically re-observe when Trezor returns.
      */
@@ -62,7 +72,7 @@ object SessionStore {
         _pendingSignType.value = value
     }
 
-    /** Per-input DER signatures from Trezor Connect (for multisig) */
+    /* Per-input DER signatures from Trezor Connect (for multisig) */
     private val _pendingTrezorSignatures = MutableStateFlow<List<String>?>(null)
     val pendingTrezorSignatures: StateFlow<List<String>?> = _pendingTrezorSignatures.asStateFlow()
 
@@ -70,7 +80,7 @@ object SessionStore {
         _pendingTrezorSignatures.value = value
     }
 
-    /**
+    /*
      * Which UI flow is currently waiting for a Trezor sign callback.
      * Set by the flow before launching the deeplink, cleared after consuming
      * the result. Composables observing [pendingSignedPsbt] must compare
@@ -83,7 +93,7 @@ object SessionStore {
         _activeSignFlow.value = flow
     }
 
-    /**
+    /*
      * Request ID of the Trezor Connect deeplink currently in flight.
      * [TrezorDeeplinkLauncher] generates a random id, stores it here, and
      * embeds the same id in the callback URL. [TrezorCallbackActivity] then
@@ -93,7 +103,7 @@ object SessionStore {
      */
     @Volatile var pendingRequestId: String? = null
 
-    /** Preferred fiat currency for balance display (czk, usd, eur). */
+    /* Preferred fiat currency for balance display (czk, usd, eur). */
     private val _preferredCurrency = MutableStateFlow("czk")
     val preferredCurrency: StateFlow<String> = _preferredCurrency.asStateFlow()
 
@@ -102,7 +112,7 @@ object SessionStore {
         SessionPersistence.updatePreferredCurrency(currency)
     }
 
-    /**
+    /*
      * One-shot reason shown on the Trezor connect screen after a forced logout
      * (e.g. wrong-device sign attempt). Set this *before* calling [clearAuth] —
      * [clearAuth] intentionally does NOT wipe it, otherwise the user would see
@@ -116,7 +126,7 @@ object SessionStore {
         _pendingLogoutReason.value = value
     }
 
-    /**
+    /*
      * One-shot signal that the backend rejected the session (401 + refresh
      * failed). Observed at the nav-host level so the UI can route the user
      * back to the Trezor connect screen from anywhere, rather than leaving
@@ -126,7 +136,7 @@ object SessionStore {
     private val _sessionExpired = MutableStateFlow(false)
     val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
 
-    /**
+    /*
      * Called from the HTTP layer when a 401 could not be recovered via refresh.
      * Sets the banner reason, wipes auth, then raises the flag so the UI
      * navigates. Safe to call from any thread — StateFlow writes are atomic.
@@ -162,7 +172,7 @@ object SessionStore {
 
     fun hasWalletSelected(): Boolean = !activeWalletId.isNullOrBlank()
 
-    /** Called from the launcher Activity to rehydrate from disk on cold start. */
+    /* Called from the launcher Activity to rehydrate from disk on cold start. */
     fun restoreFromPersistence() {
         val snap = SessionPersistence.load() ?: return
         refreshToken = snap.refreshToken

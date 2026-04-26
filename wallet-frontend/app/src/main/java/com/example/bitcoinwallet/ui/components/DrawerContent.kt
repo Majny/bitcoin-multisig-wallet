@@ -21,10 +21,10 @@ enum class DrawerItem(val label: String) {
     SETTINGS("Settings")
 }
 
-/**
+/*
  * Drawer content for the hamburger menu.
- * Matches the dark-themed mockup: title "Bitcoin Wallet", then
- * Home / Multisig Wallets / Settings separated by dividers.
+ * Title "Bitcoin Wallet" on top, then Home / Multisig Wallets / Settings
+ * separated by dividers on a dark surface.
  */
 @Composable
 fun DrawerContent(

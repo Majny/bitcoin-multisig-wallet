@@ -1,11 +1,9 @@
+/* DTOs for account discovery and on-the-fly address derivation. Used during
+ * Trezor connect to figure out which accounts are worth importing. */
 package cz.majny.wallet.gateway.dto
 
 import kotlinx.serialization.Serializable
 
-/**
- * Request to scan multiple derivation paths for activity.
- * Used for account discovery when connecting a Trezor device.
- */
 @Serializable
 data class ScanAccountsRequest(
     val fingerprint: String,
@@ -18,9 +16,6 @@ data class AccountToScan(
     val derivationPath: String
 )
 
-/**
- * Response with scan results for each account.
- */
 @Serializable
 data class ScanAccountsResponse(
     val fingerprint: String,
@@ -38,10 +33,6 @@ data class ScannedAccount(
     val network: String
 )
 
-/**
- * Request to derive addresses from a descriptor.
- * Sent to wallet-registry POST /registry/derive-addresses.
- */
 @Serializable
 data class DeriveAddressesRequest(
     val descriptor: String,

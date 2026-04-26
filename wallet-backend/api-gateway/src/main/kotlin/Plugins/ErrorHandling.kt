@@ -6,6 +6,7 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.response.*
 import kotlinx.serialization.Serializable
 
+/* Uniform error body returned by every 4xx/5xx response from the gateway. */
 @Serializable
 data class ErrorResponse(
     val error: String,
@@ -13,12 +14,17 @@ data class ErrorResponse(
     val details: Map<String, String>? = null
 )
 
+/* Thrown by upstream clients when a downstream service replies with a non-2xx.
+ * Preserves the upstream name and original status so the client handler can
+ * translate it to a meaningful ErrorResponse. */
 class UpstreamException(
     val upstream: String,
     val status: HttpStatusCode,
     message: String
 ) : RuntimeException(message)
 
+/* Installs StatusPages with a small catch-all matrix: IllegalArgumentException
+ * → 400, UpstreamException → upstream's original status, anything else → 500. */
 fun Application.configureErrorHandling() {
     install(StatusPages) {
 

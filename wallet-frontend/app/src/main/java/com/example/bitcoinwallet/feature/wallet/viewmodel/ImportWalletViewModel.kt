@@ -32,7 +32,7 @@ class ImportWalletViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(walletName = value)
     }
 
-    /**
+    /*
      * Set the descriptor from a file or QR scan result.
      */
     fun onDescriptorScanned(content: String) {

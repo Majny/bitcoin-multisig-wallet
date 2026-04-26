@@ -7,6 +7,8 @@ import org.jetbrains.exposed.sql.transactions.transaction
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 
+/* Wallet + cosigner + address persistence. All methods run in Exposed
+ * transactions; callers don't need their own transaction wrapper. */
 class Repository {
 
     private val log = LoggerFactory.getLogger(Repository::class.java)
@@ -283,18 +285,11 @@ class Repository {
         log.info("Derived {} {} addresses for wallet {}", addresses.size, type, walletId)
     }
 
-    /**
-     * Derives a single address beyond the initial gap limit and stores it in DB.
-     *
-     * Used when all pre-derived addresses (of one type) are already used on-chain
-     * and we need to extend the wallet's address window — typically because
-     * psbt-service needs a fresh change output, or explorer-service needs a fresh
-     * receive address. Maintains privacy invariant: callers should verify that
-     * the returned address also has no on-chain activity before committing to use it.
-     *
-     * The operation is idempotent: if an address at (walletId, type, index) already
-     * exists in DB, it's returned as-is instead of re-derived.
-     */
+    /* Derives + stores a single address past the initial gap limit. Used when
+     * every pre-derived address of a kind is already on-chain and we need a
+     * fresh one (change outputs, receive addresses). Idempotent — if the
+     * (walletId, type, index) row already exists, returns it as-is. Callers
+     * should still verify on-chain freshness before committing to the address. */
     fun deriveAdditionalAddress(
         walletId: String,
         type: String,

@@ -20,9 +20,8 @@ import com.example.bitcoinwallet.ui.theme.DarkBackground
 import com.example.bitcoinwallet.ui.theme.TestnetAmber
 import com.example.bitcoinwallet.ui.theme.TextPrimary
 
-/**
- * Top app bar with hamburger menu and optional network badge.
- */
+/* Top app bar — hamburger menu on the left, centred title, optional
+ * mainnet/testnet badge next to the title. */
 @Composable
 fun WalletTopBar(
     title: String,

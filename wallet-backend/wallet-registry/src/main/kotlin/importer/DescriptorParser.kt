@@ -3,19 +3,14 @@ package cz.majny.wallet.registry.importer
 import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
-//
-// Parses Bitcoin output descriptors into structured wallet definitions.
-//
-// Supported formats:
-//   - wsh(sortedmulti(M, [fp/path]xpub/chain/STAR, ...))  -> P2WSH multisig
-//   - wsh(multi(M, [fp/path]xpub/chain/STAR, ...))         -> P2WSH multisig (unsorted)
-//   - sh(wsh(sortedmulti(M, ...)))                         -> P2SH-P2WSH multisig
-//   - wpkh([fp/path]xpub/chain/STAR)                       -> P2WPKH single-sig
-//   - tr([fp/path]xpub/chain/STAR)                         -> P2TR single-sig
-//
-// BIP-67 sorting: For sortedmulti, cosigner xpubs are sorted lexicographically
-// by their serialized public key at each derivation index.
-//
+/* Output-descriptor parser (BIP-380 / BIP-383). Handles:
+ *   wsh(sortedmulti(M, ...))   — P2WSH multisig (BIP-67 sorted)
+ *   wsh(multi(M, ...))         — P2WSH multisig (unsorted)
+ *   sh(wsh(sortedmulti(M,...))) — P2SH-P2WSH multisig
+ *   wpkh([fp/path]xpub/chain/STAR) — P2WPKH single-sig
+ *   tr([fp/path]xpub/chain/STAR)   — P2TR single-sig
+ * Checksum (`#xxxxxxxx`) is stripped and ignored; caller is expected to have
+ * validated it if they care. */
 object DescriptorParser {
 
     private val log = LoggerFactory.getLogger(DescriptorParser::class.java)
@@ -37,23 +32,9 @@ object DescriptorParser {
     // Descriptor checksum regex: #checksum at the end.
     private val CHECKSUM_RE = Regex("""#([0-9a-z]{8})\s*$""")
 
-    // ------------------------------------------------------------------
-    // Public API
-    // ------------------------------------------------------------------
-
-    /**
-     * Parse a raw descriptor string into a [ParsedDescriptor].
-     *
-     * Accepts either:
-     *   - A single descriptor (receive or change) — we'll generate the counterpart
-     *   - Two descriptors separated by newline
-     *
-     * @param raw The descriptor string (may include checksum)
-     * @param network "mainnet" or "testnet" (for validation)
-     * @param label Optional label for the wallet
-     * @return [ParsedDescriptor] with all extracted info
-     * @throws DescriptorParseException on invalid input
-     */
+    /* Parses a raw descriptor into ParsedDescriptor. Accepts either one
+     * descriptor (the counterpart is synthesised by flipping /0 ↔ /1) or two
+     * lines (receive + change). Throws DescriptorParseException on bad input. */
     fun parse(raw: String, network: String = "mainnet", label: String? = null): ParsedDescriptor {
         val lines = raw.trim().lines()
             .map { it.trim() }

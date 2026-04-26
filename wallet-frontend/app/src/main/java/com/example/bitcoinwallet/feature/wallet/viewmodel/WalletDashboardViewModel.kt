@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 
 private const val TAG = "WalletDashboardVM"
 
-/**
+/*
  * UI State for the Wallet Dashboard.
  */
 data class WalletDashboardUiState(
@@ -25,7 +25,7 @@ data class WalletDashboardUiState(
     val error: String? = null
 )
 
-/**
+/*
  * ViewModel for the Wallet Dashboard screen.
  * Fetches wallet-level data via explorer-service through the API Gateway.
  */
@@ -40,7 +40,7 @@ class WalletDashboardViewModel : ViewModel() {
         loadWalletData()
     }
     
-    /**
+    /*
      * Load wallet data – balance and transaction history – in parallel.
      * Uses explorer-service wallet-level endpoints (no address lookup needed).
      */
@@ -52,7 +52,7 @@ class WalletDashboardViewModel : ViewModel() {
             if (accessToken == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Není přihlášen uživatel"
+                    error = "Not signed in"
                 )
                 return@launch
             }
@@ -61,7 +61,7 @@ class WalletDashboardViewModel : ViewModel() {
             if (walletId == null) {
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = "Není vybrán wallet"
+                    error = "No wallet selected"
                 )
                 return@launch
             }
@@ -91,13 +91,13 @@ class WalletDashboardViewModel : ViewModel() {
                 Log.e(TAG, "Error loading wallet data", e)
                 _uiState.value = _uiState.value.copy(
                     isLoading = false,
-                    error = e.message ?: "Neznámá chyba"
+                    error = e.message ?: "Unknown error"
                 )
             }
         }
     }
     
-    /**
+    /*
      * Refresh wallet data (pull-to-refresh).
      */
     fun refresh() {

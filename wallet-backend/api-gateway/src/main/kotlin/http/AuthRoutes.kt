@@ -11,10 +11,15 @@ private val log = LoggerFactory.getLogger("AuthRoutes")
 
 fun Route.authRoutes() {
 
+    /* POST /api/v1/auth/trezor/login
+     * Exchanges a Trezor fingerprint + xpubs for a JWT access/refresh pair and
+     * runs BIP-44 account discovery for each supplied xpub. Wallets with any
+     * on-chain activity are created and attached to the device. Discovery is
+     * best-effort: one account scan failing (e.g. Mempool.space blip) must not
+     * fail the login. Returns the tokens + wallet list as the session bootstrap. */
     post("/auth/trezor/login") {
         val req = call.receive<TrezorLoginRequest>()
 
-        // 1) auth-service: gives us JWT
         val upstream = call.application.deps.auth.trezorLogin(req)
 
         val deviceId = JwtClaimExtractor.deviceIdFromJwt(upstream.accessToken)
@@ -28,7 +33,8 @@ fun Route.authRoutes() {
             )
         )
 
-        // Build list of accounts to scan (backwards compat: fallback to single xpub)
+        // Multi-account request is preferred; fall back to the single xpub fields
+        // from older clients for backwards compatibility.
         val accountsToScan: List<AccountToScan> = if (!req.accounts.isNullOrEmpty()) {
             req.accounts
         } else if (req.xpub.isNotBlank()) {
@@ -37,12 +43,6 @@ fun Route.authRoutes() {
             emptyList()
         }
 
-        // 2) BIP-44 account discovery: scan accounts sequentially, stop at first gap.
-        //
-        // Network errors MUST NOT fail the whole login — discovery is best-effort.
-        // If mempool.space blinks, we log and skip to the next account. The user
-        // still gets a valid session; any missing wallets can be recovered via a
-        // refresh once the network is stable again.
         for (account in accountsToScan) {
             try {
                 val walletCreate = buildSingleSigWalletCreate(
@@ -53,7 +53,6 @@ fun Route.authRoutes() {
                     deviceLabel = req.deviceLabel
                 )
 
-                // Derive first 5 receive addresses and check blockchain activity
                 val hasActivity = checkAccountActivity(
                     registry = call.application.deps.registry,
                     blockchain = call.application.deps.blockchain,
@@ -63,10 +62,11 @@ fun Route.authRoutes() {
 
                 if (hasActivity) {
                     log.info("Account {} has activity, creating wallet {}", account.derivationPath, walletCreate.walletId)
+                    // createWallet / attachMember both upsert — duplicate errors
+                    // on subsequent logins are expected and swallowed.
                     try {
                         call.application.deps.registry.createWallet(walletCreate)
                     } catch (_: Exception) {
-                        // wallet already exists from previous login — OK
                     }
                     try {
                         call.application.deps.registry.attachMember(
@@ -74,21 +74,19 @@ fun Route.authRoutes() {
                             req = MemberAttach(deviceId = deviceId)
                         )
                     } catch (_: Exception) {
-                        // member already attached — OK
                     }
                 } else {
+                    // BIP-44 gap limit: first inactive account ends discovery.
                     log.info("Account {} has no activity — BIP-44 gap limit reached, stopping discovery", account.derivationPath)
                     break
                 }
             } catch (e: Exception) {
-                // Network error or upstream failure — log and skip. Do not break,
-                // do not propagate: a Connection reset on one account should not
-                // stop the user from logging in.
+                // Any upstream/network error on a single account is non-fatal —
+                // the user still gets a session; missing wallets recover on refresh.
                 log.warn("Account {} scan failed ({}), skipping", account.derivationPath, e.message)
             }
         }
 
-        // 3) source-of-truth wallets
         val wallets = call.application.deps.registry.listWallets(deviceId)
 
         call.respond(
@@ -100,11 +98,14 @@ fun Route.authRoutes() {
         )
     }
 
+    /* POST /api/v1/auth/token/refresh
+     * Single-use rotation: trades the caller's refresh token for a fresh
+     * access+refresh pair. Thin pass-through to auth-service, which enforces
+     * the single-use invariant atomically. */
     post("/auth/token/refresh") {
         val req = call.receive<RefreshTokenRequest>()
         val upstream = call.application.deps.auth.refresh(req)
 
-        // rotation of refresh token
         call.respond(
             RefreshTokenResponse(
                 accessToken = upstream.accessToken,
@@ -114,10 +115,8 @@ fun Route.authRoutes() {
     }
 }
 
-/**
- * Derive first N receive addresses and check if any have blockchain activity.
- * Stops early on first active address found.
- */
+/* Derives the first N receive addresses and returns true if any has on-chain
+ * activity. Stops early on the first hit. */
 private suspend fun checkAccountActivity(
     registry: cz.majny.wallet.gateway.clients.RegistryClient,
     blockchain: cz.majny.wallet.gateway.clients.BlockchainClient,
@@ -132,9 +131,10 @@ private suspend fun checkAccountActivity(
     return false
 }
 
-/**
- * Builds a CreateWalletRequest for a single-sig wallet from xpub + derivationPath.
- */
+/* Assembles a CreateWalletRequest for a single-sig wallet out of the raw xpub
+ * and derivation path returned by Trezor. Encodes scriptType from BIP purpose
+ * (84 → WPKH, 86 → TR), coin type 1 → testnet, and shapes the origin prefix
+ * expected by descriptor consumers. */
 private fun buildSingleSigWalletCreate(
     deviceId: String,
     fingerprint: String,
