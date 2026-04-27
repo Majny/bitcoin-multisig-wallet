@@ -28,10 +28,10 @@ dependencies {
     implementation("io.ktor:ktor-server-auth-jvm:3.0.0")
     implementation("io.ktor:ktor-server-auth-jwt-jvm:3.0.0")
 
-    // -------- JWT (Auth0) - ty importy com.auth0.jwt.* --------
+    // -------- JWT --------
     implementation("com.auth0:java-jwt:4.4.0")
 
-    // -------- KTOR CLIENT (volání microservices) --------
+    // -------- KTOR CLIENT --------
     implementation("io.ktor:ktor-client-core:3.0.0")
     implementation("io.ktor:ktor-client-cio:3.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.0")

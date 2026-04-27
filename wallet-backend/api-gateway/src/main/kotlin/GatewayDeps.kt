@@ -12,7 +12,6 @@ data class GatewayDeps(
     val auth: AuthClient,
     val registry: RegistryClient,
     val explorer: ExplorerClient,
-    val signer: SignerClient,
     val psbt: PsbtClient,
     val blockchain: BlockchainClient,
     val price: PriceClient,
