@@ -37,10 +37,12 @@ blockchainovými API.
 Backend je v~adresáři \texttt{wallet-backend} distribuován jako sada Docker
 obrazů popsaných souborem \texttt{docker-compose.yml}. Obsahuje API Gateway,
 šest mikroslužeb popsaných v~sekci~\ref{sec:architektura} a~jednu instanci
-PostgreSQL~\cite{PostgreSQL}, ve které jsou při prvním spuštění automaticky
-vytvořeny tři oddělené databáze (\texttt{wallet\_auth},
-\texttt{wallet\_registry}, \texttt{wallet\_psbt}) inicializačním skriptem
-\texttt{init-db.sql}.
+PostgreSQL~\cite{PostgreSQL}, ve které při prvním spuštění vzniknou
+tři oddělené databáze: \texttt{wallet\_registry} (vytvořená automaticky
+z~proměnné \texttt{POSTGRES\_DB} v~konfiguraci kontejneru)
+a~\texttt{wallet\_auth} spolu s~\texttt{wallet\_psbt} (vytvořené
+inicializačním skriptem \texttt{init-db.sql}, namountovaným do
+\texttt{/docker-entrypoint-initdb.d/}).
 
 Spuštění celého stacku se provede v~kořenovém adresáři \texttt{wallet-backend}
 jediným příkazem:
@@ -68,25 +70,47 @@ Zastavení stacku (s~ponecháním dat) se provede příkazem
 \texttt{docker compose down}, kompletní reset včetně smazání obsahu
 databáze pak \texttt{docker compose down -v}.
 
+Veškeré proměnné prostředí, které jednotlivé mikroslužby čtou
+(URL upstream služeb, JWT~konfigurace, přihlašovací údaje k~databázi),
+jsou pro standardní docker-compose nasazení definované přímo
+v~\texttt{docker-compose.yml}. Pro vývojové scénáře, kdy uživatel
+chce některou službu spustit přímo na hostiteli mimo Docker, slouží
+šablony \texttt{.env.example} v~kořenovém adresáři \texttt{wallet-backend}
+a~v~odpovídajících modulech -- stačí je zkopírovat na \texttt{.env}
+a~upravit hodnoty. Skutečné soubory \texttt{.env} jsou v~\texttt{.gitignore},
+takže se nedostávají do repozitáře.
+
 %%% -----------------------------------------------------------------------
 \section{Sestavení mobilní aplikace}
 \label{sec:user-app}
 
-Mobilní aplikace je dostupná pouze ve formě zdrojového kódu v~adresáři
-\texttt{wallet-frontend} a~je nutné si ji sestavit lokálně. Pro vývojové
-i~uživatelské nasazení používáme stejný postup -- otevřeme adresář
-v~Android Studiu, počkáme na dokončení Gradle synchronizace a~zvolíme
-\emph{Run} pro instalaci a~spuštění na připojeném zařízení (případně
-\emph{Build $\to$ Build APK} pro samostatný instalační soubor).
+Aplikace je dostupná pouze ve formě zdrojového kódu v~adresáři
+\texttt{wallet-frontend}. Adresář otevřeme v~Android Studiu, počkáme
+na Gradle synchronizaci a~zvolíme \emph{Run} pro instalaci na připojené
+zařízení, případně \emph{Build $\to$ Build APK} pro samostatný
+instalační soubor.
 
-Před prvním sestavením je nutné v~souboru
-\texttt{core/api/ApiConfig.kt} upravit konstantu \texttt{API\_GATEWAY\_BASE\_URL}
-tak, aby odpovídala adrese, na které běží backend. Pro lokální testování,
-kdy backend běží na desktopovém PC ve stejné síti, má hodnota typicky
-podobu \texttt{http://192.168.X.Y:8080/api/v1}. Adresa je zapsaná
-v~kódu záměrně, nikoli v~konfiguraci dostupné z~UI -- mobilní aplikace
-předpokládá důvěryhodný backend, jehož adresa se v~čase nemění. Po úpravě
-adresy je nutné aplikaci znovu sestavit.
+Adresu backendu konfigurujeme v~souboru \texttt{local.properties}
+v~kořenovém adresáři frontendu, a~to vlastností
+\texttt{api.\allowbreak gateway.\allowbreak base.\allowbreak url}. Soubor je
+gitignored, šablonu s~komentáři pro různé scénáře najde uživatel
+v~\texttt{local.\allowbreak properties.\allowbreak example}. Pokud vlastnost
+není nastavená, build se vrátí k~výchozí hodnotě cílící na alias
+Android emulátoru pro \texttt{localhost} hostitele, takže s~backendem
+v~Dockeru aplikace v~emulátoru funguje bez úprav.
+
+Pro reálné zařízení v~lokální síti stačí do \texttt{local.properties}
+zapsat IP počítače, na kterém běží Docker (analogicky pro VPN nebo
+jiný tunel). Konkrétní formát hodnoty ukazuje šablona
+\texttt{local.\allowbreak properties.\allowbreak example}. Po změně
+je nutné aplikaci znovu sestavit.
+
+Stejnou hodnotu adresy je třeba zapsat i~do souboru
+\texttt{network\_\allowbreak security\_\allowbreak config.\allowbreak xml}
+v~adresáři \texttt{app/\allowbreak src/\allowbreak main/\allowbreak res/\allowbreak xml/};
+Android by jinak nezašifrovaný HTTP požadavek odmítl. Soubor používá
+whitelist na jedinou doménu, aby aplikace nemohla volat nezašifrovaně
+nikam jinam.
 
 %%% -----------------------------------------------------------------------
 \section{První přihlášení a hlavní obrazovka}
@@ -126,9 +150,11 @@ a~CZK, seznamem transakcí a~tlačítky pro odeslání a~příjem.}
 \label{fig:screen-onboarding}
 \end{figure}
 
-Tento postup probíhá pouze při prvním přihlášení nebo po vypršení tokenu;
-v~běžném provozu aplikace přihlášení obnoví automaticky bez nutnosti
-dalšího exportu z~Trezoru.
+Tento postup probíhá pouze při prvním přihlášení. V~běžném provozu
+aplikace po~vypršení krátkodobého přístupového tokenu automaticky vymění
+uchovávaný refresh token za~novou dvojici tokenů, aniž by uživatel
+musel znovu exportovat klíče z~Trezoru; mechanismus rotace popisujeme
+v~sekci~\ref{subsec:refresh-token}.
 
 Hlavní obrazovka (dashboard) zobrazuje aktuální zůstatek v~BTC a~jeho
 ekvivalent ve zvolené fiat měně (CZK, USD nebo EUR -- volbu měny lze
@@ -446,7 +472,8 @@ V~dialogu signerů (obrázek~\ref{fig:screen-psbt-flow}, vpravo, přístupném
 přes odkaz \emph{Show all signers}) uživatel vidí u~každého cosignera jeho
 stav, fingerprint a~zkratku veřejného klíče. Cosignerům je možné přiřadit
 pojmenování (například \uv{Pepa}) stisknutím ikony tužky -- název se uloží
-na backend a~zobrazí se i~ostatním účastníkům multisig peněženky. Cosigner
+pouze pro aktuálně přihlášené zařízení a~ostatním cosignerům se nezobrazí,
+aby osobní poznámky neprosakovaly mezi členy sdílené peněženky. Cosigner
 odpovídající aktuálně přihlášenému účtu je označen příznakem \emph{YOU}.
 
 Pokud transakce čeká na podpis aktuálního cosignera, zobrazí se tlačítko
@@ -462,9 +489,25 @@ rozpracovanou transakci v~seznamu PSBT u~odpovídající multisig peněženky,
 otevře její detail a~stiskne \emph{Sign with Trezor} -- aplikace ho opět
 přesměruje do Trezor Suite Mobile.
 
-Po dosažení prahu~$M$ (obrázek~\ref{fig:screen-psbt-flow}, vpravo) backend
-automaticky finalizuje PSBT (sestaví witness data se všemi podpisy ve
-správném pořadí) a~na detailu PSBT se zobrazí tlačítko \emph{Broadcast
-Transaction}. Po jeho stisknutí backend odešle výslednou transakci do
-Bitcoinové sítě a~aplikace zobrazí potvrzení s~identifikátorem transakce
-shodně jako u~singlesig odeslání.
+Po dosažení prahu~$M$ (obrázek~\ref{fig:screen-psbt-flow}, vpravo)
+má PSBT kompletní sadu podpisů. Na~detailu PSBT zmizí tlačítko
+\emph{Sign with Trezor} a~místo něj se objeví \emph{Broadcast
+Transaction}. Po~jeho stisknutí aplikace zavolá na~backend endpoint
+pro~broadcast, ten výslednou transakci propaguje přes
+\texttt{blockchain-service} do~Bitcoinové sítě a~aplikace zobrazí
+potvrzení s~identifikátorem transakce shodně jako u~singlesig
+odeslání. Broadcast je tedy vždy explicitní akcí některého
+cosignera na~detailu PSBT -- po~přijetí posledního podpisu se
+transakce sama od~sebe neodesílá.
+
+\textbf{Zrušení rozpracované transakce.} Pokud uživatel zjistí, že
+transakce byla vytvořena s~chybnými parametry (například špatná
+cílová adresa nebo částka), nebo cosigner z~jakéhokoli důvodu
+nepodepíše, nabízí detail PSBT tlačítko \emph{Cancel PSBT}. Po
+potvrzení v~dialogu aplikace zavolá \texttt{DELETE /psbt/\{id\}},
+backend záznam smaže a~uvolní rezervaci utracených UTXO, takže je lze
+znovu použít v~nové transakci. Tlačítko je dostupné jen u~PSBT, které
+ještě nebyly broadcastnuty -- broadcastované transakce se uchovávají
+jako auditní stopa. Bez této možnosti by opuštěná multisig konfigurace
+držela své UTXO blokované až do automatického úklidu po~sedmi dnech
+(viz sekci~\ref{sec:datovy-model}).
