@@ -8,13 +8,14 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 
+/* wallet-registry HTTP surface. All business endpoints live under
+ * /registry. The /health probe is registered in Main.kt's routing block
+ * so the same pattern holds across all services. */
 fun Application.configureRoutes(repo: Repository) {
 
     val importer = WalletImporter(repo)
 
     routing {
-        get("/health") { call.respondText("ok") }
-
         route("/registry") {
 
             /*

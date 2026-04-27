@@ -5,6 +5,8 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
+import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import kotlinx.serialization.json.Json
 
 /* auth-service entry point. Boots the database (Flyway + Hikari), loads the
@@ -48,6 +50,10 @@ fun main() {
         )
 
         val refreshStore = RefreshStore(ttlSeconds = refreshTtl)
+
+        routing {
+            get("/health") { call.respondText("ok") }
+        }
 
         configureAuthRoutes(jwt, keys, refreshStore, deviceRepo)
     }.start(wait = true)

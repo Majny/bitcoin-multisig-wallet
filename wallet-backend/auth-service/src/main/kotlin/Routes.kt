@@ -51,9 +51,11 @@ data class RefreshTokenResponse(
     val refreshToken: String
 )
 
-/* auth-service HTTP surface. Everything lives under /auth except the
- * /health probe. No authentication plugin here: clients talk to auth-service
- * only through the gateway, which fronts the public routes. */
+/* auth-service HTTP surface. Everything lives under /auth. The /health
+ * probe is registered separately in Main.kt's routing block so the same
+ * pattern holds across all services. No authentication plugin here:
+ * clients talk to auth-service only through the gateway, which fronts
+ * the public routes. */
 fun Application.configureAuthRoutes(
     jwt: JwtIssuer,
     keys: RsaKeyMaterial,
@@ -61,8 +63,6 @@ fun Application.configureAuthRoutes(
     deviceRepo: DeviceRepository
 ) {
     routing {
-        get("/health") { call.respondText("ok") }
-
         route("/auth") {
 
             /* GET /auth/.well-known/jwks.json — public key published for the

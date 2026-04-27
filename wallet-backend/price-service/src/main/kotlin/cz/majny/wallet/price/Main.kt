@@ -1,4 +1,3 @@
-package cz.majny.wallet.price
 
 import cz.majny.wallet.price.client.CoinGeckoClient
 import cz.majny.wallet.price.config.AppConfig
@@ -44,6 +43,7 @@ fun main() {
         }
 
         routing {
+            get("/health") { call.respondText("ok") }
             priceRoutes(coinGeckoClient)
         }
 
@@ -53,6 +53,4 @@ fun main() {
             coinGeckoClient.close()
         }
     }.start(wait = true)
-
-    println("Price Service started on port ${AppConfig.PORT}")
 }

@@ -115,10 +115,8 @@ fun Application.configureApp(
     }
     
     routing {
-        get("/health") {
-            call.respond(mapOf("status" to "ok", "service" to "psbt-service"))
-        }
-        
+        get("/health") { call.respondText("ok") }
+
         psbtRoutes(repository, blockchainClient, registryClient, explorerClient)
     }
 }

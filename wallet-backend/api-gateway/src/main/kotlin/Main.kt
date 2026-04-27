@@ -10,6 +10,9 @@ import cz.majny.wallet.gateway.plugins.configureSerialization
 import cz.majny.wallet.gateway.plugins.httpClient
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.netty.Netty
+import io.ktor.server.response.respondText
+import io.ktor.server.routing.get
+import io.ktor.server.routing.routing
 
 /*
  * api-gateway entry point. Wires up Ktor plugins, constructs upstream clients,
@@ -30,7 +33,6 @@ fun main() {
             auth = AuthClientImpl(cfg),
             registry = RegistryClientImpl(baseUrl = cfg.registryBaseUrl),
             explorer = ExplorerClientImpl(cfg),
-            signer = SignerClientImpl(cfg),
             psbt = PsbtClientImpl(cfg),
             blockchain = BlockchainClientImpl(baseUrl = cfg.blockchainBaseUrl),
             price = HttpPriceClient(baseUrl = cfg.priceBaseUrl, httpClient = client),
@@ -40,6 +42,11 @@ fun main() {
         deps.attachHttpClients(application = this)
 
         configureAuth(cfg)
+
+        routing {
+            get("/health") { call.respondText("ok") }
+        }
+
         configureHttpRouting()
     }.start(wait = true)
 }

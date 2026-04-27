@@ -84,9 +84,7 @@ fun main() {
         }
 
         routing {
-            get("/health") {
-                call.respond(mapOf("status" to "ok", "service" to "explorer-service"))
-            }
+            get("/health") { call.respondText("ok") }
 
             explorerRoutes(walletExplorer, blockchainClient)
         }

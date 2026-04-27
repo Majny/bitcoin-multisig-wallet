@@ -9,6 +9,7 @@ import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
+import io.ktor.server.routing.*
 import io.ktor.http.*
 import com.typesafe.config.ConfigFactory
 import kotlinx.serialization.json.Json
@@ -66,6 +67,11 @@ fun main() {
         Db.init(dbCfg)
 
         val repo = Repository()
+
+        routing {
+            get("/health") { call.respondText("ok") }
+        }
+
         configureRoutes(repo)
     }.start(wait = true)
 }

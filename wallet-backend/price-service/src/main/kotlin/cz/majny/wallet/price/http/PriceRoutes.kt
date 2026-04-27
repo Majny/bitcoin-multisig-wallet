@@ -8,15 +8,12 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 
 /*
- * REST surface for BTC price data. Two real endpoints — current prices and
- * sats→fiat conversion — plus health checks at both /health and
- * /price/health so either is reachable depending on gateway routing.
+ * REST surface for BTC price data. Two endpoints — current prices and
+ * sats→fiat conversion. The /health probe lives in Main.kt at the routing
+ * root so docker-compose can hit /health directly without a per-service
+ * special case.
  */
 fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
-
-    get("/health") {
-        call.respond(mapOf("status" to "ok", "service" to "price-service"))
-    }
 
     route("/price") {
 
@@ -55,12 +52,6 @@ fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
                 fiatValue = fiatValue,
                 fiatCurrency = currency.uppercase()
             ))
-        }
-
-        /* GET /price/health — duplicate health probe under the /price route
-         * so the gateway can check this service without a special case. */
-        get("/health") {
-            call.respond(mapOf("status" to "ok", "service" to "price-service"))
         }
     }
 }
