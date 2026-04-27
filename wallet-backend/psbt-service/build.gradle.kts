@@ -19,7 +19,7 @@ dependencies {
     implementation("io.ktor:ktor-server-content-negotiation:2.3.12")
     implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.12")
 
-    // Ktor client (pro volání blockchain-service)
+    // Ktor client (used to call blockchain-service)
     implementation("io.ktor:ktor-client-core:2.3.12")
     implementation("io.ktor:ktor-client-cio:2.3.12")
     implementation("io.ktor:ktor-client-content-negotiation:2.3.12")
@@ -43,7 +43,7 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:0.53.0")
     implementation("org.jetbrains.exposed:exposed-java-time:0.53.0")
 
-    // BitcoinJ pro PSBT práci
+    // BitcoinJ — low-level Bitcoin primitives used when assembling PSBTs
     implementation("org.bitcoinj:bitcoinj-core:0.17")
 }
 

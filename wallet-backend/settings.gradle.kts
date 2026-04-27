@@ -5,10 +5,11 @@ pluginManagement {
         google()
     }
     plugins {
-        // dej sem VERZI, kterou používáš v celém repu
+        // Shared Kotlin plugin versions for all subprojects in this build.
         id("org.jetbrains.kotlin.jvm") version "2.2.0"
         id("org.jetbrains.kotlin.plugin.serialization") version "2.2.0"
-        // pokud používáš i Ktor pluginy nebo cokoliv dalšího přes plugins DSL, přidej sem taky
+        // If a subproject pulls in extra Gradle plugins (e.g. Ktor) via the
+        // plugins DSL, declare their versions here too.
     }
 }
 
