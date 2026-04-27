@@ -1,70 +1,72 @@
-# Bitcoin Multisig Wallet – Bakalářská práce
+# Bitcoin Multisig Wallet — Bachelor's Thesis
 
-**Autor:** Jakub Dvořák
-**Vedoucí:** RNDr. Filip Zavoral, Ph.D.
-
----
-
-## Zadání
-
-Práce se zabývá návrhem a implementací mobilní aplikace pro platformu Android, která umožňuje pokročilou správu Bitcoinových prostředků.
-
-Pod pojmem pokročilá správa se rozumí zejména:
-
-- **Multisignature transakce** — podpora schémat M-of-N (např. 2-of-3) dle standardů BIP-48 (HD derivace pro multisig) a BIP-67 (kanonické řazení klíčů), s využitím output deskriptorů ve formátu `wsh(sortedmulti(...))`.
-- **Coin control** — možnost manuálního výběru konkrétních nepoužitých výstupů (UTXO) při tvorbě transakcí, což umožňuje optimalizaci poplatků.
-- **Integrace hardwarové peněženky Trezor** prostřednictvím rozhraní Trezor Connect (deeplink API pro mobilní platformy), kde veškeré privátní klíče zůstávají na zařízení a aplikace s nimi nikdy nepřijde do styku.
-
-Součástí práce je analýza existujících pokročilých Bitcoinových peněženek z hlediska podpory multisig schémat, coin control a integrace hardwarových peněženek, a identifikace jejich omezení na mobilních platformách.
-
-Aplikace využívá formát PSBT (BIP-174) pro tvorbu, podepisování a distribuci částečně podepsaných transakcí a podporuje nativní SegWit adresy (P2WPKH dle BIP-84 pro singlesig, P2WSH pro multisig). Backend je realizován jako soustava mikroslužeb (Kotlin/Ktor) komunikujících s veřejnými blockchain API (Blockstream Esplora). Bezpečnostní model aplikace zajišťuje, že server nikdy nedisponuje privátními klíči, podepisování probíhá výhradně na hardwarové peněžence.
+**Author:** Jakub Dvořák
+**Supervisor:** RNDr. Filip Zavoral, Ph.D.
 
 ---
 
-## Struktura projektu
+## Assignment
 
-| Složka | Popis |
+The thesis designs and implements an Android application for advanced management of Bitcoin funds.
+
+By "advanced management" we specifically mean:
+
+- **Multisignature transactions** — support for M-of-N schemes (e.g. 2-of-3) per BIP-48 (HD derivation for multisig) and BIP-67 (canonical key sorting), using output descriptors in the `wsh(sortedmulti(...))` format.
+- **Coin control** — manual selection of specific unspent transaction outputs (UTXOs) when building transactions, enabling fee optimisation.
+- **Trezor hardware wallet integration** through the Trezor Connect deeplink API for mobile platforms; private keys never leave the device and the application never has access to them.
+
+The work also surveys existing advanced Bitcoin wallets in terms of multisig support, coin control, and hardware wallet integration, and identifies their limitations on mobile platforms.
+
+The application uses the PSBT format (BIP-174) for creating, signing, and distributing partially signed transactions, and supports native SegWit addresses (P2WPKH per BIP-84 for singlesig, P2WSH for multisig). The backend is a set of microservices written in Kotlin/Ktor that talk to public blockchain APIs. The security model guarantees that the server never holds private keys — all signing happens on the hardware wallet.
+
+---
+
+## Project structure
+
+| Directory | Description |
 |---|---|
-| `wallet-frontend/` | Android aplikace (Kotlin, Jetpack Compose) |
-| `wallet-backend/` | Mikroslužby (Kotlin/Ktor, PostgreSQL, Docker Compose) |
-| `DOCS/` | Dokumentace — user stories, use cases, architektura, diagramy |
+| `wallet-frontend/` | Android application (Kotlin, Jetpack Compose) |
+| `wallet-backend/` | Microservices (Kotlin/Ktor, PostgreSQL, Docker Compose) |
+| `DOCS/` | Documentation — user stories, use cases, architecture, diagrams (in Czech) |
 
-### Backend – mikroslužby
+### Backend microservices
 
-| Služba | Port | Popis |
+| Service | Port | Description |
 |---|---|---|
-| `api-gateway` | 8080 | Vstupní bod, JWT autentizace, routing |
-| `auth-service` | 8081 | Vydávání JWT tokenů, JWKS |
-| `wallet-registry` | 8082 | Správa walletů, derivace adres, import deskriptorů |
-| `explorer-service` | 8083 | Agregace dat o walletu (zůstatek, transakce) |
-| `psbt-service` | 8085 | Tvorba, podepisování a broadcast PSBT |
-| `blockchain-service` | 8086 | Proxy na Blockstream/Mempool API |
-| `price-service` | 8087 | Kurz BTC (CoinGecko) |
+| `api-gateway` | 8080 | Entry point, JWT authentication, routing |
+| `auth-service` | 8081 | JWT token issuance, JWKS |
+| `wallet-registry` | 8082 | Wallet management, address derivation, descriptor import |
+| `explorer-service` | 8083 | Wallet-level data aggregation (balance, transactions) |
+| `psbt-service` | 8085 | PSBT creation, signing, broadcast |
+| `blockchain-service` | 8086 | Proxy to Blockstream / Mempool APIs |
+| `price-service` | 8087 | BTC price (CoinGecko) |
 
-### Frontend – klíčové balíčky
+### Frontend — key packages
 
-| Balíček | Popis |
+| Package | Description |
 |---|---|
-| `core/api` | HTTP klient, DTO |
-| `core/trezor` | Trezor Connect deeplink integrace |
-| `core/session` | Stav přihlášení, aktivní wallet |
-| `feature/trezorconnect` | Připojení Trezoru, výběr účtu |
-| `feature/wallet` | Dashboard, send/receive, coin control, multisig, PSBT |
+| `core/api` | HTTP client, DTOs |
+| `core/trezor` | Trezor Connect deeplink integration |
+| `core/session` | Login state, active wallet |
+| `feature/trezorconnect` | Trezor connection, account selection |
+| `feature/wallet` | Dashboard, send/receive, coin control, multisig, PSBT workflow |
 
 ---
 
-## Dokumentace
+## Documentation
 
-- [Přehled aplikace](./DOCS/01-overview.md)
-- [User Stories](./DOCS/02-user-stories/us-overview.md)
-- [Požadavky na systém](./DOCS/03-requirements/requirements-overview.md)
-- [Use Cases](./DOCS/04-use-cases/uc-overview.md)
-- [Architektura](./DOCS/05-architecture/architecture.md)
-- [Use Case diagram](./DOCS/diagrams/UC/uc-overview.svg)
+The longer documents under `DOCS/` are written in Czech, matching the language of the thesis itself:
+
+- [Application overview](./DOCS/01-overview.md)
+- [User stories](./DOCS/02-user-stories/us-overview.md)
+- [System requirements](./DOCS/03-requirements/requirements-overview.md)
+- [Use cases](./DOCS/04-use-cases/uc-overview.md)
+- [Architecture](./DOCS/05-architecture/architecture.md)
+- [Use case diagram](./DOCS/diagrams/UC/uc-overview.svg)
 
 ---
 
-## Spuštění
+## Running the project
 
 ### Backend
 
@@ -73,6 +75,18 @@ cd wallet-backend
 docker compose up --build
 ```
 
+All environment variables are set inline in `docker-compose.yml`, so no extra configuration is needed for the standard run. If you want to launch a single service directly on the host (outside Docker), each module ships an `.env.example` template — copy it to `.env` and adjust as needed.
+
 ### Frontend
 
-Otevřít `wallet-frontend/` v Android Studiu a spustit na zařízení/emulátoru.
+Open `wallet-frontend/` in Android Studio and run on a device or emulator.
+
+The backend URL is configured in `wallet-frontend/local.properties` (gitignored) via the `api.gateway.base.url` key. **A template with all variants is available in `wallet-frontend/local.properties.example`** — copy it to `local.properties` and adjust. If the key is missing, the build falls back to `http://10.0.2.2:8080/api/v1` (the Android emulator's alias for the host machine's localhost), which means the app works in the emulator with the Dockerised backend out of the box.
+
+For a real device on the same LAN, add or uncomment the following line in `local.properties`:
+
+```properties
+api.gateway.base.url=http://192.168.0.100:8080/api/v1
+```
+
+(Replace the IP with the address of the host running Docker.) After the change, a Gradle sync and rebuild propagates the new value into `BuildConfig.API_GATEWAY_BASE_URL`.
