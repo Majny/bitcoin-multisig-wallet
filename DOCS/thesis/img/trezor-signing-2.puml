@@ -25,7 +25,7 @@ tsm --> app : callback URL\n(signatures, serialized_tx)
 deactivate tsm
 
 alt singlesig
-    app -> gw : POST /psbt/{id}/broadcast\n(serialized_tx)
+    app -> gw : POST /psbt/{id}/broadcast-raw\n(serialized_tx)
     activate gw
     gw -> psbt : broadcast
     activate psbt
@@ -39,15 +39,24 @@ else multisig
     gw -> psbt : přidej podpisy
     activate psbt
     psbt -> psbt : BIP-67 řazení\n+ vložení do PSBT\n+ current_sigs++
-    alt current_sigs == required_sigs
-        psbt -> psbt : finalizace + broadcast
-        psbt --> gw : {status: "broadcast"}
-    else čeká na další cosignery
-        psbt --> gw : {status: "pending"}
-    end
+    psbt --> gw : aktualizovaný stav PSBT\n(current_sigs / required_sigs)
     deactivate psbt
     gw --> app : stav PSBT
     deactivate gw
+    alt current_sigs == required_sigs
+        app -> app : na detailu PSBT\nzobrazí \"Broadcast Transaction\"
+        user -> app : klikne \"Broadcast\"
+        app -> gw : POST /psbt/{id}/broadcast-raw\n(serialized_tx)
+        activate gw
+        gw -> psbt : broadcast
+        activate psbt
+        psbt --> gw : txid
+        deactivate psbt
+        gw --> app : txid
+        deactivate gw
+    else čeká na další cosignery
+        app -> app : zobrazí \"1 z M podpisů\"
+    end
 end
 
 @enduml

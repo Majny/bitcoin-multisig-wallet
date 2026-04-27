@@ -9,14 +9,12 @@ left to right direction
 actor "Uživatel" as user
 
 rectangle "Bitcoin Multisig Wallet" {
-  usecase "Přihlášení\npřes Trezor" as UC1
-  usecase "Zobrazení\nzůstatku" as UC2
-  usecase "Odeslání\nsinglesig transakce" as UC3
-  usecase "Import multisig\ndeskriptoru" as UC4
-  usecase "Podepsání\nmultisig PSBT" as UC5
-  usecase "Coin control\n(výběr UTXO)" as UC6
-  usecase "Zobrazení stavu\nPSBT transakcí" as UC7
-  usecase "Přepnutí\núčtu" as UC8
+  usecase "UC1: Připojení\nTrezoru\na přihlášení" as UC1
+  usecase "UC2: Odeslání\nsinglesig\ntransakce" as UC2
+  usecase "UC3: Import\nmultisig\npeněženky" as UC3
+  usecase "UC4: Vytvoření\na podepsání\nmultisig transakce" as UC4
+  usecase "UC5: Manuální\nvýběr UTXO\n(coin control)" as UC5
+  usecase "UC6: Stav PSBT\na doplnění\npodpisu" as UC6
 }
 
 user -- UC1
@@ -25,10 +23,8 @@ user -- UC3
 user -- UC4
 user -- UC5
 user -- UC6
-user -- UC7
-user -- UC8
 
-UC3 ..> UC6 : <<extend>>
-UC5 ..> UC8 : <<include>>
+UC2 ..> UC5 : <<extend>>
+UC4 ..> UC6 : <<include>>
 
 @enduml

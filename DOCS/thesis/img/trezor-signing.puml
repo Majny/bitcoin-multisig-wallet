@@ -19,7 +19,7 @@ participant "Trezor" as hw
 user -> app : zadá adresu, částku
 activate app
 
-app -> gw : POST /api/psbt/create
+app -> gw : POST /psbt
 activate gw
 gw -> psbt : vytvoř PSBT
 activate psbt
@@ -41,7 +41,7 @@ tsm --> app : callback URL\n(signatures / serialized_tx)
 deactivate tsm
 
 alt singlesig
-    app -> gw : POST /api/psbt/{id}/broadcast\n(serialized_tx)
+    app -> gw : POST /psbt/{id}/broadcast-raw\n(serialized_tx)
     activate gw
     gw -> psbt : broadcast
     activate psbt
@@ -50,7 +50,7 @@ alt singlesig
     gw --> app : txid
     deactivate gw
 else multisig
-    app -> gw : POST /api/psbt/{id}/sign-trezor\n(signatures, cosignerIndex)
+    app -> gw : POST /psbt/{id}/sign-trezor\n(signatures, cosignerIndex)
     activate gw
     gw -> psbt : přidej podpisy
     activate psbt

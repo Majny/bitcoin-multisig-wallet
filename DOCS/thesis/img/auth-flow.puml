@@ -22,14 +22,14 @@ user -> tsm : potvrdí export na Trezoru
 tsm --> app : callback: xpub[], fingerprint
 deactivate tsm
 
-app -> app : device_id = UUID v5(fingerprint)
+app -> app : device_id = UUID v3("trezor:" + fingerprint)
 
 app -> gw : POST /auth/trezor/login\n(fingerprint, xpub[], ...)
 activate gw
 
 gw -> auth : POST /auth/trezor/login
 activate auth
-auth -> auth : device_id = UUID v5(fingerprint)
+auth -> auth : device_id = UUID v3("trezor:" + fingerprint)
 auth -> auth : uloží zařízení do DB
 auth -> auth : vydá JWT (RS256)\nsubject = device_id
 auth --> gw : {accessToken, refreshToken}

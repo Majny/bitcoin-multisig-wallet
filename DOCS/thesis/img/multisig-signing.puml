@@ -17,7 +17,7 @@ participant "Trezor Suite\nMobile" as trezor
 == Vytvoření PSBT ==
 
 user -> app : Zadání transakce\n(adresa, částka)
-app -> gw : POST /psbt/create
+app -> gw : POST /psbt
 gw -> psbt : vytvor PSBT
 psbt -> bc : GET /utxo (vstupy)
 psbt -> bc : GET /tx (referencni tx)

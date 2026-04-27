@@ -14,7 +14,7 @@ participant "psbt-service" as psbt
 user -> app : zadá adresu, částku
 activate app
 
-app -> gw : POST /psbt/create
+app -> gw : POST /psbt
 activate gw
 gw -> psbt : vytvoř PSBT
 activate psbt

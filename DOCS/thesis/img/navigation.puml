@@ -25,6 +25,7 @@ state "QR skener" as qr
 state "Coin Control" as coin
 state "Detail\ntransakce" as txdetail
 state "Odeslána" as txsent
+state "Chyba\ntransakce" as txerror
 
 state "Multisig\npeněženky" as mslist
 state "Import\ndeskriptoru" as import
@@ -49,7 +50,9 @@ dash --> txdetail : klik na\ntransakci
 send --> qr : sken\nadresy
 send --> coin : výběr\nUTXO
 send --> txsent : podpis\nna Trezoru\n+ broadcast
+send --> txerror : podpis\nzamítnut /\nbroadcast\nselhal
 coin --> txdetail : detail\nUTXO
+txerror --> dash : zpět
 
 mslist --> msdetail : výběr\npeněženky
 mslist --> import : import

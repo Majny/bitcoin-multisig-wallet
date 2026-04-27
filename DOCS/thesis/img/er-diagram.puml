@@ -24,6 +24,16 @@ entity "devices" as devices {
   created_at : TIMESTAMP
 }
 
+entity "refresh_tokens" as rtokens {
+  * **token_hash** : TEXT <<PK>>
+  --
+  device_id : TEXT
+  fingerprint : TEXT
+  expires_at : TIMESTAMP
+  created_at : TIMESTAMP
+  revoked_at : TIMESTAMP
+}
+
 }
 
 package "wallet-registry" {
@@ -37,6 +47,8 @@ entity "wallets" as wallets {
   m : INT
   n : INT
   account_index : INT
+  birth_height : INT
+  label : TEXT
   receive_descriptor : TEXT
   change_descriptor : TEXT
   created_at : TIMESTAMP
@@ -76,6 +88,15 @@ entity "wallet_addresses" as addresses {
   created_at : TIMESTAMP
 }
 
+entity "cosigner_labels" as clabels {
+  * **device_id** : TEXT
+  * **wallet_id** : TEXT <<FK>>
+  * **idx** : INT
+  --
+  label : TEXT
+  updated_at : TIMESTAMP
+}
+
 }
 
 package "psbt-service" {
@@ -83,17 +104,21 @@ package "psbt-service" {
 entity "psbts" as psbts {
   * **id** : UUID <<PK>>
   --
-  * wallet_id : TEXT <<FK>>
+  wallet_id : VARCHAR(255)
   psbt_base64 : TEXT
   status : VARCHAR(50)
+  tx_type : VARCHAR(50)
   required_sigs : INT
   current_sigs : INT
   total_output_sats : BIGINT
   estimated_fee_sats : BIGINT
+  label : VARCHAR(255)
+  txid : VARCHAR(64)
   trezor_connect_params : TEXT
   serialized_tx : TEXT
   created_at : TIMESTAMP
   updated_at : TIMESTAMP
+  broadcast_at : TIMESTAMP
 }
 
 entity "psbt_signatures" as signatures {
@@ -113,12 +138,21 @@ wallets ||--o{ members : "sdílí"
 wallets ||--o{ wcosigners : "má cosignery"
 cosigners ||--o{ wcosigners : "přiřazení"
 wallets ||--o{ addresses : "má adresy"
+wallets ||--o{ clabels : "per-device labely"
+
+' Relationships — auth-service
+devices ||..o{ rtokens : "vydává"
 
 ' Relationships — psbt-service
-wallets ||--o{ psbts : "má transakce"
+' Note: psbts.wallet_id is a logical reference only — psbt-service and
+' wallet-registry use separate databases, so no SQL foreign key constraint
+' exists across the boundary. Application-level integrity is enforced
+' in api-gateway.
+wallets ||..o{ psbts : "logická vazba (jiná DB)"
 psbts ||--o{ signatures : "má podpisy"
 
 ' Force vertical stacking of packages
+devices -[hidden]right- rtokens
 devices -[hidden]down- wallets
 addresses -[hidden]down- psbts
 
@@ -127,5 +161,6 @@ members -[hidden]right- wcosigners
 addresses -[hidden]right- cosigners
 wallets -[hidden]down- members
 wallets -[hidden]down- addresses
+addresses -[hidden]down- clabels
 
 @enduml

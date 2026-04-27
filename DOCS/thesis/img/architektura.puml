@@ -53,7 +53,7 @@ rectangle "Backendové služby" <<service>> as backend {
 }
 
 rectangle "Externí služby" <<external>> as ext {
-  rectangle "Mempool.space\nREST API" as mempool
+  rectangle "Mempool.space\n(testnet) /\nBlockstream\nEsplora\n(mainnet)" as mempool
   rectangle "CoinGecko\nAPI" as coingecko
   mempool -[hidden]down- coingecko
 }
@@ -65,7 +65,7 @@ rectangle "Trezor zařízení" <<external>> as ext_trezor {
 database "PostgreSQL" <<db>> as db
 
 ' Connections
-api_client -down-> gw : HTTPS
+api_client -down-> gw : HTTP (LAN / VPN)
 trezor_launcher <-right-> trezor : deeplink
 
 ' Gateway -> services
@@ -77,8 +77,8 @@ gw -down-> psbt
 ' Inter-service relations
 explorer --> registry : adresy
 explorer --> blockchain : on-chain data
-psbt --> registry : UTXO, adresy
-psbt --> blockchain : ref. transakce
+psbt --> registry : adresy, metadata
+psbt --> blockchain : UTXO, ref. transakce
 psbt --> explorer : next change
 
 ' External services
