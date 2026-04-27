@@ -142,9 +142,13 @@ odpovídající aktuálnímu cosignerovi. Stav PSBT přejde z~\texttt{pending}
 dalšího cosignera. Ve druhém kroku v~nastavení přepneme aktivní účet na
 cosignera~2 (\texttt{m/48'/1'/1'/2'}), v~seznamu rozpracovaných PSBT vybereme
 připravovanou transakci a~znovu projdeme deeplink podpisem. Backend po
-přijetí druhého podpisu detekuje dosažení prahu, finalizuje PSBT (sestaví
-witness s~podpisy ve správném pořadí dle BIP-67~\cite{BIP67}) a~provede broadcast.
-Úspěch ověřujeme v~Mempool.space, kde u~vstupů vidíme očekávaný witness
+přijetí druhého podpisu uloží podpisy na~pozice odpovídající
+BIP-67~\cite{BIP67} řazení a~vrátí aktualizovaný stav PSBT; aplikace
+detail obnoví a~místo tlačítka \emph{Sign with Trezor} zobrazí
+\emph{Broadcast Transaction}. Po~jeho stisknutí aplikace zavolá
+broadcast endpoint, který transakci propaguje přes
+\texttt{blockchain-service} do~sítě. Úspěch ověřujeme v~Mempool.space,
+kde u~vstupů vidíme očekávaný witness
 obsahující dva podpisy a~kompletní redeem skript ve tvaru
 \texttt{OP\_2~<pk1>~<pk2>~<pk3>~OP\_3 OP\_CHECKMULTISIG}.
 

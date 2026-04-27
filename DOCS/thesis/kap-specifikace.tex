@@ -162,7 +162,13 @@ výstupní podmínky a~alternativní scénáře.
     \begin{enumerate}
       \item Uživatel přejde na obrazovku odeslání a~zadá cílovou adresu (ručně nebo
             naskenováním QR kódu).
-      \item Uživatel zadá částku v~BTC nebo fiat měně (např.\ CZK, EUR).
+      \item Uživatel zadá částku buď v~BTC, nebo ve zvolené fiat měně
+            (CZK, USD nebo EUR; konkrétní měna se volí v~nastavení).
+            Přepínač jednotky vedle pole umožňuje mezi BTC a~fiat přepínat;
+            aplikace pod polem vždy zobrazuje ekvivalent ve~druhé jednotce.
+            Sats (tedy skutečná částka utracená v~transakci) se počítají
+            z~BTC ekvivalentu: je-li vstup ve~fiat, aplikace jej nejprve
+            převede přes aktuální kurz získaný ze~služby \texttt{price-service}.
       \item Aplikace zobrazí odhadovaný poplatek na základě aktuálního stavu mempoolu.
       \item Uživatel volitelně aktivuje coin control a~vybere konkrétní UTXO
             (viz UC5, sekce~\ref{uc:coin-control}).
@@ -432,10 +438,14 @@ příslušné US/UC.
     cosignerem.
 
   \item[F13 -- Broadcast transakce \textnormal{(UC4)}:]
-    Když cosigner přidá podpis, kterým je dosažen požadovaný práh,
-    systém finalizuje PSBT a~provede broadcast transakce do Bitcoin
-    sítě. Broadcast je tedy vyvolán akcí konkrétního cosignera,
-    nikoli automaticky na pozadí.
+    Po~dosažení prahu podpisů zmizí na~detailu PSBT tlačítko
+    \emph{Sign with Trezor} a~místo něj se zobrazí \emph{Broadcast
+    Transaction}. Po~jeho stisknutí aplikace zavolá broadcast
+    endpoint a~finalizovanou transakci propaguje do~Bitcoin sítě.
+    Broadcast je tedy explicitní akcí některého cosignera
+    na~detailu PSBT -- po~přijetí posledního podpisu se transakce
+    sama od~sebe neodesílá a~iniciuje ji vždy klient, nikoli
+    server-side background úloha.
 \end{description}
 
 %%% -----------------------------------------------------------------------
@@ -459,8 +469,11 @@ Nefunkční požadavky specifikují kvalitativní vlastnosti systému.
     nesoucí identitu zařízení). Token je vydán při přihlášení na základě
     ověření veřejného klíče z~Trezoru.
 
-  \item[NF3 -- Šifrovaná komunikace:]
-    Veškerá komunikace mezi aplikací a~backendem probíhá přes HTTPS.
+  \item[NF3 -- Důvěryhodný síťový kanál:]
+    Komunikace mezi aplikací a~backendem probíhá přes HTTP v~izolované
+    LAN nebo ve~VPN (ve~vývojovém nasazení autor používá Tailscale,
+    které zajišťuje šifrování na~síťové vrstvě mezi zařízeními).
+    TLS na~aplikační vrstvě není v~rámci této práce řešeno.
 \end{description}
 
 \subsection{Platforma a kompatibilita}
