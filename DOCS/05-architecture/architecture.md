@@ -1,545 +1,970 @@
-# Architektura: komponenty, API a use‑casy
+# Architektura systému
 
-> Cíl: Android bitcoin aplikace s **coin‑control** a **multisig**. Všechny podpisy probíhají na **Trezoru**. Backend komunikuje s **Bitcoin blockchain** přes veřejné **Mempool.space API** (nevyžaduje vlastní node).
-
----
-
-## 1) Hlavní komponenty
-
-### 1.1 Zařízení / klient
-
-* **Trezor**
-
-  * Uchovává seed (BIP-39, novější verze SLIP-39 TODO).
-  * Podepisuje **PSBT** (BIP-174). Model T umí pamatovat *multisig policy* pro ověřování. TODO (zjistit, jak tohle pořádně funguje a jak podpora jiných trezorů).
-  * Identita pro backend: **master fingerprint** + xpub pro dané derivace.
-  * Volitelná passphrase vytváří hidden wallet.
-  * Používá **Trezor Connect Mobile** přes Trezor Suite (deeplink).
-
-* **Android App**
-
-  * UI (Jetpack Compose), coin-control, přehled multisigů, PSBT workflow.
-  * **Trezor Connect Mobile flow:**
-    * Appka otevře Trezor Suite Mobile přes deeplink (`https://connect.trezor.io/...`).
-    * Suite zobrazí výzvu k potvrzení na Trezoru a po úspěchu zavolá zpět **deeplink** do appky (`bitcoinwallet://trezor-callback?...`).
-    * Appka dostane JSON `{ success, payload: { fingerprint, xpub, path, device_model, device_label, ... }}`.
-  * Párování účtu = identifikace Trezoru přes backend pomocí jeho master fingerprintu a odvozeného xpubu (end-point `/auth/trezor/login`).
-  * Podepisování transakcí:
-    * Backend připraví PSBT (`/wallets/{id}/tx/prepare`).
-    * Appka pošle PSBT do Trezor Suite (Trezor Connect), získá podepsanou PSBT.
-    * Podepsanou PSBT pošle zpět na backend (`/wallets/{id}/tx/submit`).
-  * Transport: HTTPS → **API Gateway** (Android používá `MobileSigner` klienta postaveného na Ktoru).
-
-
-
-### 1.2 Cloud backend
-
-* **API Gateway** – vstupní REST API, autentizace/autorizační tokeny, rate‑limit, audit.
-* **Auth & Pairing Service** – párování Trezoru ⇆ účet v aplikaci (device\_id), správa JWT/refresh.
-* **Wallet Registry (SoT)** – jediný zdroj pravdy pro peněženky (deskriptory, multisig policy, členové, cosigneři).
-* **Wallet Importer** – import/export policy/deskriptorů (Sparrow/Specter/BSMS/descriptor strings). TODO, zjistit jestli je potřeba toto rešit
-* **Explorer Service** – čtení UTXO/historie/fee/chain info (cache), ZMQ invalidace.
-* **PSBT Builder/Bridge** – stavba PSBT, coin selection, fee, finalize, broadcast.
-* **Multisig Coordinator** – sleduje stav PSBT u multisigů (K‑z‑N), orchestrace podpisů, notifikace.
-* **Notification Service** – FCM/webhooky (nevim jestli bude potřeba, spíše ne).
-* **Blockchain Client (Mempool.space)** – **separátní microservice** pro komunikaci s veřejným Mempool.space API. Poskytuje UTXO, TX history, fee estimates, broadcast. Nevyžaduje vlastní Bitcoin node.
-* **Infra úložiště**: PostgreSQL (perzistence), Redis (cache/rate‑limit), S3 (PSBT blobs), Observability (Prometheus/Grafana/Loki/Jaeger).
-
-> **Poznámka:** Podepisování transakcí probíhá **výhradně na telefonu** přes Trezor Connect Mobile (deeplink do Trezor Suite). Backend nikdy nemá přístup k privátním klíčům ani k Trezoru.
-
-### 1.3 Blockchain Data Source (Mempool.space)
-
-* **Mempool.space API** – veřejné REST API pro Bitcoin blockchain data.
-  * Mainnet: `https://mempool.space/api/`
-  * Testnet: `https://mempool.space/testnet/api/`
-* **Poskytuje**:
-  * UTXO pro adresy: `GET /address/:addr/utxo`
-  * TX historie: `GET /address/:addr/txs`
-  * Fee estimates: `GET /v1/fees/recommended`
-  * Broadcast TX: `POST /tx` (raw hex)
-  * Account discovery: kontrola `tx_count` pro adresy derivované z xpub
-* **Výhody**: Žádná infrastruktura, žádná údržba, vysoká dostupnost, podpora testnet.
+> Android Bitcoin peněženka s podporou **coin-control**, **multisig** a **Trezor** hardware peněženky.
+> Všechny podpisy probíhají výhradně na Trezoru. Backend komunikuje s Bitcoinovým blockchainem přes veřejné **Blockstream.info Esplora API**.
 
 ---
 
-## 2) Microservices – detail a API
+## 1. Přehled systému
 
-### 2.1 API Gateway
+Systém se skládá ze tří hlavních vrstev:
 
-* **Role**: jediný veřejný vstup; ověřuje JWT, aplikuje rate‑limits a audit; směruje na vnitřní služby.
-* **Auth**: Bearer JWT; device‑scope (vázaný na `device_id`).
-* **Veřejné endpointy (zatím jen příklady, bude jich více TODO)**
+```
+┌──────────────────────────────────────────────────────┐
+│                   Android App                        │
+│  Jetpack Compose UI · MobileSigner (Ktor) · Session  │
+└────────────────────────┬─────────────────────────────┘
+                         │ HTTPS/JSON
+                         ▼
+┌──────────────────────────────────────────────────────┐
+│                   API Gateway :8080                  │
+│        JWT ověření (JWKS) · routing · CORS           │
+└──┬──────┬──────┬──────┬──────┬──────┬───────────────┘
+   │      │      │      │      │      │
+   ▼      ▼      ▼      ▼      ▼      ▼
+auth   registry explorer psbt block- price
+:8081  :8082   :8083   :8085 chain  :8087
+                             :8086
+                               │
+                               ▼ HTTPS
+                    Blockstream.info Esplora API
+                    (nebo mempool.space)
+```
 
-  * `POST /api/v1/auth/pairing/start` → zahájí pairing flow (viz UC‑01)
-  * `POST /api/v1/auth/token/refresh` → nové access JWT
-  * `GET  /api/v1/wallets` → seznam peněženek pro aktuální device
-  * `POST /api/v1/wallets` → vytvoření singlesig/multisig (předá Wallet Registry)
-  * `POST /api/v1/wallets/import` → import policy/descriptor (předá Wallet Importer)
-  * `GET  /api/v1/wallets/{id}/utxos` → data z Exploreru
-  * `POST /api/v1/psbt` → vytvoření PSBT (Bridge)
-  * `POST /api/v1/psbt/{id}/submit` → přijetí podepsané PSBT z appky (Bridge)
-  * `POST /api/v1/psbt/{id}/broadcast` → broadcast (Bridge → Mempool.space API)
-* **Spojení**
-  * API Gateway → Auth & Pairing Service: vydání/obnova tokenů přes pairing s Trezorem.
-  * API Gateway → Wallet Registry: CRUD nad peněženkami a přidělování adres.
-  * API Gateway → Explorer Service: čtení UTXO/historie/fee.
-  * API Gateway → PSBT Bridge: stavba/finalizace PSBT.
-  * API Gateway → Multisig Coordinator: dotazy na stav podpisů / registrace účasti 
-  * API Gateway → PostgreSQL: zápis auditních záznamů.
+Android appka nikdy nekomunikuje přímo s interními službami – vše prochází přes API Gateway. Trezor interaguje s appkou přes **Trezor Connect Mobile deeplink** (Trezor Suite Mobile app na telefonu).
 
-### 2.2 Auth & Pairing Service
-
-* **Role**: Zajišťuje párování Trezoru s backendem a vystavení tokenů pro ověřený přístup. 
-* **Funkce**:
-  * Párování Trezoru (mobilní varianta):
-    * Android appka si přes Trezor Connect Mobile vyčte `fingerprint`, `xpub`, `derivationPath`, `deviceModel`, `deviceLabel`.
-    * Přes MobileSigner zavolá `POST /auth/trezor/login`.
-    * Auth služba podle fingerprintu a xpubu založí/aktualizuje záznam zařízení (`device_id`) a případně i uživatele.
-  * Tokeny a autentizace:
-    * Po úspěšném loginu vygeneruje krátkodobý access token (JWT) a dlouhodobý refresh token.
-    * Tokeny jsou svázány s `device_id` a uživatelem.
-  * Správa zařízení:
-    * Eviduje známé Trezory (model, firmware, fingerprint).
-    * Umožňuje ověřit, že zařízení odpovídá záznamu v systému.
-* **API** (mobilní flow – první verze)
-  * `POST /auth/trezor/login`
-    * Vstup: `{ fingerprint, xpub, derivationPath, deviceModel, deviceLabel }` (z Trezor Connect).
-    * Výstup: `{ accessToken, refreshToken?, user: { id, displayName, trezorFingerprint, wallets[] } }`.
-  * `POST /auth/token/refresh`
-    * Vstup: `{ refreshToken }`.
-    * Výstup: `{ accessToken }`.
-* **Spojení**
-  * Auth → PostgreSQL: perzistence devices, users, refresh tokenů, klíčů pro JWT.
-  * Auth → Wallet Registry: (volitelně) vytvoření výchozí watch-only wallet pro nově spárovaný Trezor.
-  * Auth → API Gateway: Gateway volá Auth pro login a refresh a vrací odpověď appce.
-
-
-### 2.3 Wallet Registry (Source of Truth)
-
-* **Role**: Účel: Uchovává všechny definice peněženek (single i multisig) v podobě watch‑only záznamů. Je to hlavní databáze, která určuje, jak peněženky vypadají, kdo do nich patří a jak se počítají adresy.
-* **Funkce**
-  * Deskriptory + checksum, network, birth\_height, label.
-  * Multisig policy (M, N, script type, account index, BIP‑67 pořadí).
-  * **Cosigner fragments**: `fingerprint`, `origin_path` (např. `48'/0'/0'/2'`), `xpub_root, tady zatim TODO
-  * **Wallet membership**: přiřazení `device_id` k peněžence (+ možná TODO `cosigner_idx`).
-* **API TODO**
-  * `POST /wallets` → vytvoření (single/multisig) z parametrů nebo z importu.
-  * `GET  /wallets?device_id=…` → všechny wallet, které „vidí“ dané zařízení (auto‑discovery podle cosigner fragmentu).
-  * `POST /wallets/{id}/members/attach` → připoj device k wallet (když se shoduje cosigner fragment).
-* **Spojení**
-  * Wallet Registry → PostgreSQL — zdroj pravdy pro wallets/cosigners/members
-  * Wallet Registry → Explorer/Bridge/Signer — čtou deskriptory/členství
-
-### 2.4 Wallet Importer5
-
-* **Role**: Wallet Importer zajišťuje, že systém umí přijmout peněženky z různých externích nástrojů (např. Sparrow, Bitcoin Core, ..) a převést je do jednotného interního formátu, který používá Wallet Registry.
-* **Funkce**:
-  * Rozpoznání formátu:
-    * Automaticky detekuje typ importu – může jít o descriptor string, BSMS JSON nebo export ze Specter/Sparrow. 
-  * Normalizace dat:
-    * Převede importovaný obsah do jednotné podoby. 
-    * Seřadí cosignery podle BIP-67, sjednotí derivace a ověří strukturu. 
-  * Validace:
-    * Ověří kontrolní součty (descriptor checksum), síť, typ skriptu a počet signérů (M-of-N). 
-    * Při chybě (např. nesprávná derivace nebo duplikovaný xpub) vrátí detailní hlášku. 
-  * Integrace s Registry:
-    * Po úspěšné normalizaci vytvoří nebo aktualizuje záznam v Wallet Registry. 
-    * Výstupem jsou dva deskriptory (external a internal) a jednotná definice politiky (canonical policy) TODO.
-* **API TODO**
-  * `POST /wallets/import` → vstup: descriptor/policy export, výstup: canonical policy + dva deskriptory.
-
-### 2.5 Explorer Service
-
-* **Role**: Rychlé a škálovatelné READ endpointy pro peněženky: UTXO, historie, zůstatek, odhad poplatků a základní chain info. Používá **Mempool.space API** jako primární zdroj dat.
-* **Funkce**:
-  * Primární zdroj: **Mempool.space API** – UTXO, TX historie, fee estimates.
-  * Account discovery: derivuje adresy z xpub a kontroluje `tx_count > 0` přes Mempool API.
-  * Lokální cache: Redis (hot cache) pro snížení počtu API volání.
-  * Projekce do PG: trvalé projekce UTXO/tx-history pro rychlé filtry, stránkování a agregace.
-* **API** TODO
-  * `GET /wallets/{id}/utxos`
-  * `GET /wallets/{id}/history?limit=&from=`
-  * `GET /fees/estimates`
-  * `GET /chaininfo`
-* **Data**: Redis (hot cache), PG (projekce na transakce/UTXO).
-* **Spojení**
-  * Explorer → Wallet Registry: získání descriptor setu a členství; Příklad: „Načti ext/int descriptor pro wallet X“. 
-  * Explorer → Mempool.space API: UTXO, TX historie, fee estimates, account discovery.
-  * Explorer → Redis: hot cache výsledků 
-  * Explorer → PostgreSQL: projekce historie/utxo
-
-### 2.6 PSBT Builder/Bridge
-
-* **Role**: Tvoří, spravuje a připravuje PSBT (Partially Signed Bitcoin Transaction) pro podepisování a odesílání. Zajišťuje kompletní workflow od výběru vstupů (coin selection) až po finální broadcast transakce do sítě.
-* **Funkce**: TODO celé pořádně překontrolovat
-  * Tvorba PSBT (/psbt)
-    * Načte definici peněženky z Wallet Registry (deskriptory). 
-    * Načte UTXO z Exploreru. 
-    * Provede coin selection – vybere vhodné vstupy podle cílové částky, poplatku a politiky (např. „minimize change“ nebo „max privacy“). 
-    * Sestaví nekompletní PSBT s potřebnými metadaty (inputs, outputs, witnessUtxo, bip32 derivace, atd.). 
-    * Vrací psbt_id + PSBT blob uložený (např. v S3 nebo Redis). 
-  * Update PSBT (/psbt/{id}/update)
-    * Umožňuje upravit vstupy nebo poplatky (např. při použití Coin Control). 
-    * Znovu přepočítá poplatek a change výstup. 
-  * Finalize (/psbt/{id}/finalize)
-    * Finalizuje PSBT lokálně pomocí BitcoinJ/libwally. 
-    * Zkontroluje, zda má transakce všechny potřebné podpisy (complete: true/false). 
-    * Vrací hex a stav finální transakce. 
-  * Broadcast (/psbt/{id}/broadcast)
-    * Po complete=true odešle transakci do mempoolu přes **Mempool.space API** (`POST /tx`).
-    * Mempool.space vrací txid při úspěchu.
-* **API** TODO
-  * `POST /psbt` – vstup: wallet\_id, outputs\[], optional inputs (coin‑control), fee policy. Výstup: `psbt_id`, PSBT blob.
-  * `POST /psbt/{id}/update` – změna vstupů/fee (např. z Coin Control).
-  * `POST /psbt/{id}/finalize` – finalizuje PSBT lokálně, řekne `complete: true/false`.
-  * `POST /psbt/{id}/broadcast` – po `complete=true` pošle přes Mempool.space API.
-* **Spojení**
-  * Bridge → Wallet Registry: deskriptory, change index, policy 
-  * Bridge → Explorer: UTXO/fee inputs 
-  * Bridge → Mempool.space API: broadcast transakce (`POST /tx`)
-  * Bridge → Multisig Coordinator: registrace PSBT a sběr podpisů 
-  * Bridge → PostgreSQL: záznam o PSBT/TX
-* Bezpečnostní omezení (Guard-rails):
-  * Validace PSBT lokálně před broadcastem.
-* **Závislosti**: Registry (deskriptory), Explorer (UTXO), Mempool.space (broadcast), Coordinator (multisig stav).
-
-### 2.x MobileSigner (Android HTTP klient)
-
-* **Role**: Tenký HTTP klient v Android appce (Ktor), který mluví s API Gateway a backendovými službami. Schovává URL endpointů a datové struktury.
-* **Funkce**:
-  * `loginWithTrezor(identity: TrezorDeviceIdentity): UserSession`
-    * Volá `POST /auth/trezor/login`.
-    * Tělo: `{ fingerprint, xpub, derivationPath, deviceModel, deviceLabel }`.
-    * Odpověď: JWT access token + shrnutí uživatele a peněženek.
-  * `preparePsbt(request: PreparePsbtRequest): PreparedPsbt`
-    * Volá `POST /wallets/{walletId}/tx/prepare`.
-    * Tělo: `{ amountSats, destinationAddress, feeRateSatsPerVb, selectedInputs[] }`.
-    * Odpověď: `{ psbtId, psbtBase64 }`.
-  * `submitSignedPsbt(request: SubmitSignedPsbtRequest): SubmitSignedPsbtResult`
-    * Volá `POST /wallets/{walletId}/tx/submit`.
-    * Tělo: `{ psbtId, signedPsbtBase64 }`.
-    * Odpověď: `{ status, txId? }` (např. `accepted`, `broadcasted`, `waiting_for_cosigners`).
-* **Spojení**
-  * MobileSigner → API Gateway (HTTPS/JSON).
-  * MobileSigner používá JWT access token jako `Authorization: Bearer ...`.
-
-
-### 2.8 Multisig Coordinator
-
-* **Role**: Zajišťuje koordinaci a sledování podpisů pro multisig PSBT transakce. V systému, kde je více signérů (např. 2‑z‑3), musí někdo spravovat, kolik podpisů už bylo přidáno, kolik ještě chybí a kdy lze transakci finalizovat.
-* **Funkce**:
-  * Každá nová PSBT se po vytvoření zaregistruje v Coordinatoru spolu s parametry M‑z‑N a wallet_id. 
-  * Coordinator udržuje tabulku stavů: který cosigner již podepsal, čas podpisu, fingerprint a stav (pending, partial, complete). 
-  * Jakmile některý z uživatelů přes Signer Service přidá podpis (addsig), Coordinator zaktualizuje PSBT záznam a vyhodnotí, zda je dosaženo požadovaného počtu podpisů (K‑z‑N). 
-  * Pokud je PSBT kompletní (complete=true), notifikací informuje Bridge/Explorer, že lze provést finalizepsbt a následně broadcast.
-* **API** TODO
-
-  * `POST /ms/psbt/register` → registrace nového PSBT (wallet\_id, m/n)
-  * `POST /ms/psbt/{id}/addsig` → přidán podpis (od Signeru)
-  * `GET  /ms/psbt/{id}/status` → kolik chybí
-* **Spojení**
-  * Coordinator → PostgreSQL: stav podpisů (K‑z‑N), mapování signerů 
-  * Coordinator → Redis: fronty/události/notifikace
-  * Coordinator → API Gateway: dotazování z app
-
-### 2.9 Notification Service TODO
-
-* **Role**: FCM/webhooky při změně stavu PSBT, při příchozí transakci apod.
-* **API**: `POST /notify/device` / `POST /notify/webhook`.
-
-### 2.10 Blockchain Service (blockchain-service)
-
-* **Role**: **Separátní microservice** pro komunikaci s veřejným **Mempool.space API**. Poskytuje všechny blockchain data bez nutnosti vlastního Bitcoin node.
-* **Port**: 8086 (default)
-* **API endpointy**:
-  * `GET /api/v1/blockchain/address/:addr` → informace o adrese (tx_count, balance)
-  * `GET /api/v1/blockchain/address/:addr/utxos` → seznam UTXO pro coin control
-  * `GET /api/v1/blockchain/address/:addr/txs` → historie transakcí
-  * `GET /api/v1/blockchain/address/:addr/has-activity` → kontrola aktivity (pro account discovery)
-  * `GET /api/v1/blockchain/fees` → fee estimates (fastestFee, halfHourFee, hourFee)
-  * `GET /api/v1/blockchain/tx/:txid` → detail transakce
-  * `POST /api/v1/blockchain/tx/broadcast` → broadcast raw hex transakce
-* **Mempool.space API**:
-  * Mainnet: `https://mempool.space/api/`
-  * Testnet: `https://mempool.space/testnet/api/`
-* **Funkce**:
-  * **Account discovery**: kontroluje `tx_count > 0` pro adresy.
-  * **UTXO list**: pro coin control vrací `{ txid, vout, value, status }`.
-  * **Fee estimation**: vrací doporučené sat/vB pro různé priority.
-  * **Broadcast**: odesílá finalizovanou TX jako raw hex.
-* **Výhody separátního service**:
-  * Single Responsibility Principle - API Gateway jen routuje
-  * Snadná výměna providera (Mempool → Blockstream → vlastní node)
-  * Testovatelnost a škálovatelnost
-* **Spojení**:
-  * API Gateway → Blockchain Service → Mempool.space API
-  * Explorer Service → Blockchain Service (pro UTXO a TX data)
-  * PSBT Bridge → Blockchain Service (pro broadcast)
-* **Konfigurace** (env proměnné):
-  * `PORT`: Port služby (default 8086)
-  * `MEMPOOL_BASE_URL`: URL Mempool API (default `https://mempool.space/api`)
-
-### 2.11 Price Service (price-service)
-
-* **Role**: **Separátní microservice** pro získávání cen Bitcoinu ve fiat měnách. Komunikuje s **CoinGecko API**.
-* **Port**: 8087 (default)
-* **API endpointy**:
-  * `GET /price` → aktuální ceny BTC v CZK, USD, EUR + 24h změna
-  * `GET /price/convert?sats=1000000&currency=czk` → převod satoshi na fiat
-  * `GET /price/health` → health check
-* **CoinGecko API**:
-  * `https://api.coingecko.com/api/v3/simple/price`
-  * Free tier: 10-30 requests/min (bez API klíče)
-* **Funkce**:
-  * **In-memory cache**: Ceny se cachují (default 5 minut) pro respektování rate limitů.
-  * **Převod**: Satoshi → fiat hodnota pro zobrazení v UI.
-  * **24h změna**: Procentuální změna ceny za posledních 24 hodin.
-* **Výhody separátního service**:
-  * Single Responsibility - oddělení cenových dat od blockchain dat
-  * Jiný zdroj dat (CoinGecko vs Mempool.space)
-  * Nezávislý caching a škálování
-  * Pokud CoinGecko padne, blockchain-service funguje dál
-* **Spojení**:
-  * API Gateway → Price Service → CoinGecko API
-* **Konfigurace** (env proměnné):
-  * `PORT`: Port služby (default 8087)
-  * `COINGECKO_BASE_URL`: URL CoinGecko API (default `https://api.coingecko.com/api/v3`)
-  * `PRICE_CACHE_DURATION_MS`: Doba cache v ms (default 300000 = 5 min)
-
-### 2.12 Infra (PG/Redis/S3/Observability)
-
-* **PG**: devices, wallets, wallet\_cosigners, wallet\_members, utxo/history projekce, audit, ms\_state.
-* **Redis**: RL tokens, krátké cache, PSBT dočasné stavy.
-* **S3**: PSBT blob.
-* **Obs**: metriky, logy, trasy.
-* Auth & Pairing	devices, tokens	párování Trezoru a JWT 
-* Wallet Registry	wallets, cosigners, members	konfigurace peněženek 
-* Explorer	utxo, history	projekce dat z blockchainu 
-* Coordinator	psbt_state, signatures	stav podpisů 
-* Audit	audit_log	logy akcí
+Interní komunikace mezi microservicemi jde **přímo** (ne přes API Gateway):
+- psbt-service → wallet-registry (wallet detail, adresy)
+- psbt-service → blockchain-service (UTXO, raw tx, broadcast)
+- explorer-service → wallet-registry (adresy)
+- explorer-service → blockchain-service (balance, transakce)
 
 ---
 
-## 3) Komunikace mezi službami (shrnutí)
+## 2. Microservices
 
-| From → To                    | Protokol       | Účel                                     |
-|------------------------------| -------------- | ---------------------------------------- |
-| Android App → API Gateway    | HTTPS/JSON     | Všechny klientské akce                   |
-| Android App ↔ Trezor Suite   | Deeplink       | Podepisování PSBT přes Trezor Connect    |
-| API Gateway → AuthSvc        | HTTP           | Pairing, tokeny                          |
-| API Gateway → WalletReg      | HTTP           | CRUD peněženek, členství                 |
-| API Gateway → WalletImporter | HTTP           | Import policy/descriptor                 |
-| API Gateway → Explorer       | HTTP           | Read (UTXO/history/fees/chain)           |
-| API Gateway → Bridge         | HTTP           | Tvorba/úprava/finalize/broadcast PSBT    |
-| API Gateway → MsCoordinator  | HTTP           | Registrace PSBT, stav                    |
-| API Gateway → BlockchainSvc  | HTTP           | Proxy k Mempool.space API                |
-| BlockchainSvc → Mempool.space| HTTPS          | UTXO, TX historie, fee, broadcast        |
-| Explorer → BlockchainSvc     | HTTP           | UTXO, TX historie, fee estimates         |
-| Bridge → BlockchainSvc       | HTTP           | Broadcast TX                             |
+### 2.1 API Gateway `:8080`
 
----
+Jediný veřejný vstupní bod. Ověřuje JWT tokeny pomocí JWKS (klíče servírované z auth-service), směruje požadavky na interní služby a zajišťuje CORS.
 
-## 4) Datové modely
+**Klíčové env proměnné:**
 
-* **devices**: `(device_id, fingerprint, model, created_at)`
-* **cosigners**: `(cosigner_id, fingerprint, origin_path, xpub_root)`
-* **wallets**: `(wallet_id, wpid, network, type, script_type, m, n, account_index, birth_height, label)`
-* **wallet\_cosigners**: `(wallet_id, idx, cosigner_id)`
-* **wallet\_members**: `(wallet_id, device_id, cosigner_idx)`
-* **psbt\_state**: `(psbt_id, wallet_id, created_by, created_at, complete, tx_hex?)`
-* **audit**: `(ts, service, actor(device_id), action, payload_hash, ip/token)`
+| Proměnná | Default (Docker) | Popis |
+|---|---|---|
+| `PORT` | `8080` | Naslouchací port |
+| `AUTH_BASE_URL` | `http://auth-service:8081` | URL auth-service |
+| `REGISTRY_BASE_URL` | `http://wallet-registry:8082` | URL wallet-registry |
+| `EXPLORER_BASE_URL` | `http://explorer-service:8083` | URL explorer-service |
+| `PSBT_BASE_URL` | `http://psbt-service:8085` | URL psbt-service |
+| `BLOCKCHAIN_BASE_URL` | `http://blockchain-service:8086` | URL blockchain-service |
+| `PRICE_BASE_URL` | `http://price-service:8087` | URL price-service |
+| `JWT_ISSUER` | `wallet-auth` | Očekávaný issuer v JWT |
+| `JWT_AUDIENCE` | `wallet-gateway` | Očekávaná audience v JWT |
+| `JWKS_URL` | `http://auth-service:8081/auth/.well-known/jwks.json` | JWKS endpoint pro ověření podpisů |
 
+**Veřejné (neautentizované) endpointy:**
 
----
+| Metoda | Cesta | Přesměruje na |
+|---|---|---|
+| `POST` | `/auth/trezor/login` | auth-service + wallet-registry |
+| `POST` | `/auth/token/refresh` | auth-service |
 
-## 5) Use‑casy a **datové toky** mezi microservices
+**Autentizované endpointy** (vyžadují `Authorization: Bearer <JWT>`):
 
-### UC‑01: Připojení Trezoru (pairing)
-
-**Actors:** Uživatel
-
-**Preconditions:** Trezor je připojen k telefonu (USB/Bluetooth) a Trezor Suite Mobile je nainstalována.
-
-**Main Flow**
-
-1. **App**: otevře deeplink do Trezor Suite Mobile pro získání seznamu účtů (`getAccountInfo` nebo `getPublicKey` pro všechny derivace).
-2. **Trezor Suite**: zobrazí výzvu, uživatel potvrdí na Trezoru.
-3. **Trezor Suite → App**: callback se seznamem účtů `{ accounts[]: { fingerprint, xpub, derivationPath, scriptType }, deviceModel, deviceLabel }`.
-4. **App → Gateway → Explorer**: `POST /wallets/discover { descriptors[] }` – ověří, které účty mají aktivitu (UTXO/historie).
-5. **Explorer → Node Proxy → Core**: pro každý descriptor zavolá `scantxoutset` nebo `listunspent` pro kontrolu aktivity.
-6. **Explorer → App**: vrátí seznam aktivních účtů s balance `{ activeAccounts[]: { descriptor, balance, txCount } }`.
-7. **App → Gateway**: `POST /auth/trezor/login` s daty z callbacku + informací o aktivních účtech.
-8. **Gateway → AuthSvc → Registry**: založ/aktualizuj `device` a vytvoř watch-only wallety pro aktivní účty.
-9. **Gateway → App**: vrátí `{ accessToken, refreshToken, user, wallets[] }`.
-10. **App**: uloží tokeny a pokračuje na výběr účtu (UC‑08).
-
-**Alternative**: 
-- Uživatel odmítne na Trezoru → **App** zobrazí retry/cancel.
-- Žádný účet nemá aktivitu → **App** nabídne vytvoření nového účtu (prázdná peněženka).
-
-**Postconditions**: Zařízení je spárováno (device\_id), aktivní wallety jsou registrovány.
-
----
-
-### UC‑02: Zobrazení zůstatku
-
-**Actors:** Uživatel
-
-**Preconditions:** Spárované zařízení, vybraná wallet (UC‑08).
-
-**Main Flow**
-
-1. **App → Gateway → Explorer**: `GET /wallets/{id}/utxos` + `GET /fees/estimates`.
-2. **Explorer** (cache miss) → **Node Proxy → Core**: READ RPC; jinak z Redis/PG.
-3. **App**: zobrazí sumu (BTC) + přepočet.
-
-**Alternative**: chyba → App nabídne `Refresh`.
-
-**Postconditions**: Zůstatek zobrazen a app ho periodicky refreshuje.
+| Metoda | Cesta | Přesměruje na |
+|---|---|---|
+| `GET` | `/wallets` | wallet-registry |
+| `POST` | `/wallets` | wallet-registry |
+| `POST` | `/wallets/import` | wallet-registry |
+| `GET` | `/wallets/{id}/address` | wallet-registry |
+| `GET` | `/explorer/wallet/{id}/balance` | explorer-service |
+| `GET` | `/explorer/wallet/{id}/transactions` | explorer-service |
+| `GET` | `/explorer/wallet/{id}/utxos` | explorer-service |
+| `GET` | `/explorer/wallet/{id}/receive-address` | explorer-service |
+| `GET` | `/explorer/tx/{txid}` | explorer-service |
+| `GET` | `/explorer/fees` | explorer-service |
+| `POST` | `/psbt` | psbt-service |
+| `GET` | `/psbt/{id}` | psbt-service |
+| `GET` | `/psbt/wallet/{walletId}` | psbt-service |
+| `POST` | `/psbt/{id}/sign-trezor` | psbt-service |
+| `POST` | `/psbt/{id}/broadcast-raw` | psbt-service |
+| `GET` | `/psbt/{id}/signers` | psbt-service |
+| `DELETE` | `/psbt/{id}` | psbt-service |
+| `GET` | `/blockchain/address/{addr}` | blockchain-service |
+| `GET` | `/blockchain/address/{addr}/utxos` | blockchain-service |
+| `GET` | `/blockchain/address/{addr}/txs` | blockchain-service |
+| `GET` | `/blockchain/address/{addr}/has-activity` | blockchain-service |
+| `GET` | `/blockchain/fees` | blockchain-service |
+| `GET` | `/blockchain/tx/{txid}` | blockchain-service |
+| `POST` | `/blockchain/tx/broadcast` | blockchain-service |
+| `GET` | `/price` | price-service |
+| `GET` | `/price/convert` | price-service |
 
 ---
 
-### UC‑03: Historie transakcí
+### 2.2 Auth Service `:8081`
 
-**Main Flow**
+Vystavuje JWT access tokeny (RSA, 15 minut platnost) a refresh tokeny (30 dní, rotace). Klíče generuje při startu a servíruje přes JWKS.
 
-1. **App → Gateway → Explorer**: `GET /wallets/{id}/history?limit=…`.
-2. Explorer vrací seznam transakcí (PG projekce, případně doplněno z Core přes Node Proxy).
+**Env proměnné:**
 
----
+| Proměnná | Default | Popis |
+|---|---|---|
+| `PORT` | `8081` | Port |
+| `JWT_ISSUER` | `wallet-auth` | Issuer claim |
+| `JWT_AUDIENCE` | `wallet-gateway` | Audience claim |
+| `JWT_DEV_ALLOW_GENERATE_KEYS` | `true` | Generuje RSA klíče při startu |
 
-### UC‑04: Přijetí BTC (receive)
+**Endpointy (interní, přes API Gateway):**
 
-**Main Flow**
+`POST /auth/trezor/login`
+```json
+// Request
+{
+  "fingerprint": "abcd1234",
+  "xpub": "xpub6D4BDP...",
+  "derivationPath": "m/84'/1'/0'",
+  "deviceModel": "Trezor T",
+  "deviceLabel": "Muj Trezor"
+}
+// Response
+{
+  "accessToken": "eyJ...",
+  "refreshToken": "uuid",
+  "user": { "id": "...", "displayName": "User", "trezorFingerprint": "abcd1234", "wallets": [] }
+}
+```
 
-1. **App → Gateway → Registry**: `GET /wallets/{id}/address/next` → vygeneruj next index, vrátí adresu.
-2. **App**: zobrazí adresu/QR.
-3. (Volitelně) **App → Trezor Suite**: deeplink pro `getAddress` s `showOnTrezor=true` → uživatel ověří adresu **na Trezoru**.
-4. Po přijetí vstupu **Explorer** přes ZMQ rychle signalizuje novou tx.
+`POST /auth/token/refresh` — rotace refresh tokenu.
 
----
+`GET /auth/.well-known/jwks.json` — JWKS pro ověření JWT v API Gateway.
 
-### UC‑05: Odeslání BTC (singlesig i multisig)
-
-**Preconditions:** Dostatek UTXO; pro multisig budou podpisy v UC‑12.
-
-**Main Flow** TODO udělat kontrolu
-
-1. **App** vyplní cílové výstupy, mód výběru vstupů (Auto vs. Coin‑control).
-2. **App → Gateway → Bridge**: `POST /psbt { wallet_id, outputs[], inputs? (z UC‑06), fee_policy }`.
-3. **Bridge**: načte deskriptory (Registry), utxo (Explorer), provede coin selection, vytvoří PSBT.
-4. **App** zobrazí rekapitulaci; otevře **Trezor Suite** přes deeplink s PSBT (`signTransaction`).
-5. **Trezor Suite**: uživatel potvrdí na Trezoru, Suite vrátí podepsanou PSBT callbackem.
-6. **App → Gateway → Bridge**: `POST /psbt/{id}/submit { signedPsbtBase64 }`.
-7. **Bridge/MsCoordinator**: vyhodnotí stav (K‑z‑N), případně `finalizepsbt`.
-8. Pokud **singlesig** nebo již komplet **multisig**: **Bridge** `finalizepsbt` (Node Proxy → Core) → `complete=true` → `sendrawtransaction`.
-9. **Explorer** přes ZMQ/mempool brzy ukáže neconfirm TX v historii.
-
-**Alternative**
-
-* Uživatel podpis odmítne → PSBT zůstává v „pending“.
-* `testmempoolaccept` odmítne (too‑low fee, double‑spend) → App ukáže chybu a dovolí upravit fee/vstupy.
+> **Poznámka:** Login endpoint v API Gateway dělá více než jen auth: zároveň zaregistruje zařízení a automaticky vytvoří peněženku v wallet-registry (viz UC-01).
 
 ---
 
-### UC‑06: Coin Control (výběr vstupů)
+### 2.3 Wallet Registry `:8082`
 
-**Main Flow**
+Source of Truth pro peněženky. Ukládá deskriptory, derivuje adresy (BitcoinJ), eviduje zařízení, cosignery a členství v multisig peněženkách.
 
-1. **App → Gateway → Explorer**: `GET /wallets/{id}/utxos`.
-2. Uživatel vybere konkrétní UTXO a poplatek.
-3. **App → Bridge**: `POST /psbt { …, inputs: [txid:vout], fee_rate }` nebo `POST /psbt/{id}/update`.
+**Databáze:** `wallet_registry` (PostgreSQL)
 
-**Alternative**: nedostatečný výběr → Bridge vrátí error s důvodem.
+**Schéma:**
 
----
+```sql
+/* Zařízení (Trezor) */
+devices (
+  device_id TEXT PK,
+  fingerprint TEXT,
+  model TEXT,
+  label TEXT,
+  created_at TIMESTAMPTZ
+)
 
-### UC‑07: Řazení UTXO
+/* Peněženky */
+wallets (
+  wallet_id TEXT PK,
+  network TEXT,
+  type TEXT,              -- "SINGLE_SIG" | "MULTI_SIG"
+  script_type TEXT,       -- "WPKH" | "TR" | "WSH"
+  m INTEGER,              -- požadovaný počet podpisů (multisig)
+  n INTEGER,              -- celkový počet cosignerů (multisig)
+  account_index INTEGER,
+  birth_height INTEGER,
+  label TEXT,
+  receive_descriptor TEXT,
+  change_descriptor TEXT,
+  created_at TIMESTAMPTZ
+)
 
-**Main Flow**
+/* Cosigneři (multisig) */
+cosigners (
+  cosigner_id TEXT PK,
+  fingerprint TEXT,
+  origin_path TEXT,       -- "48'/1'/0'/2'" (BIP-48)
+  xpub_root TEXT,
+  created_at TIMESTAMPTZ
+)
 
-1. **App** mění kritéria (hodnota, stáří, etikety…).
-2. **App → Explorer**: `GET /wallets/{id}/utxos?sort=age|value|…`.
+wallet_cosigners (wallet_id, idx, cosigner_id)  -- pořadí v deskriptoru
+wallet_members  (wallet_id, device_id)           -- přiřazení zařízení
 
----
+/* Odvozené adresy */
+wallet_addresses (
+  wallet_id TEXT,
+  address_type TEXT,   -- "receive" | "change"
+  address_index INTEGER,
+  address TEXT,        -- bc1q... | tb1q...
+  created_at TIMESTAMPTZ,
+  PRIMARY KEY (wallet_id, address_type, address_index)
+)
+```
 
-### UC‑08: Výběr účtu (Select Account)
+**Derivace adres:**
+- **P2WPKH** (scriptType=WPKH): `key.toAddress(ScriptType.P2WPKH, network)` → `bc1q...` / `tb1q...`
+- **P2WSH multisig** (scriptType=WSH): pubklíče všech cosignerů derivované z xpubů, seřazeny dle BIP-67 (lexikograficky), witness script `OP_M <pk1>...<pkN> OP_N OP_CHECKMULTISIG`, SHA-256 → bech32
 
-
-**Main Flow**
-
-1. **App → Gateway → Registry**: `GET /wallets?device_id=me` → seznam wallet (single i multisig), které patří k mému Trezoru (auto‑discovery podle cosigner fragmentů).
-2. Uživatel vybere wallet; App načte balance/history (UC‑02/03).
-
----
-
-### UC‑09: Výběr multisig peněženky
-
-**Main Flow**
-
-1. **App → Registry**: `GET /wallets?type=multisig&device_id=me`.
-2. Uživateli se zobrazí seznam s parametry (M‑z‑N) a balancí (Explorer).
-
----
-
-### UC‑10: Přehled PSBT transakcí (multisig)
-
-**Main Flow**
-
-1. **App → MsCoordinator**: `GET /ms/psbt?wallet_id=…`.
-2. Zobrazí seznam rozpracovaných PSBT, počty podpisů, datumy.
-
----
-
-### UC‑11: Detail PSBT
-
-**Main Flow**
-
-1. **App → MsCoordinator/Bridge**: `GET /psbt/{id}`.
-2. Zobrazí vstupy/výstupy, poplatek, stav podpisů.
-3. Akce: **Sign** (UC‑12), **Export** (QR/text), **Broadcast** (pokud complete).
-
----
-
-### UC‑12: Podepsání PSBT přes Trezor
-
-**Main Flow**
-
-1. **App**: otevře **Trezor Suite** přes deeplink s PSBT (`signTransaction`).
-2. **Trezor Suite**: zobrazí detaily, uživatel potvrdí na Trezoru.
-3. **Trezor Suite → App**: callback s podepsanou PSBT.
-4. **App → Gateway → Bridge**: `POST /psbt/{id}/submit { signedPsbtBase64 }`.
-5. **Bridge → MsCoordinator**: `POST /ms/psbt/{id}/addsig` (pro multisig).
-6. **Bridge** (nebo MsCoordinator) zkusí `finalizepsbt` → pokud `complete=true`, označí jako připravené k broadcastu.
-
-**Alternative**: odmítnuto / chyba komunikace → App nabídne retry.
+**Gap limit:** 20 adres. Při `getNextReceiveAddress` vrátí první adresu s indexem, kde TX count = 0 (dotaz přes blockchain-service `has-activity`).
 
 ---
 
-### UC‑13: Broadcast podepsané transakce
+### 2.4 Explorer Service `:8083`
 
-**Preconditions**: `complete=true`.
+Aggreguje wallet-level data z wallet-registry (adresy) a blockchain-service (data z blockchainu). Počítá balance, transakce a UTXOs pro celou peněženku.
 
-**Main Flow**
+**Env proměnné:**
 
-1. **App → Bridge**: `POST /psbt/{id}/broadcast`.
-2. **Bridge → Node Proxy → Core**: `sendrawtransaction` (po předchozím `testmempoolaccept`).
-3. **Explorer** zachytí novou TX a zobrazí ji v historii.
+| Proměnná | Default | Popis |
+|---|---|---|
+| `PORT` | `8083` | Port |
+| `REGISTRY_URL` | `http://wallet-registry:8082` | Adresa registry |
+| `BLOCKCHAIN_URL` | `http://blockchain-service:8086` | Adresa blockchain-service |
 
-**Alternative**: odmítnuto mempoolem → App nabídne úpravu fee.
+**Klíčové optimalizace:**
+- `BlockchainClient` deduplikuje souběžné požadavky na stejnou adresu: druhý coroutine čeká na výsledek prvního místo vlastního HTTP volání.
+- Odpovědi `getAddressInfo` jsou cachovány 60 sekund v `ConcurrentHashMap`.
+- Před fetchováním UTXOs / transakcí se pre-filtrují aktivní adresy pomocí `getAddressInfo` (která je cachována a šetří API volání).
+
+**Klasifikace transakcí:**
+- `RECEIVED`: žádný vstup není moje adresa, ale alespoň jeden výstup ano.
+- `SENT`: alespoň jeden vstup je moje adresa.
+- `SELF`: všechny vstupy i výstupy jsou moje.
+- Počet konfirmací: `max(tipHeight - blockHeight + 1, 1)`, `tipHeight` fetchován z `/blockchain/tip/height`.
+
+**Endpointy (interní):**
+
+| Metoda | Cesta | Popis |
+|---|---|---|
+| `GET` | `/api/v1/explorer/wallet/{id}/balance` | Balance (confirmed/unconfirmed/total, utxoCount) |
+| `GET` | `/api/v1/explorer/wallet/{id}/transactions` | Tx historie s klasifikací |
+| `GET` | `/api/v1/explorer/wallet/{id}/utxos` | Seznam UTXO |
+| `GET` | `/api/v1/explorer/wallet/{id}/receive-address` | Další volná adresa (next index) |
+| `GET` | `/api/v1/explorer/tx/{txid}` | Detail transakce s `isMine` flagy |
+| `GET` | `/api/v1/explorer/fees` | Doporučené fee sazby |
 
 ---
 
-### UC‑14: Import multisig peněženky
+### 2.5 PSBT Service `:8085`
 
-**Main Flow**
+Spravuje PSBT workflow: tvorba, podepisování (přes Trezor Connect), a broadcast. Implementuje BIP-174. Kód je rozdělen do 3 souborů:
+- `PsbtBuilder.kt` — sestaví PSBT binárně (unsigned tx, per-input/output metadata)
+- `PsbtEncoding.kt` — nízkoúrovňové kódování (varint, bech32, scriptPubKey, witness script)
+- `TrezorParamsBuilder.kt` — generuje Trezor Connect JSON params z wallet dat
 
-1. **App → WalletImporter**: `POST /wallets/import` (descriptor/policy export).
-2. **Importer → Registry**: uloží canonical policy + deskriptory.
-3. **Registry (auto‑discovery)**: pokud se aktuální device shoduje s některým cosignerem, přidá členství `wallet_members`.
-4. **App**: peněženka je viditelná v seznamu.
+**Databáze:** `wallet_psbt` (PostgreSQL)
 
-**Alternative**: nevalidní descriptor/policy → 400 s chybou a tipem (BIP‑67 pořadí, špatná derivace apod.).
+```sql
+/* PSBT records — stores transaction data, signing status, and Trezor Connect params. */
+psbts (
+  id UUID PK,
+  wallet_id VARCHAR,
+  psbt_base64 TEXT,                 -- aktuální stav PSBT (BIP-174)
+  status VARCHAR,                   -- "pending" | "signed" | "broadcast"
+  tx_type VARCHAR,                  -- "send"
+  required_sigs INTEGER,            -- M (z peněženky)
+  current_sigs INTEGER,             -- počet sebraných podpisů
+  total_output_sats BIGINT,         -- součet výstupů (bez change)
+  estimated_fee_sats BIGINT,
+  label VARCHAR,
+  txid VARCHAR,                     -- vyplněno po broadcastu
+  trezor_connect_params TEXT,       -- JSON TrezorConnectParams (bez refTxs)
+  serialized_tx TEXT,               -- podepsaný raw tx hex (od posledního cosignera)
+  created_at, updated_at, broadcast_at TIMESTAMPTZ
+)
+
+/* Signature records — tracks which cosigners have signed each PSBT. */
+psbt_signatures (
+  id UUID PK,
+  psbt_id UUID FK,
+  device_id VARCHAR,
+  fingerprint VARCHAR,
+  cosigner_index INTEGER DEFAULT 0, -- pozice cosignera v deskriptoru
+  signed_at TIMESTAMPTZ,
+  UNIQUE(psbt_id, cosigner_index)   -- jeden podpis na cosignera
+)
+```
+
+**Odhad velikosti transakce (vBytes):**
+- P2WPKH single-sig vstup: **68 vB**
+- P2WSH multisig vstup: **57 + 73×M + 34×N vB**
+- Výstup (P2WPKH/P2WSH): 31 vB
+- Základní overhead: 10 vB
+- Vzorec: `(počet_vstupů × vB_na_vstup + počet_výstupů × 31 + 10) × fee_rate`
+
+**Coin selection (automatický):** Largest-first algoritmus. Vstupy jsou přidávány od největšího UTXO dokud součet >= (cílová částka + fee). UTXOs reservované jinými pending/signed PSBT jsou vyloučeny (prevence double-spend). Pokud zbývá drobný nad dust limit (546 sats), připočte change výstup.
+
+**Coin selection (manuální):** Pokud request obsahuje `utxos` s adresami (coin control), dotáže se blockchainu jen na ty konkrétní adresy (fast path). Bez adres skenuje celou peněženku (slow path).
+
+**PSBT stavový automat:**
+
+```
+pending ──sign-trezor──→ signed ──broadcast-raw──→ broadcast
+   │                        │
+   └────── delete ◄─────────┘
+```
+
+PSBT přejde do stavu `signed` když `currentSigs >= requiredSigs`.
+
+**Endpointy (interní):**
+
+| Metoda | Cesta | Popis |
+|---|---|---|
+| `POST` | `/psbt/create` | Vytvoří PSBT (coin selection, build BIP-174, Trezor Connect params) |
+| `GET` | `/psbt/{id}` | Detail PSBT |
+| `GET` | `/psbt/wallet/{walletId}` | Seznam PSBT pro peněženku (?status=pending) |
+| `POST` | `/psbt/{id}/sign-trezor` | Přidá podpisy od jednoho cosignera (DER sigs z Trezor Connect) |
+| `POST` | `/psbt/{id}/broadcast-raw` | Broadcastuje raw signed TX hex (z Trezor Connect serializedTx) |
+| `GET` | `/psbt/{id}/signers` | Stav podpisů cosignerů (kdo podepsal, kdo zbývá) |
+| `DELETE` | `/psbt/{id}` | Smaže PSBT a uvolní reservované UTXO |
+
+**Klíčové detaily implementace:**
+- `sign-trezor`: BIP-67 — podpis se umístí na správnou pozici v `multisig.signatures[]` podle lexikografického pořadí pubkeys, ne podle cosigner indexu.
+- `trezor_connect_params` se ukládá **bez refTxs** (příliš velké). Při dalším podpisu se raw tx znovu stáhnou z blockchainu.
+- `serialized_tx` se uloží jen u **posledního podpisu** (když Trezor vrátí kompletně podepsanou tx).
+- Duplikátní podpis se kontroluje podle `cosigner_index`, ne `fingerprint` (jeden Trezor může podepisovat jako různí cosigneři přes různé BIP-48 accounty).
 
 ---
 
+### 2.6 Blockchain Service `:8086`
+
+Proxy na **Esplora-kompatibilní API** (Blockstream.info, mempool.space). Všechna blockchain data procházejí přes tuto jedinou vrstvu. Výměna providera nevyžaduje změnu v ostatních službách.
+
+Služba podporuje **obě sítě současně** — mainnet i testnet. Volající služby (explorer-service, psbt-service) předávají query parametr `?network=mainnet|testnet` a blockchain-service vybere odpovídajícího HTTP klienta pomocí `clientFor(network)`.
+
+**Env proměnné:**
+
+| Proměnná | Default | Popis |
+|---|---|---|
+| `PORT` | `8086` | Port |
+| `MAINNET_MEMPOOL_URL` | `https://blockstream.info/api` | URL Esplora API pro mainnet |
+| `TESTNET_MEMPOOL_URL` | `https://mempool.space/testnet4/api` | URL Esplora API pro testnet |
+
+**Rate limiting:**
+- Semaphore s 5 paralelními požadavky.
+- Při HTTP 429 (Too Many Requests): 1 sekunda pauza a jeden retry.
+
+**Endpointy (interní):**
+
+| Metoda | Cesta | Esplora endpoint |
+|---|---|---|
+| `GET` | `/api/v1/blockchain/address/{addr}` | `GET /address/{addr}` |
+| `GET` | `/api/v1/blockchain/address/{addr}/utxos` | `GET /address/{addr}/utxo` |
+| `GET` | `/api/v1/blockchain/address/{addr}/txs` | `GET /address/{addr}/txs` |
+| `GET` | `/api/v1/blockchain/address/{addr}/has-activity` | `GET /address/{addr}` → `tx_count > 0` |
+| `GET` | `/api/v1/blockchain/fees` | `GET /fee-estimates` |
+| `GET` | `/api/v1/blockchain/tip/height` | `GET /blocks/tip/height` |
+| `GET` | `/api/v1/blockchain/tx/{txid}` | `GET /tx/{txid}` |
+| `GET` | `/api/v1/blockchain/tx/{txid}/hex` | `GET /tx/{txid}/hex` |
+| `POST` | `/api/v1/blockchain/tx/broadcast` | `POST /tx` (raw hex body) |
+
+> **Poznámka k fee estimates:** Blockstream/mempool Esplora vrací `{"1": 50.0, "3": 35.0, "6": 25.0, ...}` (target v blocích → sat/vB). Blockchain-service mapuje tyto hodnoty na `fastestFee`, `halfHourFee`, `hourFee`, `economyFee`, `minimumFee`.
+
+---
+
+### 2.7 Price Service `:8087`
+
+Proxy na **CoinGecko API** pro ceny BTC ve fiat měnách.
+
+**Env proměnné:**
+
+| Proměnná | Default | Popis |
+|---|---|---|
+| `PORT` | `8087` | Port |
+| `COINGECKO_BASE_URL` | `https://api.coingecko.com/api/v3` | CoinGecko API URL |
+
+**Caching:** In-memory cache na 5 minut (CoinGecko free tier: ~10-30 req/min).
+
+**Endpointy (interní):**
+
+| Metoda | Cesta | Popis |
+|---|---|---|
+| `GET` | `/price?currencies=czk,usd,eur` | Aktuální ceny BTC |
+| `GET` | `/price/convert?sats={n}&currency={c}` | Převod satoshi → fiat |
+
+---
+
+## 3. Android aplikace
+
+Jetpack Compose, MVVM architektura (ViewModel + mutableStateOf), Ktor HTTP klient.
+
+### 3.1 Navigace
+
+**TrezorConnect graph** (stav: nepřihlášen)
+- `trezor_connect` — uvítací obrazovka s tlačítkem Connect Trezor
+- `trezor_resolve` — zpracování callbacku, přihlášení, fetch peněženek
+- `trezor_select_account` — výběr aktivní peněženky
+
+**Wallet graph** (stav: přihlášen, peněženka vybrána)
+- `wallet_dashboard` — balance, tx historie, drawer
+- `wallet_send` — odeslání BTC (coin control volitelný)
+- `wallet_coin_control` — výběr UTXO
+- `wallet_tx_sent/{amountSats}/{feeSats}` — potvrzení odeslání
+- `wallet_tx_error` — chybová obrazovka
+- `wallet_receive` — přijmout BTC (adresa + QR)
+- `wallet_transaction_detail/{txId}` — detail transakce
+- `wallet_multisig_list` — seznam multisig peněženek
+- `wallet_multisig_detail/{walletId}/{name}/{m}/{n}` — detail multisig
+- `wallet_psbt_list/{walletId}` — seznam PSBT transakcí
+- `wallet_psbt_detail/{psbtId}` — podepisování / broadcast
+- `wallet_import` — import peněženky z deskriptoru
+- `wallet_qr_scanner` — skenování QR kódu (Bitcoin adresa)
+- `wallet_settings` — nastavení (switch account, měna)
+
+### 3.2 Klíčové komponenty
+
+**SessionStore** — globální singleton stav:
+```kotlin
+var session: UserSession?                          // accessToken + user + wallets
+var activeWalletId: String?                        // vybraná peněženka
+var activeAccountIndex: Int?                       // BIP-48 account index (pro multisig cosigner matching)
+val pendingSignedPsbt: StateFlow<String?>          // signed data ze Trezoru (serializedTx)
+val pendingSignType: StateFlow<SignResultType?>    // SERIALIZED_TX | SIGNED_PSBT
+val pendingTrezorSignatures: StateFlow<List<String>?> // per-input DER podpisy (multisig)
+val preferredCurrency: StateFlow<String>           // "czk" | "usd" | "eur"
+var pendingIdentity: TrezorDeviceIdentity?         // z Trezor deeplink callbacku
+var pendingBatchXpubs: List<TrezorDeviceIdentity>  // 10 xpubů z account discovery
+```
+
+**TrezorDeeplinkLauncher** — spouštění Trezor Suite Mobile přes deeplink:
+- `openGetPublicKeyBundle(context, paths, network)` → požádá o 10 xpubů naráz (account discovery)
+- `openSignTransactionStructured(context, TrezorConnectParamsDto)` → `signTransaction` se strukturovanými inputs/outputs
+- `openSignTransaction(context, psbtBase64, network)` → legacy fallback
+- `openGetAddress(context, derivationPath, network)` → `getAddress` s `showOnTrezor=true`
+- Coin pro mainnet: `"btc"`, pro testnet: `"tbtc"`
+- Deeplink base URL: `https://connect.trezor.io/9/deeplink/1/`
+
+**TrezorCallbackActivity** — přijímá deeplink callback z Trezor Suite:
+- Auth callback (action=`auth`): parsuje xpub bundle → `SessionStore.pendingBatchXpubs`
+- Sign callback (action=`sign`):
+  - Extrahuje `serializedTx` → `SessionStore.pendingSignedPsbt`
+  - Extrahuje per-input `signatures[]` → `SessionStore.pendingTrezorSignatures`
+  - Vrátí se do MainActivity přes `FLAG_ACTIVITY_SINGLE_TOP`
+- Compose screen detekuje změnu přes `LaunchedEffect(pendingSignedPsbt)` → zpracuje
+
+**WalletApiClient** — HTTP klient pro API Gateway:
+- Wallet: `listWallets()`, `importWallet()`
+- Explorer: `getWalletBalance()`, `getWalletTransactions()`, `getWalletUtxos()`, `getReceiveAddress()`, `getFeeEstimates()`
+- PSBT: `createPsbt()`, `signTrezor()`, `broadcastRawTx()`, `getPsbtDetail()`, `listPsbtsForWallet()`, `getSignerStatus()`
+- Price: `getBitcoinPrices()`, `convertSatsToFiat()`
+
+---
+
+## 4. Infrastruktura
+
+### 4.1 Docker Compose
+
+```
+Service            Port   Databáze
+────────────────────────────────────
+api-gateway        8080   —
+auth-service       8081   (in-memory refresh store)
+wallet-registry    8082   wallet_registry
+explorer-service   8083   —
+psbt-service       8085   wallet_psbt
+blockchain-service 8086   —
+price-service      8087   —
+postgres           5432   wallet_registry, wallet_psbt
+```
+
+**Databáze** jsou inicializovány skriptem `init-db.sql` při prvním spuštění. Wallet-registry i psbt-service používají **Flyway** pro migrace.
+
+### 4.2 Spuštění
+
+```bash
+cd wallet-backend
+docker-compose up --build
+```
+
+Volitelně lze přepsat URL blockchain providerů v `.env` souboru (`MAINNET_MEMPOOL_URL`, `TESTNET_MEMPOOL_URL`).
+
+---
+
+## 5. Use-casy a datové toky
+
+### UC-01: Připojení Trezoru (přihlášení)
+
+**Preconditions:** Trezor Suite Mobile nainstalována na telefonu. Trezor odemčen.
+
+**Flow:**
+
+```
+1. App → Trezor Suite deeplink
+   openGetPublicKeyBundle(context, paths, "testnet")
+   Požádá o 10 xpubů (m/84'/1'/0' až m/84'/1'/9') naráz
+
+2. Trezor Suite → TrezorCallbackActivity
+   Callback: array of { fingerprint, xpub, path, device_model }
+   SessionStore.pendingBatchXpubs = [TrezorDeviceIdentity(...), ...]
+
+3. App → POST /auth/trezor/login
+   { fingerprint, xpub, derivationPath: "m/84'/1'/0'", deviceModel, deviceLabel }
+
+4. API Gateway:
+   a. auth-service.trezorLogin() → JWT access + refresh token
+   b. registry.upsertDevice() → uloží device_id (UUID z fingerprint)
+   c. buildSingleSigWalletCreate():
+      - derivationPath "m/84'/1'/0'" → coinType=1 → network="testnet"
+      - scriptType: purpose=84 → "WPKH"
+      - receiveDescriptor: "wpkh([fp/84h/1h/0h]xpub.../0/*)"
+      - walletId: "wallet-{fp}-testnet-WPKH-0"
+   d. registry.createWallet() → idempotentní (re-login = skip)
+   e. registry.attachMember() → přiřadí device k peněžence
+   f. registry.listWallets(deviceId) → vrátí peněženky
+
+5. Response: { accessToken, refreshToken, user: { wallets: [{...}] } }
+
+6. SelectAccountScreen → uživatel vybere peněženku
+   SessionStore.activeWalletId = walletId
+   SessionStore.activeAccountIndex = accountIndex
+
+7. Navigace na WalletDashboard
+```
+
+---
+
+### UC-02: Zobrazení zůstatku
+
+```
+1. App → GET /explorer/wallet/{id}/balance
+
+2. Explorer:
+   a. registry.getAddresses(walletId) → všechny receive+change adresy
+   b. Paralelně: blockchain.getAddressInfo(addr) pro každou adresu (cache 60s)
+   c. Součet: confirmedBalance = Σ chain_stats.funded - spent
+              unconfirmedBalance = Σ mempool_stats.funded - spent
+
+3. Response: { confirmedSats, unconfirmedSats, totalSats, utxoCount, addressCount }
+
+4. App → GET /price?currencies=czk,usd,eur
+   Přepočet: sats × (btcPrice / 100_000_000)
+```
+
+---
+
+### UC-03: Historie transakcí
+
+```
+1. App → GET /explorer/wallet/{id}/transactions?limit=50&offset=0
+
+2. Explorer:
+   a. getAddresses(walletId)
+   b. Pre-filter: getAddressInfo(addr).txCount > 0 → jen aktivní adresy
+   c. Paralelně: getAddressTransactions(addr) pro aktivní adresy
+   d. Deduplikace: rawTxMap[txid] (jedna tx se může týkat více adres)
+   e. Klasifikace každé TX:
+      - RECEIVED: žádný input není "mine", alespoň 1 output je "mine"
+      - SENT: alespoň 1 input je "mine"
+      - SELF: všechny vstupy i výstupy jsou "mine"
+   f. Confirmations: tipHeight - blockHeight + 1
+
+3. Response: { transactions: [{ txid, type, amountSats, fee, confirmed, confirmations, ... }] }
+```
+
+---
+
+### UC-04: Detail transakce
+
+```
+1. App → GET /explorer/tx/{txid}?walletId={id}
+
+2. Explorer:
+   a. getTransaction(txid) z blockchain-service → raw TX data
+   b. getAddresses(walletId) → moje adresy
+   c. Pro každý vstup/výstup: isMine = adresa ∈ moje adresy
+   d. Výpočet: type, amountSats (přijato / odesláno), fee
+
+3. Response: { txid, inputs[], outputs[], fee, confirmed, blockHeight, isMine flags }
+```
+
+---
+
+### UC-05: Přijetí BTC (Receive)
+
+```
+1. App → GET /explorer/wallet/{id}/receive-address
+
+2. Explorer:
+   a. registry.getAddresses(walletId, "receive") → existující adresy
+   b. Pro adresy od posledního indexu: blockchain.hasActivity(addr)
+   c. Vrátí první adresu kde hasActivity=false (nebo next index)
+
+3. App zobrazí adresu + QR kód
+
+4. (Volitelné) Ověření na Trezoru:
+   App → openGetAddress(context, "m/84'/1'/0'/0/{index}", "testnet")
+   Trezor Suite zobrazí adresu na displeji Trezoru
+```
+
+---
+
+### UC-06: Odeslání BTC (singlesig)
+
+```
+1. (Volitelné) Coin Control: App → GET /explorer/wallet/{id}/utxos
+   Uživatel vybere konkrétní UTXO → selectedUtxos = [{ txid, vout, address }, ...]
+
+2. App → POST /psbt { walletId, outputs, feeRate, utxos?, rbf, signerAccountIndex }
+
+3. PSBT Service (POST /psbt/create):
+   a. registry.getWallet(walletId) → descriptor, network, type, cosigners
+   b. Pokud utxos prázdné → autoSelectUtxos (largest-first, exclude reserved)
+      Pokud utxos s adresami → selectSpecificUtxos (fast path)
+   c. Paralelně: fetch raw tx hex pro každý unikátní txid (pro PSBT_IN_NON_WITNESS_UTXO + Trezor refTxs)
+   d. registry.getChangeAddress(walletId) → next change adresa
+   e. PsbtBuilder.createPsbt():
+      - Sestaví unsigned tx (version, inputs, outputs, locktime)
+      - Per-input: PSBT_IN_NON_WITNESS_UTXO, PSBT_IN_WITNESS_UTXO, PSBT_IN_BIP32_DERIVATION
+      - Change output: PSBT_OUT_BIP32_DERIVATION
+      - Dust limit check: change < 546 sats → přidáno k fee
+   f. TrezorParamsBuilder.build():
+      - Pro každý UTXO → TrezorConnectInput (address_n, prev_hash, amount, script_type)
+      - Pro výstupy → TrezorConnectOutput (address/address_n, amount, script_type)
+      - refTxs → raw hex předchozích transakcí
+   g. Uložení do DB (status="pending", trezorConnectParams bez refTxs)
+   Response: { id, psbtBase64, estimatedFee, estimatedVsize, trezorConnectParams, signerCosignerIndex }
+
+4. App → openSignTransactionStructured(context, trezorConnectParams)
+   Deeplink na Trezor Suite s kompletními params (inputs, outputs, refTxs, coin)
+
+5. Trezor Suite zobrazí detaily TX → uživatel potvrdí na Trezoru
+   Callback → TrezorCallbackActivity:
+   payload.serializedTx → SessionStore.pendingSignedPsbt
+
+6. SendTransactionViewModel (LaunchedEffect detekuje změnu):
+   → broadcastRawTx(psbtId, serializedTx)
+
+7. PSBT Service (POST /psbt/{id}/broadcast-raw):
+   a. blockchain-service → POST /tx (raw hex)
+   b. Uloží txid, status="broadcast"
+
+8. App naviguje na TransactionSentScreen
+```
+
+---
+
+### UC-07: Odeslání BTC (multisig) — první cosigner
+
+```
+1. Stejné kroky 1-5 jako UC-06 (singlesig)
+   Rozdíl: TrezorConnectParams obsahují multisig objekt v inputs/outputs
+   (pubkeys všech cosignerů, m threshold, signatures=["","",""])
+
+2. Trezor Suite vrátí:
+   - signatures: ["304402...", "304402..."]  (DER per input)
+   - serializedTx: "020000..."  (neúplně podepsaná tx — chybí M-1 podpisů)
+
+3. TrezorCallbackActivity:
+   SessionStore.pendingTrezorSignatures = signatures
+   SessionStore.pendingSignedPsbt = serializedTx
+
+4. SendTransactionViewModel:
+   → POST /psbt/{id}/sign-trezor {
+       signatures: ["304402...", ...],
+       cosignerIndex: 0,
+       fingerprint: "aabbccdd",
+       signerAccountIndex: 0
+     }
+
+5. PSBT Service (POST /psbt/{id}/sign-trezor):
+   a. Resolve signerAccountIndex → cosignerIndex (mapování BIP-48 account → pozice v deskriptoru)
+   b. Duplicate check: cosignerIndex already signed? → 409 Conflict
+   c. Najde signer's pubkey z xpubu → BIP-67 pozice v multisig.pubkeys
+   d. Update TrezorConnectParams: signatures[bip67_position] = DER sig
+   e. currentSigs++ → 1 < requiredSigs(2) → status zůstává "pending"
+   f. Uloží do psbt_signatures: { cosigner_index=0 }
+
+6. App zobrazí: "1/2 podpisů, čeká na dalšího cosignera"
+```
+
+---
+
+### UC-08: Podepisování PSBT (druhý cosigner)
+
+```
+1. Cosigner 2 otevře PsbtListScreen → vidí pending PSBT
+   App → GET /psbt/wallet/{walletId}?status=pending
+
+2. Klikne na PSBT → PsbtDetailScreen
+   App → GET /psbt/{id} → { status: "pending", currentSigs: 1, requiredSigs: 2, trezorConnectParams }
+   App → GET /psbt/{id}/signers → kdo podepsal, kdo zbývá
+
+3. Klikne "Podepsat":
+   a. adjustTrezorParamsForSigner(): opraví address_n[2] na svůj BIP-48 account index
+   b. Fetch čerstvé refTxs z blockchainu (v DB nejsou uložené)
+   c. openSignTransactionStructured(params)
+   Trezor Connect params obsahují existující podpisy: signatures=["","304402...",""]
+
+4. Trezor Suite → uživatel potvrdí → callback:
+   signatures + serializedTx (teď kompletně podepsaná tx)
+
+5. PsbtDetailViewModel:
+   → POST /psbt/{id}/sign-trezor { signatures, cosignerIndex: 1, signerAccountIndex: 2 }
+
+6. PSBT Service:
+   a. BIP-67 lookup → umístí podpis na správnou pozici
+   b. currentSigs=2 >= requiredSigs=2 → status="signed"
+   c. Uloží serializedTx (kompletně podepsaná tx)
+
+7. App detekuje status="signed":
+   → POST /psbt/{id}/broadcast-raw { txHex: serializedTx }
+   → status="broadcast", txid uložen
+
+8. App naviguje na TransactionSentScreen
+```
+
+---
+
+### UC-09: Import multisig peněženky
+
+```
+1. App → POST /wallets/import
+   {
+     descriptor: "wsh(sortedmulti(2,[fp1/48h/1h/0h/2h]xpub1/0/*,[fp2/...]xpub2/0/*,[fp3/...]xpub3/0/*))",
+     network: "testnet",
+     label: "2-of-3 Multisig"
+   }
+
+2. Wallet Registry (DescriptorParser):
+   a. Parsuje typ deskriptoru: wsh(sortedmulti) → MULTI_SIG, WSH
+   b. Extrahuje cosignery: fingerprint, origin_path, xpub
+   c. Detekuje network z coin_type v origin_path (1 = testnet)
+   d. Sestaví receive + change deskriptor
+
+3. WalletImporter:
+   a. Idempotentní tvorba peněženky (přeskočí pokud existuje)
+   b. Uloží cosignery, wallet_cosigners
+   c. Pokud device_id odpovídá cosignerovi → attachMember()
+
+4. Response: { success: true, isNew: true/false, walletId, wallet }
+
+5. App → SelectAccountScreen → zobrazí novou multisig peněženku
+```
+
+---
+
+### UC-10: Coin Control (výběr UTXO)
+
+```
+1. App → GET /explorer/wallet/{id}/utxos → seznam UTXO
+
+2. Explorer:
+   a. getAddresses(walletId)
+   b. Pre-filter: getAddressInfo(addr).utxoCount > 0
+   c. Paralelně: getAddressUtxos(addr) pro aktivní adresy
+   d. Enrich: address, addressType, addressIndex, confirmed, blockHeight
+
+3. CoinControlScreen:
+   - UTXO řádky s checkboxy (toggle výběru)
+   - Seřadit dle: AMOUNT | STATUS | ADDRESS
+
+4. Uživatel vybere UTXOs → přejde na SendTransactionScreen
+   selectedUtxos = [{ txid, vout, address }, ...]
+```
+
+---
+
+### UC-11: Zobrazení adresy na Trezoru
+
+```
+1. ReceiveBtcScreen → tlačítko "Show on Trezor"
+2. App → openGetAddress(context, derivationPath, walletNetwork)
+   derivationPath = "m/84'/1'/0'/0/{addressIndex}"
+3. Trezor Suite zobrazí adresu na Trezoru → uživatel vizuálně ověří
+4. Callback → akce= "showAddress" → TrezorCallbackActivity ignoruje (jen zobrazení)
+```
+
+---
+
+## 6. Podpora sítí (mainnet / testnet)
+
+Systém podporuje **obě sítě současně** — mainnet i testnet. Síť se určuje automaticky z derivační cesty při přihlášení (coin_type `0` = mainnet, `1` = testnet) a ukládá se do `wallet.network`. Všechny služby pak pracují s konkrétní sítí na základě tohoto pole.
+
+### 6.1 Jak funguje detekce sítě
+
+| Komponenta | Mechanismus |
+|---|---|
+| `blockchain-service` | Dva oddělené HTTP klienty: `MAINNET_MEMPOOL_URL` a `TESTNET_MEMPOOL_URL`. `clientFor(network)` vybere správného klienta. |
+| `wallet-registry` | Detekuje network z coin_type v derivační cestě: `'/1'/` → `"testnet"`, `'/0'/` → `"mainnet"` |
+| `api-gateway/AuthRoutes.kt` | `buildSingleSigWalletCreate()` → coin_type z derivační cesty → `wallet.network` |
+| `explorer-service` | Čte `wallet.network` z wallet-registry a předává ho blockchain-service jako query parametr |
+| `psbt-service` | Čte `wallet.network` z wallet-registry a předává ho blockchain-service jako query parametr |
+| Android `TrezorDeeplinkLauncher` | Coin pro mainnet: `"btc"`, pro testnet: `"tbtc"` |
+
+### 6.2 Konfigurace blockchain-service
+
+```yaml
+# docker-compose.yml
+blockchain-service:
+  environment:
+    MAINNET_MEMPOOL_URL: ${MAINNET_MEMPOOL_URL:-https://blockstream.info/api}
+    TESTNET_MEMPOOL_URL: ${TESTNET_MEMPOOL_URL:-https://mempool.space/testnet4/api}
+```
+
+---
+
+## 7. Bezpečnostní principy
+
+- **Privátní klíče nikdy neopustí Trezor.** Backend nemá přístup k seed ani k privátním klíčům.
+- **Watch-only wallet:** backend uchovává pouze xpub (veřejný klíč) a odvozené adresy.
+- **JWT:** RS256, 15 minut platnost. Refresh token (UUID) rotuje při každém použití.
+- **Podepisování:** Trezor Connect params jsou poslány na Trezor přes deeplink, Trezor zobrazí detaily transakce uživateli před podpisem. Backend nikdy nepodepisuje.
+- **Multisig BIP-67:** podpisy umístěny na správnou pozici podle lexikografického pořadí pubkeys ve witness scriptu.
+- **Double-spend prevence:** UTXOs reservované pending/signed PSBT jsou vyloučeny z coin selection.
+- **Dust limit:** change output pod 546 sats se nepřidá — místo toho se přidá k fee.
+
+---
+
+## 8. Komunikace mezi službami (přehled)
+
+| Caller | Volaná služba | Protokol | Účel |
+|---|---|---|---|
+| Android App | API Gateway | HTTPS/JSON | Všechny klientské akce |
+| Android App ↔ Trezor Suite | Deeplink (Intent) | URL scheme | Podepisování, ověření adres, xpub export |
+| API Gateway | Auth Service | HTTP/JSON | JWT, refresh |
+| API Gateway | Wallet Registry | HTTP/JSON | CRUD peněženek, adresy |
+| API Gateway | Explorer Service | HTTP/JSON | Balance, tx historie, UTXO |
+| API Gateway | PSBT Service | HTTP/JSON | PSBT workflow |
+| API Gateway | Blockchain Service | HTTP/JSON | Proxy k Esplora API |
+| API Gateway | Price Service | HTTP/JSON | BTC ceny |
+| Explorer Service | Wallet Registry | HTTP/JSON | Adresy peněženky |
+| Explorer Service | Blockchain Service | HTTP/JSON | UTXO, TX data, tip height |
+| PSBT Service | Wallet Registry | HTTP/JSON | Wallet detail, adresy, cosigneři |
+| PSBT Service | Blockchain Service | HTTP/JSON | UTXO, raw tx hex, broadcast |
+| Blockchain Service | Blockstream.info | HTTPS/JSON | Esplora API |
+| Price Service | CoinGecko | HTTPS/JSON | BTC ceny |
+
+---
+
+## 9. Trezor Connect deeplink struktury
+
+Komunikace s Trezor Suite Mobile probíhá přes Trezor Connect deeplink protokol. Appka otvírá URL ve formátu:
+
+```
+https://connect.trezor.io/9/deeplink/1/?method={method}&params={JSON}&callback={callbackURL}
+```
+
+- `method` — název Trezor Connect metody
+- `params` — URL-encoded JSON s parametry metody
+- `callback` — URL kam Trezor Suite vrátí výsledek (`bitcoinwallet://trezor-callback?id={requestId}&action={action}`)
+
+### 9.1 getPublicKey (bundle)
+
+Získání xpubů pro account discovery. Použito při přihlášení (UC-01).
+
+**Request params:**
+```json
+{
+  "bundle": [
+    { "coin": "tbtc", "path": "m/84'/1'/0'", "showOnTrezor": false },
+    { "coin": "tbtc", "path": "m/84'/1'/1'", "showOnTrezor": false },
+    ...
+  ]
+}
+```
+
+**Response callback** (`action=auth`):
+```json
+{
+  "success": true,
+  "payload": [
+    { "fingerprint": "abcd1234", "xpub": "tpubDC8a5...", "serializedPath": "m/84'/1'/0'" },
+    { "fingerprint": "abcd1234", "xpub": "tpubDRiv...", "serializedPath": "m/84'/1'/1'" },
+    ...
+  ]
+}
+```
+
+### 9.2 signTransaction (singlesig P2WPKH)
+
+**Request params:**
+```json
+{
+  "coin": "tbtc",
+  "inputs": [
+    {
+      "address_n": [2147483732, 2147483649, 2147483648, 0, 3],
+      "prev_hash": "a1b2c3d4...",
+      "prev_index": 0,
+      "amount": "100000",
+      "script_type": "SPENDWITNESS"
+    }
+  ],
+  "outputs": [
+    { "address": "tb1q...", "amount": "90000", "script_type": "PAYTOADDRESS" },
+    { "address_n": [2147483732, 2147483649, 2147483648, 1, 0], "amount": "9500", "script_type": "PAYTOWITNESS" }
+  ],
+  "refTxs": [
+    { "hash": "a1b2c3d4...", "tx_hex": "020000000001..." }
+  ]
+}
+```
+
+### 9.3 signTransaction (multisig P2WSH)
+
+Rozdíl oproti singlesig: inputs a change output obsahují `multisig` objekt.
+
+**Request params (input):**
+```json
+{
+  "address_n": [2147483696, 2147483649, 2147483648, 2147483650, 0, 2],
+  "prev_hash": "a1b2c3d4...",
+  "prev_index": 0,
+  "amount": "85000",
+  "script_type": "SPENDWITNESS",
+  "multisig": {
+    "m": 2,
+    "pubkeys": [
+      { "node": { "depth": 4, "fingerprint": 12345, "child_num": 0, "chain_code": "ab...", "public_key": "02ab..." }, "address_n": [0, 2] },
+      { "node": { "depth": 4, "fingerprint": 67890, "child_num": 0, "chain_code": "cd...", "public_key": "03ef..." }, "address_n": [0, 2] },
+      { "node": { "depth": 4, "fingerprint": 11111, "child_num": 0, "chain_code": "ef...", "public_key": "0299..." }, "address_n": [0, 2] }
+    ],
+    "signatures": ["", "", ""]
+  }
+}
+```
+
+Při druhém podpisu `signatures` obsahují existující podpisy: `["", "304402...", ""]`.
+
+**Response callback** (`action=sign`):
+```json
+{
+  "success": true,
+  "payload": {
+    "signatures": ["304402...", "304402..."],
+    "serializedTx": "020000000001..."
+  }
+}
+```
+
+### 9.4 getAddress
+
+Zobrazení adresy na displeji Trezoru pro vizuální ověření (UC-11).
+
+**Request params:**
+```json
+{
+  "coin": "tbtc",
+  "path": "m/84'/1'/0'/0/5",
+  "showOnTrezor": true
+}
+```
+
+### 9.5 Datový tok: Backend → Trezor Connect params
+
+```
+Backend (TrezorParamsBuilder.build):
+  wallet.cosigners[signerIdx].originPath = "48'/1'/0'/2'"
+  → parseOriginPathToUint32 → [2147483696, 2147483649, 2147483648, 2147483650]
+
+  Pro každý UTXO:
+    originPath + [chain, addressIndex]
+    → address_n = [2147483696, 2147483649, 2147483648, 2147483650, 0, idx]
+
+  Pro change výstup:
+    originPath + [1, changeIndex]
+    → address_n = [2147483696, 2147483649, 2147483648, 2147483650, 1, changeIdx]
+
+  Pro multisig:
+    xpubToHDNode(cos.xpubRoot) → { depth, fingerprint, child_num, chain_code, public_key }
+    multisig.pubkeys[i].address_n = [chain, index] (relativní k account xpubu)
+```
