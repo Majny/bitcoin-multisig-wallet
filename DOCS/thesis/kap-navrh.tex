@@ -632,7 +632,7 @@ jejich životního cyklu:
 
 \begin{description}
 \item[\texttt{psbts}] -- Hlavní tabulka PSBT transakcí. Obsahuje
-  \texttt{psbt\_\allowbreak id} (UUID),
+  \texttt{id} (UUID, primární klíč),
   \texttt{wallet\_\allowbreak id} (odkaz na~peněženku),
   \texttt{psbt\_\allowbreak base64} (serializovaná PSBT ve~formátu
   Base64), \texttt{status} (pending~/~signed~/~broadcast),
@@ -646,7 +646,7 @@ jejich životního cyklu:
 
 \item[\texttt{psbt\_\allowbreak signatures}] -- Sleduje, kteří
   cosigneři již PSBT podepsali. Obsahuje
-  \texttt{psbt\_\allowbreak id},
+  \texttt{psbt\_\allowbreak id} (cizí klíč na \texttt{psbts.id}),
   \texttt{device\_\allowbreak id} (zařízení, které podepsalo),
   \texttt{fingerprint} (otisk kořenového klíče)
   a~\texttt{cosigner\_\allowbreak index} (index cosignera v~rámci
