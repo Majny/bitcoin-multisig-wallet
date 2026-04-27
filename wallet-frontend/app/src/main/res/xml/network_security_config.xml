@@ -1,8 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    Network security config for the wallet app.
+
+    Cleartext HTTP is allowed ONLY for the gateway domain whitelisted below.
+    All other traffic must use HTTPS — no global cleartext exception.
+
+    The default value matches the author's development backend, which is
+    reached over a Tailscale tailnet. For any other deployment (LAN, VPN,
+    Android emulator → host loopback, ngrok tunnel, ...) you must:
+
+      1) Replace the <domain> value below with your gateway's host or IP.
+      2) Set the matching URL in `wallet-frontend/local.properties` via
+         the `api.gateway.base.url` key — see README and section 5.3
+         of the thesis.
+
+    Examples of replacement values:
+      - Android emulator + Docker on host:  10.0.2.2
+      - Real device on the same LAN:        192.168.0.100   (your host's LAN IP)
+      - Tailscale tailnet:                  100.x.y.z
+      - ngrok tunnel:                       abc.ngrok.io    (HTTPS, not needed here)
+
+    A production deployment should drop this whitelist entirely and front the
+    backend with HTTPS instead.
+-->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
-        <!-- IP backendu / gateway -->
         <domain includeSubdomains="true">100.91.223.40</domain>
     </domain-config>
 </network-security-config>
-
