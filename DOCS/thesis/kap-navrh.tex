@@ -25,10 +25,10 @@ architekturu zachycuje obrázek~\ref{fig:architektura}.
 \centering
 \includegraphics[width=\textwidth]{img/architektura.pdf}
 \caption{Schéma architektury systému. Android aplikace komunikuje s~API
-Gateway přes HTTPS a~s~hardwarovou peněženkou Trezor přes deeplink protokol
-zprostředkovaný aplikací Trezor Suite Mobile. Backendové mikroslužby
-komunikují mezi sebou interně a~přistupují k~externím službám
-(Mempool.space, CoinGecko).}
+Gateway přes HTTP v~izolované LAN či VPN a~s~hardwarovou peněženkou
+Trezor přes deeplink protokol zprostředkovaný aplikací Trezor Suite
+Mobile. Backendové mikroslužby komunikují mezi sebou interně
+a~přistupují k~externím službám (Mempool.space, CoinGecko).}
 \label{fig:architektura}
 \end{figure}
 
@@ -377,7 +377,7 @@ Celý průběh autentizace zachycuje obrázek~\ref{fig:auth-flow}.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{img/auth-flow.pdf}
+\includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{img/auth-flow.pdf}
 \caption{Sekvenční diagram autentizace. Uživatel exportuje veřejné klíče
 z~Trezoru přes Trezor Suite Mobile, \texttt{auth-service} uloží zařízení
 a~vydá JWT token, API Gateway následně validuje token při každém požadavku.}
@@ -396,6 +396,45 @@ jména a~hesla. Tento přístup reflektuje specifika aplikace: uživatel
 se neidentifikuje svou osobou, ale svým hardwarovým zařízením. Zároveň
 tak odpadá nutnost spravovat hesla, řešit jejich reset a~chránit je
 před únikem.
+
+\subsubsection{Obnova přístupového tokenu přes refresh token}
+\label{subsec:refresh-token}
+
+Přístupový JWT token má platnost 24~hodin. Bez dalšího mechanismu by
+uživatel musel po~každém vypršení znovu exportovat veřejné klíče
+z~Trezoru, což by výrazně zhoršilo uživatelský komfort -- uživatel
+by přitom neměnil identitu, pouze obnovoval relaci. Proto \texttt{auth-service}
+při~přihlášení vydá vedle přístupového tokenu ještě tzv.~\emph{refresh
+token} s~delší platností (30~dní), který aplikace uchová spolu
+s~přístupovým tokenem a~použije jej k~obnově, jakmile přístupový token
+vyprší.
+
+Refresh tokeny jsou navrženy jako \emph{jednorázové} -- každý token
+lze použít pouze k~jediné výměně za~novou dvojici. Rotace probíhá takto:
+
+\begin{enumerate}
+\item Aplikace pošle aktuální refresh token na \texttt{POST /auth/token/refresh}.
+\item \texttt{auth-service} v~jedné databázové transakci vyhledá záznam
+  podle hashe tokenu, ověří, že není expirovaný ani dříve revokovaný,
+  atomicky nastaví sloupec \texttt{revoked\_at} a~vydá novou dvojici
+  (přístupový $+$ refresh token).
+\item Aplikace nové tokeny uloží do~perzistence a~starý refresh token
+  už znovu nepoužije.
+\end{enumerate}
+
+Krok~2 je race-safe: klauzule \texttt{UPDATE \ldots WHERE revoked\_at
+IS NULL} zajišťuje, že pokud stejný refresh token dorazí na~server
+souběžně dvakrát, vyhraje pouze jeden \texttt{UPDATE}; druhý uvidí
+nulový počet aktualizovaných řádků a~vrátí klientovi~401. Tím se brání
+situaci, kdy by dvě souběžné výměny vygenerovaly dva platné refresh
+tokeny ze~stejného originálu.
+
+V~databázi je uložen pouze SHA-256 hash tokenu, nikoli jeho otevřená
+hodnota. Případný únik obsahu tabulky \texttt{refresh\_tokens} tedy
+neumožní útočníkovi používat aktivní tokeny -- získá pouze otisky,
+ze~kterých původní hodnotu nelze zpětně odvodit. Otevřená hodnota
+existuje výhradně v~paměti klienta a~v~jeho lokálním perzistentním
+úložišti.
 
 \subsection{Absence privátních klíčů na serveru}
 
@@ -497,13 +536,25 @@ a~jejich vztahy.
 
 \subsection{Databáze autentizační služby}
 
-Databáze \texttt{auth-service} obsahuje jedinou tabulku:
+Databáze \texttt{auth-service} obsahuje dvě tabulky:
 
 \begin{description}
 \item[\texttt{devices}] -- Uchovává identitu autentizovaných zařízení.
   Primárním klíčem je \texttt{device\_id} (UUID odvozený z~fingerprintu).
   Dále obsahuje \texttt{fingerprint} kořenového veřejného klíče Trezoru,
   \texttt{model} (typ zařízení) a~\texttt{label} (uživatelský název).
+
+\item[\texttt{refresh\_tokens}] -- Persistentní úložiště refresh tokenů
+  s~jednorázovou rotací. Primárním klíčem je SHA-256 hash tokenu
+  (otevřená hodnota se v~databázi nikdy neukládá, viz
+  sekci~\ref{subsec:refresh-token}). Dále obsahuje
+  \texttt{device\_\allowbreak id} (zařízení, kterému token patří),
+  \texttt{fingerprint} kořenového klíče,
+  \texttt{expires\_\allowbreak at} (platnost, default 30~dní),
+  \texttt{created\_\allowbreak at} (vystavení) a~\texttt{revoked\_\allowbreak at}
+  (čas revokace, \texttt{NULL} značí dosud platný token). Sloupec
+  \texttt{revoked\_\allowbreak at} je load-bearing pro race-safe rotaci
+  popsanou v~sekci~\ref{subsec:refresh-token}.
 \end{description}
 
 \subsection{Databáze wallet-registry}
@@ -551,6 +602,15 @@ cosignerů a~adres:
   Oba typy výstupů (P2WPKH i~P2WSH) sdílejí prefix \texttt{bc1q}/\texttt{tb1q},
   liší se pouze délkou adresy. Předderivování adres umožňuje rychlou odpověď na dotazy
   bez nutnosti opakované derivace.
+
+\item[\texttt{cosigner\_labels}] -- Ukládá uživatelská pojmenování
+  cosignerů v~rámci konkrétní multisig peněženky (například
+  \uv{Alicin klíč}, \uv{Pepa}). Záznam je vázán na trojici
+  (\texttt{wallet\_\allowbreak id}, \texttt{cosigner\_\allowbreak index},
+  \texttt{device\_\allowbreak id}), takže název je privátní pro dané
+  zařízení a~ostatním cosignerům se nezobrazuje. Důvodem je ochrana
+  soukromí: osobní poznámky o~spolupodepisovatelích by neměly prosakovat
+  mezi členy sdílené peněženky.
 \end{description}
 
 Schéma vztahů mezi entitami zachycuje obrázek~\ref{fig:er-diagram}.
@@ -558,9 +618,10 @@ Schéma vztahů mezi entitami zachycuje obrázek~\ref{fig:er-diagram}.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{img/er-diagram.pdf}
-\caption{ER diagram datového modelu. Databáze auth-service obsahuje tabulku
-zařízení, wallet-registry spravuje peněženky, cosignery a~adresy, psbt-service
-uchovává PSBT transakce a~záznamy podpisů.}
+\caption{ER diagram datového modelu. Databáze auth-service obsahuje tabulky
+zařízení a~refresh tokenů, wallet-registry spravuje peněženky, cosignery,
+adresy a~per-device labely, psbt-service uchovává PSBT transakce a~záznamy
+podpisů.}
 \label{fig:er-diagram}
 \end{figure}
 
@@ -579,7 +640,7 @@ jejich životního cyklu:
   tj.~$M$), \texttt{current\_\allowbreak sigs} (aktuální počet
   sebraných podpisů),
   \texttt{trezor\_\allowbreak connect\_\allowbreak params} (JSON
-  s~parametry pro Trezor Connect, uložen jako JSONB)
+  s~parametry pro Trezor Connect, serializovaný do~sloupce typu TEXT)
   a~\texttt{serialized\_\allowbreak tx} (kompletní serializovaná
   transakce po~podpisu, pokud je dostupná).
 
@@ -593,10 +654,36 @@ jejich životního cyklu:
   cosignerem.
 \end{description}
 
-Uložení parametrů pro Trezor Connect ve formátu JSONB jsme zvolili proto,
-že jejich struktura závisí na konkrétní transakci -- počet vstupů a~výstupů
-se liší, každý vstup má jinou derivační cestu a~částku. Relační reprezentace
-by vyžadovala zbytečně složité schéma s~více vazebnými tabulkami.
+Parametry pro Trezor Connect ukládáme jako serializovaný JSON
+v~textovém sloupci. Jejich struktura závisí na~konkrétní transakci --
+počet vstupů a~výstupů se liší, každý vstup má jinou derivační cestu
+a~částku~--, ale přes SQL je nikdy nedotazujeme; celý dokument čte
+pouze klient, a~to vždy vcelku. Strukturované dotazy a~indexace
+(PostgreSQL typ \texttt{JSONB}) by zde proto nepřinesly žádnou výhodu,
+a~relační reprezentace by zase vyžadovala zbytečně složité schéma
+s~více vazebnými tabulkami. Prostý TEXT je v~tomto případě nejvhodnější
+kompromis.
+
+S~tabulkou \texttt{psbts} souvisí ještě jedna nezřejmá implementační
+otázka. Při sestavování PSBT si \texttt{psbt-service} eviduje, která UTXO
+peněženky jsou aktuálně rezervovaná v~rozpracovaných transakcích, a~při
+volbě vstupů pro novou PSBT je vylučuje z~výběru. Bez této rezervace by
+mohly vzniknout dvě konkurenční PSBT utrácející tytéž UTXO, z~nichž by
+síť přijala jen jednu a~druhá by uvízla v~UI jako zdánlivě platná, ale
+trvale nebroadcastovatelná transakce. Rezervace má ale nepříjemný
+vedlejší efekt: pokud cosigner u~multisig peněženky nikdy nedokončí
+podpis, opuštěný draft drží své vstupy zablokované navždy. Pro řešení
+běží v~rámci \texttt{psbt-service} periodická úklidová úloha
+(coroutine), která jednou za hodinu odstraní záznamy ve~stavech
+\texttt{pending} a~\texttt{signed} starší než sedm dní; broadcastované
+transakce zůstávají v~tabulce zachovány jako auditní stopa. Hodnoty
+TTL i~intervalu jsou konfigurovatelné přes proměnné prostředí
+(\texttt{PSBT\_TTL\_DAYS}, \texttt{PSBT\_CLEANUP\_INTERVAL\_MINUTES}),
+celý mechanismus lze pro účely testování vypnout proměnnou
+\texttt{PSBT\_CLEANUP\_ENABLED=false}. Uživatel může rozpracovaný draft
+také kdykoliv ručně zrušit z~detailu PSBT v~mobilní aplikaci, což má
+stejný efekt jako úklidová úloha (smazání řádku, uvolnění
+rezervace).
 
 %% -----------------------------------------------------------------------
 \section{Návrh PSBT workflow}
@@ -879,10 +966,13 @@ značí navigaci přes drawer menu.}
 
 \item[PSBT detail] -- Detail konkrétní PSBT transakce se souhrnem částky,
   poplatku a~celkové hodnoty. Zobrazuje stav podpisů jednotlivých cosignerů --
-  u~každého cosignera je vidět, zda podepsal, a~v~dialogu signerů lze cosignerům
-  přiřadit pojmenování (například ,,Alicin klíč``), které se uloží na backend
-  a~zobrazí se i~ostatním účastníkům. Pokud transakce čeká na podpis
-  aktuálního cosignera, zobrazí se tlačítko pro podepsání.
+  u~každého cosignera je vidět, zda podepsal, a~v~dialogu signerů si uživatel
+  může cosignerům přiřadit vlastní pojmenování (například ,,Alicin klíč``).
+  Tento název je privátní pro dané zařízení -- uloží se vázaný na
+  \texttt{device\_id} přihlášeného Trezoru a~ostatním cosignerům se nezobrazí.
+  Důvodem je ochrana soukromí: osobní poznámky o~spolupodepisovatelích by
+  neměly prosakovat mezi členy sdílené peněženky. Pokud transakce čeká
+  na podpis aktuálního cosignera, zobrazí se tlačítko pro podepsání.
 
 \item[Nastavení] -- Umožňuje přepnutí aktivního účtu (pro multisig testování
   s~více cosignery na jednom zařízení), výběr fiat měny pro zobrazení
