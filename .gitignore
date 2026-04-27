@@ -1,4 +1,3 @@
-
 # JetBrains / Android Studio
 .idea/
 **/.idea/
@@ -6,6 +5,8 @@
 # Environment files
 .env
 **/.env
+!.env.example
+!**/.env.example
 
 # Local Android
 local.properties
@@ -15,28 +16,7 @@ local.properties
 .gradle/
 **/.gradle/
 **/build/
-
-# OS / misc
-.DS_Store
-Thumbs.db
-
-# Archives
-*# JetBrains / Android Studio
-.idea/
-**/.idea/
-
-# Environment files
-.env
-**/.env
-
-# Local Android
-local.properties
-**/local.properties
-
-# Gradle
-.gradle/
-**/.gradle/
-**/build/
+**/bin/
 
 # OS / misc
 .DS_Store
@@ -44,4 +24,3 @@ Thumbs.db
 
 # Archives
 *.zip
-.zip
