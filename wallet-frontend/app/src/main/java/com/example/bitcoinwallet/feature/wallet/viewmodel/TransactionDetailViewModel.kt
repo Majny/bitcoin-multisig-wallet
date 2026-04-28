@@ -16,7 +16,7 @@ import java.time.format.DateTimeFormatter
 data class TransactionDetailUiState(
     val txid: String = "",
     val confirmed: Boolean = false,
-    val confirmations: String = "Unconfirmed",
+    val confirmations: String = "Pending",
     val blockHeight: Int? = null,
     val timestamp: String = "",
     val feeSats: Long = 0,
@@ -64,7 +64,11 @@ class TransactionDetailViewModel : ViewModel() {
                         .format(formatter)
                 } ?: ""
 
-                val confirmText = if (dto.confirmed) "Confirmed" else "Unconfirmed"
+                // "Pending" matches the wording the dashboard, multisig
+                // history, and coin control surface for not-yet-confirmed
+                // txs — keeping a single label avoids reading like a third
+                // distinct state when the user sees them side by side.
+                val confirmText = if (dto.confirmed) "Confirmed" else "Pending"
 
                 _uiState.value = TransactionDetailUiState(
                     txid = dto.txid,
