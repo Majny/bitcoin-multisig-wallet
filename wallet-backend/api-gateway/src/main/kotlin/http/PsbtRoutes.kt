@@ -15,13 +15,21 @@ fun Route.psbtRoutes() {
         route("/psbt") {
 
             /* POST /api/v1/psbt — creates a PSBT for the supplied walletId.
-             * Ownership is enforced: caller must be a member of that wallet. */
+             * Ownership is enforced: caller must be a member of that wallet.
+             * The Trezor master fingerprint is pulled from the JWT and pinned
+             * onto the request so psbt-service can map (fingerprint, account)
+             * to a specific cosigner row even when several cosigners share an
+             * account index. */
             post {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
+                val fingerprint = principal.payload.getClaim("fingerprint")?.asString()
                 val req = call.receive<CreatePsbtRequest>()
                 if (!verifyWalletAccess(deviceId, req.walletId)) return@post
-                val resp = call.application.deps.psbt.create(req)
+                val enriched = if (req.signerFingerprint.isNullOrBlank() && !fingerprint.isNullOrBlank()) {
+                    req.copy(signerFingerprint = fingerprint)
+                } else req
+                val resp = call.application.deps.psbt.create(enriched)
                 call.respond(resp)
             }
 
@@ -98,10 +106,13 @@ fun Route.psbtRoutes() {
 
             /* GET /api/v1/psbt/verify-address — returns Trezor Connect getAddress
              * params for on-device verification of a receive address (Show On
-             * Trezor button). */
+             * Trezor button). Pulls the caller's fingerprint from the JWT so
+             * psbt-service can identify the right cosigner row in a wallet
+             * where account indexes are not unique. */
             get("/verify-address") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
+                val fingerprint = principal.payload.getClaim("fingerprint")?.asString()
                 val walletId = call.request.queryParameters["walletId"]
                 if (walletId.isNullOrBlank()) {
                     call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Missing walletId"))
@@ -111,7 +122,9 @@ fun Route.psbtRoutes() {
                 val index = call.request.queryParameters["index"]?.toIntOrNull() ?: 0
                 val cosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
                 val signerAccountIndex = call.request.queryParameters["signerAccountIndex"]?.toIntOrNull()
-                val resp = call.application.deps.psbt.verifyAddress(walletId, index, cosignerIndex, signerAccountIndex)
+                val resp = call.application.deps.psbt.verifyAddress(
+                    walletId, index, cosignerIndex, signerAccountIndex, fingerprint
+                )
                 call.respond(resp)
             }
 

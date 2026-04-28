@@ -109,25 +109,46 @@ class PsbtRepository {
     }
 
     /*
-     * Adds one signature to a PSBT and bumps the status if the threshold was
-     * just reached. Increment is done at SQL level (`current_sigs = current_sigs + 1`)
-     * so two concurrent cosigner sign requests can't both observe the same
-     * starting count and end up with one missed increment.
+     * Records a cosigner's signature and bumps the PSBT counters in the same
+     * transaction. INSERT into psbt_signatures runs first so the
+     * UNIQUE(psbt_id, cosigner_index) constraint catches duplicate sign
+     * attempts before current_sigs is touched — a previous version did the
+     * UPDATE first, so a duplicated request would inflate current_sigs and
+     * flip the PSBT to "signed" with a missing signature row underneath.
+     *
+     * On a duplicate, the underlying ExposedSQLException propagates out and
+     * the whole transaction rolls back — caller maps it to a 409 Conflict.
      */
-    fun atomicSignAndUpdate(
+    fun signWithAudit(
         id: UUID,
+        deviceId: String,
+        fingerprint: String,
+        cosignerIndex: Int,
         psbtBase64: String,
         requiredSigs: Int,
         trezorConnectParams: TrezorConnectParams? = null,
         serializedTx: String? = null
     ): Pair<Int, String> = transaction {
-        // Atomic increment + payload update in one statement.
+        val now = OffsetDateTime.now()
+
+        // INSERT first — UNIQUE(psbt_id, cosigner_index) is our guard against
+        // a double-sign racing past the early existence check in the route.
+        PsbtSignaturesTable.insert {
+            it[PsbtSignaturesTable.psbtId] = id
+            it[PsbtSignaturesTable.deviceId] = deviceId
+            it[PsbtSignaturesTable.fingerprint] = fingerprint
+            it[PsbtSignaturesTable.cosignerIndex] = cosignerIndex
+            it[signedAt] = now
+        }
+
+        // Atomic increment + payload update in one statement (only reached
+        // when the audit row inserted cleanly).
         PsbtsTable.update({ PsbtsTable.id eq id }) {
             with(SqlExpressionBuilder) {
                 it.update(PsbtsTable.currentSigs, PsbtsTable.currentSigs + 1)
             }
             it[PsbtsTable.psbtBase64] = psbtBase64
-            it[updatedAt] = OffsetDateTime.now()
+            it[updatedAt] = now
             if (trezorConnectParams != null) {
                 it[PsbtsTable.trezorConnectParams] = json.encodeToString(
                     TrezorConnectParams.serializer(), trezorConnectParams.copy(refTxs = null)
@@ -151,22 +172,6 @@ class PsbtRepository {
         }
 
         newSigs to newStatus
-    }
-
-    /* Records a signature from a cosigner (device fingerprint + cosigner index). */
-    fun addSignature(
-        psbtId: UUID,
-        deviceId: String,
-        fingerprint: String,
-        cosignerIndex: Int = 0
-    ) = transaction {
-        PsbtSignaturesTable.insert {
-            it[PsbtSignaturesTable.psbtId] = psbtId
-            it[PsbtSignaturesTable.deviceId] = deviceId
-            it[PsbtSignaturesTable.fingerprint] = fingerprint
-            it[PsbtSignaturesTable.cosignerIndex] = cosignerIndex
-            it[signedAt] = OffsetDateTime.now()
-        }
     }
 
     /* Marks a PSBT as broadcast and stores the resulting transaction ID. */

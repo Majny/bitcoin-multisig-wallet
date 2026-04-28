@@ -24,6 +24,93 @@ import java.util.*
 private val log = LoggerFactory.getLogger("PsbtRoutes")
 
 /*
+ * True when the failure represents a Postgres UNIQUE constraint violation
+ * (SQLSTATE 23505). Walks the cause chain because Exposed wraps the original
+ * SQLException in its own ExposedSQLException, sometimes nested twice.
+ */
+private fun isUniqueViolation(e: Throwable): Boolean {
+    var cur: Throwable? = e
+    while (cur != null) {
+        if (cur is java.sql.SQLException && cur.sqlState == "23505") return true
+        cur = cur.cause
+    }
+    return false
+}
+
+/*
+ * Trezor returns the master fingerprint as a uint32 number ("400209115") in
+ * its Connect responses, while Bitcoin output descriptors carry it as an
+ * 8-character lowercase hex string ("17d8b19b"). Both representations point
+ * at the same four bytes. Equality across the two is the load-bearing check
+ * for "is this signer me?", so we normalise everything to the descriptor
+ * shape before comparing — otherwise the fp leg of resolveCosignerIdx
+ * silently misses for every multisig signed by a freshly-logged-in device.
+ */
+private fun normalizeFingerprint(fp: String?): String? {
+    if (fp.isNullOrBlank()) return null
+    val asLong = fp.toLongOrNull()
+    return if (asLong != null) "%08x".format(asLong) else fp.lowercase()
+}
+
+/*
+ * Resolves which cosigner row in a multisig wallet corresponds to the signing
+ * caller. Two real-world setups must round-trip cleanly:
+ *
+ *   A) N Trezors, every cosigner picked BIP-48 account 0 on their own device.
+ *      Each cosigner row has a distinct fingerprint, so the fingerprint alone
+ *      identifies the row.
+ *   B) 1 Trezor signing as multiple cosigners via different BIP-48 accounts.
+ *      All cosigner rows share the same fingerprint, so accountIndex is what
+ *      separates them — fingerprint alone would always pick cosigner 0.
+ *
+ * The combined (fingerprint, accountIndex) match handles both at once. Single-
+ * signal fallbacks stay in for older clients (no fingerprint sent) and for the
+ * degenerate case where a row's originPath does not encode an account index.
+ * Returns -1 when nothing matches.
+ */
+private fun resolveCosignerIdx(
+    cosigners: List<CosignerDto>,
+    fingerprint: String?,
+    accountIndex: Int?
+): Int {
+    val sorted = cosigners.sortedBy { it.idx }
+    val accountOf: (CosignerDto) -> Int? = { cos ->
+        val segs = cos.originPath.replace("'", "").replace("h", "").split("/")
+        if (segs.size >= 3) segs[2].toIntOrNull() else null
+    }
+    val target = normalizeFingerprint(fingerprint)
+    val fpMatches: (CosignerDto) -> Boolean = { cos ->
+        target != null && normalizeFingerprint(cos.fingerprint) == target
+    }
+
+    // Best: both signals agree. Only this path correctly handles a single
+    // Trezor wearing two cosigner hats (same fingerprint, different account).
+    if (!fingerprint.isNullOrBlank() && accountIndex != null) {
+        val byBoth = sorted.indexOfFirst { fpMatches(it) && accountOf(it) == accountIndex }
+        if (byBoth >= 0) return byBoth
+    }
+
+    // Fingerprint alone — only safe when EXACTLY one cosigner carries that
+    // fingerprint. The single-Trezor-multi-account case has every cosigner
+    // sharing the same fingerprint, so an indexOfFirst here would silently
+    // collapse them all onto position 0 and the wrong cosigner would record
+    // the signature. When the match is ambiguous, fall through and let the
+    // caller's request.cosignerIndex decide.
+    if (!fingerprint.isNullOrBlank()) {
+        val matches = sorted.indices.filter { i -> fpMatches(sorted[i]) }
+        if (matches.size == 1) return matches[0]
+    }
+
+    // Account index alone — legacy client that never sent a fingerprint.
+    if (accountIndex != null) {
+        val byAcc = sorted.indexOfFirst { accountOf(it) == accountIndex }
+        if (byAcc >= 0) return byAcc
+    }
+
+    return -1
+}
+
+/*
  * psbt-service HTTP surface. All routes live under /psbt and are reached
  * only via api-gateway, which already enforces JWT + wallet-membership.
  */
@@ -160,24 +247,22 @@ fun Route.psbtRoutes(
                     rbf = request.rbf
                 )
 
-                // The frontend passes the signing user's BIP-48 account index;
                 // Trezor Connect expects a position within the cosigner list
-                // sorted by idx. Walk the cosigner origin paths to find the
-                // entry whose `account'` segment matches.
-                val signerCosignerIdx = if (wallet.type == "MULTI_SIG" && request.signerAccountIndex != null) {
-                    val sorted = wallet.cosigners.sortedBy { it.idx }
-                    val match = sorted.indexOfFirst { cos ->
-                        val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
-                        val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
-                        cosAccount == request.signerAccountIndex
-                    }
+                // sorted by idx. Resolve via fingerprint first (unique per
+                // device) so multisigs where every cosigner uses BIP-48
+                // account 0 still place the signer at the right slot; fall
+                // back to accountIndex for older clients.
+                val signerCosignerIdx = if (wallet.type == "MULTI_SIG") {
+                    val match = resolveCosignerIdx(
+                        wallet.cosigners, request.signerFingerprint, request.signerAccountIndex
+                    )
                     if (match >= 0) {
-                        log.info("Mapped signerAccountIndex={} to cosignerIdx={} (path={})",
-                            request.signerAccountIndex, match, sorted[match].originPath)
+                        log.info("Mapped signer fp={} acc={} to cosignerIdx={}",
+                            request.signerFingerprint, request.signerAccountIndex, match)
                         match
                     } else {
-                        log.warn("signerAccountIndex={} not found in cosigners, defaulting to 0",
-                            request.signerAccountIndex)
+                        log.warn("Could not map signer (fp={} acc={}) to a cosigner — defaulting to 0",
+                            request.signerFingerprint, request.signerAccountIndex)
                         0
                     }
                 } else 0
@@ -240,6 +325,7 @@ fun Route.psbtRoutes(
             val addressIndex = call.request.queryParameters["index"]?.toIntOrNull() ?: 0
             val rawCosignerIndex = call.request.queryParameters["cosignerIndex"]?.toIntOrNull() ?: 0
             val signerAccountIndex = call.request.queryParameters["signerAccountIndex"]?.toIntOrNull()
+            val signerFingerprint = call.request.queryParameters["fingerprint"]?.takeIf { it.isNotBlank() }
 
             try {
                 val wallet = registryClient.getWallet(walletId)
@@ -249,17 +335,13 @@ fun Route.psbtRoutes(
                 if (wallet.type == "MULTI_SIG") {
                     val m = wallet.m ?: 2
                     val sortedCosigners = wallet.cosigners.sortedBy { it.idx }
-                    // Prefer resolving via signerAccountIndex (the caller's BIP-48 account)
-                    // so a cosigner who is not cosigner[0] still gets their own origin path.
-                    // Falls back to the explicit cosignerIndex for backwards compat.
-                    val cosignerIndex = if (signerAccountIndex != null) {
-                        val match = sortedCosigners.indexOfFirst { cos ->
-                            val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
-                            val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
-                            cosAccount == signerAccountIndex
-                        }
-                        if (match >= 0) match else rawCosignerIndex
-                    } else rawCosignerIndex
+                    // Resolve which cosigner is asking. Fingerprint wins because
+                    // it's unique per device — accountIndex collides whenever
+                    // two cosigners both use BIP-48 account 0 on different
+                    // Trezors. Falls back to the legacy explicit cosignerIndex
+                    // when neither signal identifies a match.
+                    val resolved = resolveCosignerIdx(sortedCosigners, signerFingerprint, signerAccountIndex)
+                    val cosignerIndex = if (resolved >= 0) resolved else rawCosignerIndex
                     val signerCosigner = sortedCosigners.getOrNull(cosignerIndex)
                     if (signerCosigner == null) {
                         call.respond(HttpStatusCode.BadRequest, mapOf("error" to "Invalid cosignerIndex"))
@@ -414,31 +496,28 @@ fun Route.psbtRoutes(
                 return@post
             }
 
-            // Resolve cosignerIndex: prefer signerAccountIndex mapping if provided
-            val resolvedCosignerIndex = if (request.signerAccountIndex != null) {
-                try {
-                    val wallet = registryClient.getWallet(existing.walletId)
-                    val sorted = wallet.cosigners.sortedBy { it.idx }
-                    val match = sorted.indexOfFirst { cos ->
-                        val segments = cos.originPath.replace("'", "").replace("h", "").split("/")
-                        val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
-                        cosAccount == request.signerAccountIndex
-                    }
-                    if (match >= 0) {
-                        log.info("sign-trezor: mapped signerAccountIndex={} to cosignerIdx={}",
-                            request.signerAccountIndex, match)
-                        match
-                    } else {
-                        log.warn("sign-trezor: signerAccountIndex={} not found, using request.cosignerIndex={}",
-                            request.signerAccountIndex, request.cosignerIndex)
-                        request.cosignerIndex
-                    }
-                } catch (e: Exception) {
-                    log.warn("sign-trezor: failed to resolve signerAccountIndex, using request.cosignerIndex={}",
-                        request.cosignerIndex, e)
+            // Resolve which cosigner just signed. Fingerprint is the primary
+            // signal (unique per device); accountIndex is a fallback for the
+            // legacy clients that don't send the fingerprint. Falls back to
+            // the explicit request.cosignerIndex if the wallet lookup itself
+            // fails, so a transient registry blip doesn't block signing.
+            val resolvedCosignerIndex = try {
+                val wallet = registryClient.getWallet(existing.walletId)
+                val match = resolveCosignerIdx(
+                    wallet.cosigners, request.fingerprint, request.signerAccountIndex
+                )
+                if (match >= 0) {
+                    log.info("sign-trezor: mapped fp={} acc={} to cosignerIdx={}",
+                        request.fingerprint, request.signerAccountIndex, match)
+                    match
+                } else {
+                    log.warn("sign-trezor: no cosigner matches fp={} acc={}, using request.cosignerIndex={}",
+                        request.fingerprint, request.signerAccountIndex, request.cosignerIndex)
                     request.cosignerIndex
                 }
-            } else {
+            } catch (e: Exception) {
+                log.warn("sign-trezor: failed to load wallet for cosigner mapping, using request.cosignerIndex={}",
+                    request.cosignerIndex, e)
                 request.cosignerIndex
             }
 
@@ -500,28 +579,37 @@ fun Route.psbtRoutes(
                 params.copy(inputs = updatedInputs)
             }
 
-            // Atomic increment of currentSigs + update in single DB transaction
-            // Prevents race condition when two cosigners sign concurrently
-            val (newSigCount, newStatus) = repository.atomicSignAndUpdate(
-                id = uuid,
-                psbtBase64 = existing.psbtBase64,
-                requiredSigs = existing.requiredSigs,
-                trezorConnectParams = updatedParams,
-                serializedTx = if (request.serializedTx != null) request.serializedTx else null
-            )
-
-            try {
-                repository.addSignature(
-                    psbtId = uuid,
+            // Insert audit row + bump currentSigs atomically. The audit row
+            // INSERT happens first inside the transaction, so a duplicate
+            // sign attempt (same psbt × cosigner) hits the UNIQUE constraint
+            // and rolls back the whole transaction — currentSigs cannot drift
+            // past the actual number of recorded signatures.
+            val (newSigCount, newStatus) = try {
+                repository.signWithAudit(
+                    id = uuid,
                     deviceId = request.fingerprint,
                     fingerprint = request.fingerprint,
-                    cosignerIndex = resolvedCosignerIndex
+                    cosignerIndex = resolvedCosignerIndex,
+                    psbtBase64 = existing.psbtBase64,
+                    requiredSigs = existing.requiredSigs,
+                    trezorConnectParams = updatedParams,
+                    serializedTx = request.serializedTx
                 )
             } catch (e: Exception) {
+                // Postgres SQLSTATE 23505 = unique_violation. Race past the
+                // early existence check above lands here; report the same
+                // 409 Conflict the early check returns so the UI flow is
+                // identical regardless of which guard triggered.
+                if (isUniqueViolation(e)) {
+                    log.info("sign-trezor: cosigner {} already signed PSBT {} (caught at DB)",
+                        resolvedCosignerIndex, id)
+                    appCall.respond(HttpStatusCode.Conflict, mapOf("error" to "Already signed by this cosigner"))
+                    return@post
+                }
                 log.error("Failed to record signature for PSBT {} cosigner {}: {}",
-                    id, resolvedCosignerIndex, e.message)
+                    id, resolvedCosignerIndex, e.message, e)
                 appCall.respond(HttpStatusCode.InternalServerError,
-                    mapOf("error" to "Signature applied but failed to record: ${e.message}"))
+                    mapOf("error" to "Failed to record signature: ${e.message}"))
                 return@post
             }
 
@@ -603,11 +691,23 @@ fun Route.psbtRoutes(
             }
 
             try {
+                // Network must come from the wallet record. A
+                // walletId-substring heuristic ("walletId.contains(testnet)")
+                // works for singlesig (whose ids encode the network) but
+                // silently routes descriptor-imported multisigs
+                // (id = "w-{8 hex bytes}") to the wrong chain. On a registry
+                // outage we'd rather return a clear 503 than guess and have
+                // the broadcast fail with "Invalid transaction" from the
+                // wrong network.
                 val broadcastNetwork = try {
                     registryClient.getWallet(existing.walletId).network
                 } catch (e: Exception) {
-                    log.warn("broadcast-raw: failed to get wallet network, falling back to walletId heuristic", e)
-                    if (existing.walletId.contains("testnet")) "testnet" else "mainnet"
+                    log.error("broadcast-raw: registry lookup failed for wallet {}", existing.walletId, e)
+                    appCall.respond(
+                        HttpStatusCode.ServiceUnavailable,
+                        mapOf("error" to "Registry unavailable, cannot determine network for broadcast. Please retry.")
+                    )
+                    return@post
                 }
                 val broadcastResult = blockchainClient.broadcastTransaction(request.txHex, broadcastNetwork)
 

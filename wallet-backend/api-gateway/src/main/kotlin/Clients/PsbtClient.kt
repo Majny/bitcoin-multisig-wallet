@@ -17,7 +17,13 @@ interface PsbtClient {
     suspend fun broadcastRaw(id: String, req: BroadcastRawTxRequest): BroadcastResponse
     suspend fun signTrezor(id: String, req: AddTrezorSignaturesRequest): PsbtDetailResponse
     suspend fun delete(id: String)
-    suspend fun verifyAddress(walletId: String, index: Int, cosignerIndex: Int, signerAccountIndex: Int? = null): VerifyAddressResponse
+    suspend fun verifyAddress(
+        walletId: String,
+        index: Int,
+        cosignerIndex: Int,
+        signerAccountIndex: Int? = null,
+        fingerprint: String? = null
+    ): VerifyAddressResponse
 }
 
 class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
@@ -101,8 +107,16 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
     }
 
     /* GET /psbt/verify-address — Trezor Connect getAddress params for on-device
-     * verification of a receive address. */
-    override suspend fun verifyAddress(walletId: String, index: Int, cosignerIndex: Int, signerAccountIndex: Int?): VerifyAddressResponse {
+     * verification of a receive address. fingerprint is forwarded as a query
+     * param so psbt-service can match (fingerprint, accountIndex) against the
+     * cosigner roster — needed when several cosigners share an account index. */
+    override suspend fun verifyAddress(
+        walletId: String,
+        index: Int,
+        cosignerIndex: Int,
+        signerAccountIndex: Int?,
+        fingerprint: String?
+    ): VerifyAddressResponse {
         requireAttached(this::client.isInitialized, "psbt")
         val resp = upstreamRequest("psbt") {
             client.get("${cfg.psbtBaseUrl}/psbt/verify-address") {
@@ -110,6 +124,7 @@ class PsbtClientImpl(private val cfg: AppConfig) : PsbtClient {
                 parameter("index", index)
                 parameter("cosignerIndex", cosignerIndex)
                 signerAccountIndex?.let { parameter("signerAccountIndex", it) }
+                fingerprint?.takeIf { it.isNotBlank() }?.let { parameter("fingerprint", it) }
             }
         }.ensureSuccess("psbt")
         return resp.body()

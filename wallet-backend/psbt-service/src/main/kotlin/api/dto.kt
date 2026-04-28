@@ -13,7 +13,15 @@ data class CreatePsbtRequest(
     val utxos: List<UtxoSelection>? = null, // if null, auto-select UTXOs
     val rbf: Boolean = true,                // Replace-by-fee enabled (BIP-125)
     val label: String? = null,
-    val signerAccountIndex: Int? = null      // BIP-48 account index of the signing cosigner (for multisig TrezorConnect params)
+    // Trezor master fingerprint of the signing device. Primary key for resolving
+    // which cosigner row in a multisig wallet maps to the caller — unique per
+    // physical device, so it survives the case where multiple cosigners share
+    // the same BIP-48 account index. Gateway injects from JWT.
+    val signerFingerprint: String? = null,
+    // BIP-48 account index of the signing cosigner. Kept as a fallback when the
+    // fingerprint isn't available (older clients) — but ambiguous on its own
+    // when two cosigners on different devices both use account 0.
+    val signerAccountIndex: Int? = null
 )
 
 @Serializable
