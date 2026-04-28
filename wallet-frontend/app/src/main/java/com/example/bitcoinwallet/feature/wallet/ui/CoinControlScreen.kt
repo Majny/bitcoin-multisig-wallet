@@ -188,11 +188,13 @@ private fun UtxoRow(
             )
         }
 
-        // Status + date
+        // Status + date — "Pending" for not-yet-confirmed lines up with the
+        // dashboard / multisig tx history wording so the user sees the same
+        // term across the app.
         val statusText = when {
             utxo.reserved -> "Reserved"
             utxo.confirmed -> "Confirmed"
-            else -> "Unconfirmed"
+            else -> "Pending"
         }
         val statusColor = when {
             utxo.reserved -> ErrorRed
