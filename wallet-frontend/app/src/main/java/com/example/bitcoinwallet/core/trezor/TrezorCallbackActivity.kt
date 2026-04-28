@@ -72,6 +72,17 @@ class TrezorCallbackActivity : ComponentActivity() {
             "sign" -> handleSignCallback(responseParam)
             "showAddress" -> {
                 Log.d("TrezorCallback", "Address verification completed")
+                // Bring our app back to the foreground explicitly. Without
+                // this we'd just finish() the callback activity and Android
+                // would return to whoever launched the deeplink — Trezor
+                // Suite, which then re-renders the just-completed getAddress
+                // request because it retains the deeplink state. The user
+                // sees the same Show on Trezor prompt twice, even though
+                // they only clicked once. Mirror sign / auth handlers.
+                startActivity(
+                    Intent(this@TrezorCallbackActivity, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                )
                 finish()
             }
             else -> handleAuthCallback(responseParam)

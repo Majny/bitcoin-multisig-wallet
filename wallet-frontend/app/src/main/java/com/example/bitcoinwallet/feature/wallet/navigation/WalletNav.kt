@@ -248,17 +248,15 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 }
             }
 
-            // Reset Trezor state if user returns without signing (cancel/back).
-            // 120s timeout: covers even slow Trezor interactions (firmware update prompts, etc.)
-            LaunchedEffect(state.awaitingTrezor) {
-                if (state.awaitingTrezor) {
-                    kotlinx.coroutines.delay(120_000L)
-                    if (SessionStore.pendingSignedPsbt.value == null && viewModel.uiState.value.awaitingTrezor) {
-                        Log.d("WalletNav", "Trezor sign timeout — resetting awaitingTrezor")
-                        viewModel.resetTrezorState()
-                    }
-                }
-            }
+            // No auto-timeout. Multisig review plus passphrase entry on the
+            // device routinely takes more than two minutes, and any reset
+            // that runs while the user is still confirming on Trezor
+            // silently drops the eventual callback. The wait holds until
+            // either the callback arrives or the user explicitly cancels
+            // via the UI; an aborted wait still calls
+            // SessionStore.clearPendingSignRequest so a callback arriving
+            // after cancel is rejected at TrezorCallbackActivity by id
+            // mismatch.
 
             // Navigate to success screen when broadcast completes.
             // Separate LaunchedEffect avoids lifecycle issues from navigating inside
@@ -320,7 +318,8 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                             viewModel.resetTrezorState()
                         }
                     }
-                }
+                },
+                onCancelTrezorWait = { viewModel.cancelTrezorWait() }
             )
         }
 
@@ -363,9 +362,18 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
         }
         
         composable(WalletRoutes.TransactionError) { backStackEntry ->
-            val message = backStackEntry.arguments?.getString("message")
-                ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
-                ?: "An unknown error occurred"
+            val raw = backStackEntry.arguments?.getString("message")
+            // URLDecoder.decode throws IllegalArgumentException on malformed
+            // percent-encoding. An uncaught throw here would crash the
+            // composable mid-render and the user ends up on a generic
+            // "unknown error" fallback — show the raw arg instead so at
+            // least the diagnostic text reaches the screen.
+            val message = try {
+                raw?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+            } catch (e: IllegalArgumentException) {
+                Log.w("WalletNav", "Malformed error message arg, showing raw", e)
+                raw
+            } ?: "An unknown error occurred"
 
             TransactionErrorScreen(
                 message = message,
@@ -746,7 +754,8 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                         // PSBT is persisted — every cosigner will see it in their list.
                         navController.popBackStack()
                     }
-                }
+                },
+                onCancelTrezorWait = { viewModel.cancelTrezorWait() }
             )
         }
 
@@ -773,16 +782,30 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 if (SessionStore.activeSignFlow.value != com.example.bitcoinwallet.core.session.SignFlow.PSBT_DETAIL) {
                     return@LaunchedEffect
                 }
+                // The user can navigate between PSBT detail screens while a
+                // Trezor sign is in flight; without this guard we'd consume
+                // the callback against whichever PSBT happens to be on
+                // screen, submitting the wrong signature against the wrong
+                // tx hash. Bail when the pinned psbtId doesn't match —
+                // leave pendingSignedPsbt for the right screen to consume
+                // when the user navigates back to it.
+                val expected = SessionStore.pendingSignPsbtId
+                if (expected != null && expected != psbtId) {
+                    Log.d("WalletNav", "PSBT detail: ignoring callback for $expected while viewing $psbtId")
+                    return@LaunchedEffect
+                }
                 val signedData = pendingSignedPsbt
                 when {
                     signedData == "CANCELLED" -> {
                         SessionStore.setPendingSignedPsbt(null)
                         SessionStore.setActiveSignFlow(null)
+                        SessionStore.pendingSignPsbtId = null
                         viewModel.onTrezorCancelled()
                     }
                     signedData == "WRONG_DEVICE" -> {
                         SessionStore.setPendingSignedPsbt(null)
                         SessionStore.setActiveSignFlow(null)
+                        SessionStore.pendingSignPsbtId = null
                         SessionStore.setPendingLogoutReason(
                             "Signed out for security: connected Trezor did not match the one you signed in with."
                         )
@@ -796,29 +819,22 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     signedData == "ERROR" -> {
                         SessionStore.setPendingSignedPsbt(null)
                         SessionStore.setActiveSignFlow(null)
+                        SessionStore.pendingSignPsbtId = null
                         viewModel.onTrezorFailed("Trezor returned an invalid response. Please try again.")
                     }
                     signedData != null -> {
                         SessionStore.setPendingSignedPsbt(null)
                         SessionStore.setActiveSignFlow(null)
+                        SessionStore.pendingSignPsbtId = null
                         viewModel.onTrezorSigned(signedData)
                     }
                 }
             }
 
-            // Reset awaitingTrezor after 120s if no callback arrives — matches Send flow.
-            LaunchedEffect(detailState.awaitingTrezor) {
-                if (detailState.awaitingTrezor) {
-                    kotlinx.coroutines.delay(120_000L)
-                    if (viewModel.uiState.value.awaitingTrezor &&
-                        SessionStore.pendingSignedPsbt.value == null
-                    ) {
-                        Log.d("WalletNav", "PSBT detail Trezor sign timeout — resetting")
-                        SessionStore.setActiveSignFlow(null)
-                        viewModel.onTrezorFailed("Trezor did not respond in time. Please try again.")
-                    }
-                }
-            }
+            // No auto-timeout: see comment in Send route. The wait holds
+            // indefinitely until either the deeplink callback arrives or the
+            // user clicks "Cancel signing", which clears pendingRequestId so
+            // any post-cancel callback is rejected by TrezorCallbackActivity.
 
             // Navigate to TransactionSent after successful broadcast.
             // Reset the flag so a recomposition or re-entry does not re-navigate.
@@ -841,8 +857,14 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                 state = detailState,
                 onClose = { navController.popBackStack() },
                 onSignPsbt = {
-                    // Claim the sign callback for the PSBT detail flow before launching Trezor.
+                    // Claim the sign callback for the PSBT detail flow before
+                    // launching Trezor. Pin the psbtId too so the LaunchedEffect
+                    // handler (above) can reject a callback that arrives while
+                    // the user is viewing a different PSBT detail screen — the
+                    // signed data would otherwise be submitted via the wrong
+                    // viewmodel against the wrong tx hash.
                     SessionStore.setActiveSignFlow(com.example.bitcoinwallet.core.session.SignFlow.PSBT_DETAIL)
+                    SessionStore.pendingSignPsbtId = detailState.psbtId
                     viewModel.markAwaitingTrezor()
                     val params = detailState.trezorConnectParams
                     val launched = if (params != null) {
@@ -854,6 +876,7 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     }
                     if (!launched) {
                         SessionStore.setActiveSignFlow(null)
+                        SessionStore.pendingSignPsbtId = null
                         viewModel.onTrezorFailed("Trezor Suite is not installed or cannot be launched.")
                     }
                 },
@@ -875,7 +898,8 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
                     viewModel.cancelPsbt(onSuccess = {
                         navController.popBackStack()
                     })
-                }
+                },
+                onCancelTrezorWait = { viewModel.cancelTrezorWait() }
             )
         }
 

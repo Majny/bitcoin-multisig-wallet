@@ -64,6 +64,7 @@ fun PsbtDetailScreen(
     onDismissRecipients: () -> Unit,
     onRenameCosigner: (cosignerIdx: Int, newLabel: String) -> Unit = { _, _ -> },
     onCancelPsbt: () -> Unit = {},
+    onCancelTrezorWait: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var showCancelDialog by remember { mutableStateOf(false) }
@@ -363,37 +364,75 @@ fun PsbtDetailScreen(
                         )
                     }
                 } else if (state.canSign && !state.isBroadcast) {
+                    // Sign button: clickable only at rest. While the deeplink
+                    // is in flight (awaitingTrezor) or the post-Trezor submit
+                    // is running (isLoading) the button is disabled and the
+                    // text reflects which phase we're in — prevents
+                    // double-tap races that would fire two deeplinks.
+                    val signLabel = when {
+                        state.awaitingTrezor -> "Waiting for Trezor…"
+                        state.isLoading -> "Processing…"
+                        else -> "Sign with Trezor"
+                    }
                     Button(
                         onClick = onSignPsbt,
-                        enabled = !state.isLoading,
-                        colors = ButtonDefaults.buttonColors(containerColor = AccentTeal),
+                        enabled = !state.isLoading && !state.awaitingTrezor,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = AccentTeal,
+                            disabledContainerColor = AccentTeal.copy(alpha = 0.5f),
+                            disabledContentColor = TextPrimary
+                        ),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text(
-                            if (state.isLoading) "Processing…" else "Sign with Trezor",
+                            signLabel,
                             color = TextPrimary,
                             fontWeight = FontWeight.SemiBold, fontSize = 16.sp
                         )
                     }
                 }
 
-                // Cancel PSBT — destructive secondary action, hidden once the
-                // tx is broadcast (audit history is preserved on the backend).
                 if (!state.isBroadcast) {
-                    Button(
-                        onClick = { showCancelDialog = true },
-                        enabled = !state.isLoading,
-                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(48.dp)
-                    ) {
-                        Text(
-                            "Cancel PSBT",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 16.sp
-                        )
+                    if (state.awaitingTrezor) {
+                        // While we're waiting on Trezor the destructive
+                        // "Cancel PSBT" is hidden — deleting the draft mid-
+                        // sign would leave the eventual Trezor callback
+                        // submitting against a 404. Instead surface a
+                        // non-destructive "Cancel signing" that just aborts
+                        // the wait and clears pendingRequestId so a late
+                        // callback gets rejected at the activity layer.
+                        Button(
+                            onClick = onCancelTrezorWait,
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        ) {
+                            Text(
+                                "Cancel signing",
+                                color = TextSecondary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp
+                            )
+                        }
+                    } else {
+                        // Cancel PSBT — destructive secondary action, hidden
+                        // once the tx is broadcast (audit history is
+                        // preserved on the backend).
+                        Button(
+                            onClick = { showCancelDialog = true },
+                            enabled = !state.isLoading,
+                            colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth().height(48.dp)
+                        ) {
+                            Text(
+                                "Cancel PSBT",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 16.sp
+                            )
+                        }
                     }
                 }
 

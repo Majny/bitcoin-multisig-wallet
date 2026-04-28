@@ -212,6 +212,22 @@ class SendTransactionViewModel : ViewModel() {
     }
 
     /*
+     * User explicitly aborts the wait for Trezor (e.g. the deeplink launched
+     * but Trezor Suite never came back). Drops the pending request id so any
+     * callback that arrives after the user gave up is rejected at the
+     * activity layer rather than processed against this stale Send session.
+     */
+    fun cancelTrezorWait() {
+        SessionStore.clearPendingSignRequest()
+        _uiState.value = _uiState.value.copy(
+            awaitingTrezor = false,
+            isSending = false,
+            isSubmitting = false,
+            error = null
+        )
+    }
+
+    /*
      * Called when Trezor Suite returned a failure that is NOT a user cancel
      * (malformed JSON, protocol error, etc.). Shows a distinct error.
      */
@@ -251,18 +267,22 @@ class SendTransactionViewModel : ViewModel() {
 
     /*
      * Flip the entry unit between BTC and the user's fiat currency.
-     * Converts the current input so the sats value stays stable across the
-     * toggle — the user sees the same amount denominated differently,
-     * not a reset field.
+     * With a working rate we convert in place so the sats value stays stable
+     * across the toggle. Without a rate (price-service unreachable) the
+     * toggle still flips the unit label — the user can re-enter the amount
+     * in the chosen unit. Conversion is silently skipped: there is no rate
+     * to multiply by, but the user can still pick which unit they're typing
+     * in. Validation downstream will surface the missing-rate situation
+     * (FIAT-mode input with no rate becomes 0 sats and fails the "valid
+     * amount" check) so we don't need to gate the toggle itself.
      */
     fun onAmountUnitToggled() {
         val state = _uiState.value
-        val rate = state.btcFiatRate
-        if (rate == null || rate <= 0.0) return   // no rate → fiat input disabled
-
         val newUnit = if (state.amountUnit == AmountUnit.BTC) AmountUnit.FIAT else AmountUnit.BTC
+        val rate = state.btcFiatRate
         val current = state.amountInput.toDoubleOrNull()
         val converted = when {
+            rate == null || rate <= 0.0 -> state.amountInput   // No conversion possible; keep raw input.
             current == null || current == 0.0 -> state.amountInput
             newUnit == AmountUnit.FIAT -> formatFiatInput(current * rate)
             else -> formatBtcInput(current / rate)

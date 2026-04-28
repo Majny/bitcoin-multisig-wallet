@@ -42,6 +42,7 @@ fun SendTransactionScreen(
     onScanQr: () -> Unit,
     onEditSelection: () -> Unit,
     onCreateTransaction: () -> Unit,
+    onCancelTrezorWait: () -> Unit = {},
     title: String = "New Transaction",
     buttonText: String = "Create Transaction",
     modifier: Modifier = Modifier
@@ -116,7 +117,7 @@ fun SendTransactionScreen(
             SectionLabel("Amount")
             Spacer(Modifier.height(6.dp))
             val unitLabel = if (state.amountUnit == AmountUnit.BTC) "BTC" else state.fiatCurrency
-            val fiatEnabled = (state.btcFiatRate ?: 0.0) > 0.0
+            val rateAvailable = (state.btcFiatRate ?: 0.0) > 0.0
             val placeholder = if (state.amountUnit == AmountUnit.BTC) "0.00000000" else "0.00"
             OutlinedTextField(
                 value = state.amountInput,
@@ -125,23 +126,37 @@ fun SendTransactionScreen(
                 isError = state.amountError != null,
                 supportingText = {
                     val err = state.amountError
-                    if (err != null) {
-                        Text(err, color = ErrorRed, fontSize = 12.sp)
-                    } else {
-                        // Equivalent in the other unit so the user always sees both
-                        // denominations. Empty for a blank input to avoid "≈ 0 CZK" noise.
-                        val equivalent = amountEquivalent(state)
-                        if (equivalent != null) {
-                            Text(equivalent, color = TextMuted, fontSize = 12.sp)
+                    when {
+                        err != null -> Text(err, color = ErrorRed, fontSize = 12.sp)
+                        // Warn the user when they've toggled into FIAT but the
+                        // rate is missing — without a rate the amount converts to
+                        // 0 sats and the Create button will reject it. The hint
+                        // points them back to BTC.
+                        state.amountUnit == AmountUnit.FIAT && !rateAvailable -> Text(
+                            "Exchange rate unavailable — switch back to BTC to enter the amount.",
+                            color = BitcoinOrangeLight,
+                            fontSize = 12.sp
+                        )
+                        else -> {
+                            // Equivalent in the other unit so the user always sees both
+                            // denominations. Empty for a blank input to avoid "≈ 0 CZK" noise.
+                            val equivalent = amountEquivalent(state)
+                            if (equivalent != null) {
+                                Text(equivalent, color = TextMuted, fontSize = 12.sp)
+                            }
                         }
                     }
                 },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 trailingIcon = {
+                    // Toggle is always clickable — the unit label is a user
+                    // setting independent of whether we can do the math. The
+                    // pill is dimmed when the rate is missing so the user
+                    // knows the conversion isn't going to round-trip.
                     AmountUnitPill(
                         label = unitLabel,
-                        enabled = fiatEnabled,
+                        rateAvailable = rateAvailable,
                         onClick = onAmountUnitToggled
                     )
                 },
@@ -274,12 +289,48 @@ fun SendTransactionScreen(
             Spacer(Modifier.height(20.dp))
 
             // ── Create button ──
+            // Disabled across every in-flight phase so a double-tap can't
+            // race us into a second PSBT (which would orphan the first
+            // alongside its UTXO reservation). The label tracks which
+            // phase we're in so the user sees the wait explicitly:
+            //   isSending      — POST /psbt/create in flight
+            //   awaitingTrezor — deeplink launched, waiting for callback
+            //   isSubmitting   — got Trezor result, posting signatures
+            val createLabel = when {
+                state.isSending -> "Creating..."
+                state.awaitingTrezor -> "Waiting for Trezor…"
+                state.isSubmitting -> "Submitting…"
+                else -> buttonText
+            }
             PrimaryButton(
-                text = if (state.isSending) "Creating..." else buttonText,
+                text = createLabel,
                 onClick = onCreateTransaction,
-                enabled = !state.isSending && !state.isLoading,
+                enabled = !state.isSending &&
+                    !state.isLoading &&
+                    !state.awaitingTrezor &&
+                    !state.isSubmitting,
                 modifier = Modifier.fillMaxWidth()
             )
+
+            // Manual abort while we're waiting on Trezor. Clicking it
+            // clears pendingRequestId so a callback that arrives after
+            // the user gave up is rejected at TrezorCallbackActivity
+            // rather than processed against this stale Send session.
+            if (state.awaitingTrezor) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "Cancel signing",
+                    color = TextSecondary,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(8.dp))
+                        .clickable { onCancelTrezorWait() }
+                        .padding(vertical = 10.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                )
+            }
 
             Spacer(Modifier.height(20.dp))
         }
@@ -451,24 +502,27 @@ private fun formatFee(sats: Long, rateSatVb: Double): String {
 }
 
 /*
- * Clickable pill showing the current amount unit. Tapping flips BTC ↔ fiat.
- * Disabled (no click + muted colour) when the BTC/fiat rate is unavailable,
- * so the user isn't offered a toggle that would produce a 0 sats amount.
+ * Clickable pill showing the current amount unit. Tapping always flips
+ * BTC ↔ fiat — the toggle is a UI control independent of whether the
+ * conversion math succeeds. When the BTC/fiat rate is unavailable we mute
+ * the pill colour so the user can tell at a glance that conversions
+ * aren't going to round-trip, but they can still pick which unit they
+ * type in.
  */
 @Composable
 private fun AmountUnitPill(
     label: String,
-    enabled: Boolean,
+    rateAvailable: Boolean,
     onClick: () -> Unit
 ) {
-    val bg = if (enabled) AccentTeal.copy(alpha = 0.15f) else DarkCard.copy(alpha = 0.4f)
-    val fg = if (enabled) AccentTeal else TextMuted
+    val bg = if (rateAvailable) AccentTeal.copy(alpha = 0.15f) else DarkCard.copy(alpha = 0.4f)
+    val fg = if (rateAvailable) AccentTeal else TextMuted
     Row(
         modifier = Modifier
             .padding(end = 8.dp)
             .clip(RoundedCornerShape(8.dp))
             .background(bg)
-            .then(if (enabled) Modifier.clickable(onClick = onClick) else Modifier)
+            .clickable(onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -478,15 +532,13 @@ private fun AmountUnitPill(
             fontSize = 13.sp,
             fontWeight = FontWeight.SemiBold
         )
-        if (enabled) {
-            Spacer(Modifier.width(4.dp))
-            Text(
-                text = "⇅",
-                color = fg,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
+        Spacer(Modifier.width(4.dp))
+        Text(
+            text = "⇅",
+            color = fg,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold
+        )
     }
 }
 

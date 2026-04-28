@@ -103,6 +103,17 @@ object SessionStore {
      */
     @Volatile var pendingRequestId: String? = null
 
+    /*
+     * The PSBT id the deeplink was launched for, when the active flow is
+     * [SignFlow.PSBT_DETAIL]. PsbtDetail's LaunchedEffect on
+     * [pendingSignedPsbt] checks this against its own psbtId before
+     * consuming the callback — without it a callback for PSBT A would be
+     * processed by PSBT B's screen if the user navigated between them
+     * before Trezor responded, submitting the wrong signature against the
+     * wrong tx hash. Null when no PSBT-detail sign is in flight.
+     */
+    @Volatile var pendingSignPsbtId: String? = null
+
     /* Preferred fiat currency for balance display (czk, usd, eur). */
     private val _preferredCurrency = MutableStateFlow("czk")
     val preferredCurrency: StateFlow<String> = _preferredCurrency.asStateFlow()
@@ -166,8 +177,31 @@ object SessionStore {
         _pendingTrezorSignatures.value = null
         _activeSignFlow.value = null
         pendingRequestId = null
+        pendingSignPsbtId = null
         _preferredCurrency.value = "czk"
         SessionPersistence.clear()
+    }
+
+    /*
+     * Aborts an in-flight Trezor sign request from the UI side. Wipes every
+     * signal tied to the deeplink round-trip so a callback that arrives after
+     * the user gave up cannot be processed:
+     *   • pendingRequestId — TrezorCallbackActivity rejects callbacks whose id
+     *     does not match this; clearing it forces any late callback to be
+     *     dropped at the activity level rather than reaching a stale flow.
+     *   • pendingSignedPsbt / pendingSignType / pendingTrezorSignatures —
+     *     drop any partially-buffered result.
+     *   • activeSignFlow — release the SEND/PSBT_DETAIL claim.
+     * Auth (session/refresh) is intentionally untouched — this is a per-sign
+     * cancel, not a logout.
+     */
+    fun clearPendingSignRequest() {
+        pendingRequestId = null
+        pendingSignPsbtId = null
+        _pendingSignedPsbt.value = null
+        _pendingSignType.value = null
+        _pendingTrezorSignatures.value = null
+        _activeSignFlow.value = null
     }
 
     fun hasWalletSelected(): Boolean = !activeWalletId.isNullOrBlank()

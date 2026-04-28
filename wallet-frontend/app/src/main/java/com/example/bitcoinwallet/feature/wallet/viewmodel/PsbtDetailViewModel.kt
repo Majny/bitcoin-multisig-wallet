@@ -175,9 +175,19 @@ class PsbtDetailViewModel : ViewModel() {
                     val wallets = walletsDeferred.await()
 
                     val walletId = signersResp?.walletId ?: dto.walletId
+                    // Prefer the active session's account index — for a single
+                    // Trezor that imported the same multisig under several
+                    // BIP-48 accounts, listWallets returns one row per (device,
+                    // account) pair and a plain firstOrNull(walletId) is
+                    // non-deterministic. The active account is the source of
+                    // truth for "which cosigner am I right now".
+                    val activeAccount = SessionStore.activeAccountIndex
                     val myAccountIndex = wallets
-                        ?.firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
-                        ?.accountIndex ?: SessionStore.activeAccountIndex
+                        ?.firstOrNull { row ->
+                            (row.walletId.ifBlank { row.id }) == walletId &&
+                                (activeAccount == null || row.accountIndex == activeAccount)
+                        }
+                        ?.accountIndex ?: activeAccount
                     val myFingerprint = SessionStore.session?.user?.trezorFingerprint
 
                     val cosigners = buildCosignerList(signersResp, dto.status, myAccountIndex, myFingerprint)
@@ -252,6 +262,20 @@ class PsbtDetailViewModel : ViewModel() {
         )
     }
 
+    /*
+     * User explicitly aborts the wait for Trezor (e.g. Trezor app crashed,
+     * lost the device, gave up). Drops every signal so a callback that
+     * arrives later cannot be silently processed against this PSBT.
+     */
+    fun cancelTrezorWait() {
+        SessionStore.clearPendingSignRequest()
+        _uiState.value = _uiState.value.copy(
+            isLoading = false,
+            awaitingTrezor = false,
+            error = null
+        )
+    }
+
     /* Called when Trezor callback reports a non-cancel failure. */
     fun onTrezorFailed(message: String) {
         _uiState.value = _uiState.value.copy(
@@ -279,6 +303,16 @@ class PsbtDetailViewModel : ViewModel() {
             val state = _uiState.value
             val accessToken = SessionStore.session?.accessToken ?: return@launch
             if (state.psbtId.isBlank() || state.isBroadcast) return@launch
+
+            // If a Trezor sign for THIS PSBT is in flight (the UI normally
+            // hides Cancel PSBT during awaitingTrezor, but state can be lost
+            // across rotation / process death), abort the sign request too.
+            // Without this, a callback arriving after the delete would
+            // submit signatures against a now-404 PSBT and bubble up as a
+            // "Failed to submit signatures" error to the user.
+            if (SessionStore.pendingSignPsbtId == state.psbtId) {
+                SessionStore.clearPendingSignRequest()
+            }
 
             _uiState.value = state.copy(isLoading = true, error = null)
 
@@ -387,15 +421,22 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     private suspend fun resolveMyAccountIndex(walletId: String, accessToken: String): Int? {
+        // Same disambiguation as fetchPsbtDetail — restrict the wallets-list
+        // lookup to the active account so a multisig with multiple membership
+        // rows does not pick a random one.
+        val activeAccount = SessionStore.activeAccountIndex
         val fromWallets = try {
             WalletApi.client.listWallets(accessToken)
-                .firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
+                .firstOrNull { row ->
+                    (row.walletId.ifBlank { row.id }) == walletId &&
+                        (activeAccount == null || row.accountIndex == activeAccount)
+                }
                 ?.accountIndex
         } catch (e: Exception) {
             Log.w(TAG, "Failed to fetch wallet list for isMe resolution", e)
             null
         }
-        return fromWallets ?: SessionStore.activeAccountIndex
+        return fromWallets ?: activeAccount
     }
 
     private fun buildCosignerList(
@@ -403,61 +444,105 @@ class PsbtDetailViewModel : ViewModel() {
         psbtStatus: String,
         myAccountIndex: Int?,
         myFingerprint: String?
-    ): List<CosignerUiInfo> = signersResp?.signers?.map { signer ->
-        val status = when {
-            signer.signed -> SignerStatus.SIGNED
-            psbtStatus == "pending" || psbtStatus == "signed" -> SignerStatus.PENDING
-            else -> SignerStatus.MISSING
+    ): List<CosignerUiInfo> {
+        val signers = signersResp?.signers ?: return emptyList()
+        // Compute "which row is me" once across the whole roster instead of
+        // per-row — the right answer depends on what the OTHER cosigners look
+        // like (e.g. whether an ambiguous account-only fallback is safe), and
+        // a per-row decision can't see that.
+        val meIdx = findMyCosignerIndex(signers, myAccountIndex, myFingerprint)
+        return signers.mapIndexed { i, signer ->
+            val status = when {
+                signer.signed -> SignerStatus.SIGNED
+                psbtStatus == "pending" || psbtStatus == "signed" -> SignerStatus.PENDING
+                else -> SignerStatus.MISSING
+            }
+            CosignerUiInfo(
+                fingerprint = signer.fingerprint,
+                cosignerIndex = signer.cosignerIndex,
+                originPath = signer.originPath,
+                xpub = signer.xpub,
+                status = status,
+                deviceId = signer.deviceId,
+                isMe = i == meIdx,
+                label = signer.label
+            )
         }
-        CosignerUiInfo(
-            fingerprint = signer.fingerprint,
-            cosignerIndex = signer.cosignerIndex,
-            originPath = signer.originPath,
-            xpub = signer.xpub,
-            status = status,
-            deviceId = signer.deviceId,
-            isMe = isCurrentUser(signer, myAccountIndex, myFingerprint),
-            label = signer.label
-        )
-    } ?: emptyList()
+    }
 
     /*
-     * Decides whether a signer row represents the currently-active session.
-     * The two real configurations we have to handle:
+     * Picks the signer row that represents the currently-active session.
+     * The four configurations we have to handle:
      *
-     *   • N Trezors, every cosigner on BIP-48 account 0 — fingerprint alone
-     *     identifies the row because every cosigner has a unique fingerprint.
-     *   • 1 Trezor signing as multiple cosigners through different BIP-48
-     *     accounts — every cosigner row carries the *same* fingerprint, so
-     *     the active accountIndex is what picks "the one that is me right
-     *     now". Fingerprint-only would over-match every row.
+     *   1. N Trezors, every cosigner on BIP-48 account 0 — different
+     *      fingerprints, same accountIndex. (fp, acc) strict match wins.
+     *   2. 1 Trezor signing as multiple cosigners via different BIP-48
+     *      accounts — same fingerprint, different accountIndex. (fp, acc)
+     *      strict match again wins.
+     *   3. Multisig was imported with cosigners derived from a Trezor
+     *      passphrase wallet (fingerprint X) but the user's CURRENT login
+     *      session is on a different passphrase (fingerprint Y). Strict
+     *      match fails because session.fp ≠ cosigner.fp on every row, but
+     *      account-only is unambiguous because the multisig has at most one
+     *      cosigner per account index. Fall back to account-only when the
+     *      match is unique.
+     *   4. Some signers are missing originPath — fall back to fingerprint
+     *      alone when that match is unique.
      *
-     * Combined (fingerprint, accountIndex) match is the only path that gets
-     * both right. Fallbacks cover sessions where one of the two signals is
-     * unavailable (older session snapshots, signers without an originPath).
+     * Returns -1 if no row can be confidently identified as "me", and the
+     * UI shows nothing for YOU rather than guessing.
+     *
+     * Fingerprints arrive in two flavours from Trezor Connect (uint32 as
+     * decimal, e.g. "400209115") versus output descriptors (8-char hex,
+     * e.g. "17dab4db"). normalizeFingerprint folds both to the same form.
      */
-    private fun isCurrentUser(
-        signer: SignerDetailDto,
+    private fun findMyCosignerIndex(
+        signers: List<SignerDetailDto>,
         myAccountIndex: Int?,
         myFingerprint: String?
-    ): Boolean {
-        val signerFp = signer.fingerprint.takeIf { it.isNotBlank() }
-        val signerAcc = signer.originPath?.let { path ->
-            val segs = path.replace("'", "").replace("h", "")
-                .split("/").filter { it.isNotBlank() && it != "m" }
-            if (segs.size >= 3) segs[2].toIntOrNull() else null
+    ): Int {
+        val myFp = normalizeFingerprint(myFingerprint)
+        val accOf: (SignerDetailDto) -> Int? = { signer ->
+            signer.originPath?.let { path ->
+                val segs = path.replace("'", "").replace("h", "")
+                    .split("/").filter { it.isNotBlank() && it != "m" }
+                if (segs.size >= 3) segs[2].toIntOrNull() else null
+            }
+        }
+        val fpOf: (SignerDetailDto) -> String? = { signer -> normalizeFingerprint(signer.fingerprint) }
+
+        // Strict (fp, acc) — handles cases 1 and 2.
+        if (myFp != null && myAccountIndex != null) {
+            val idx = signers.indexOfFirst { fpOf(it) == myFp && accOf(it) == myAccountIndex }
+            if (idx >= 0) return idx
         }
 
-        if (!myFingerprint.isNullOrBlank() && myAccountIndex != null && signerFp != null) {
-            return signerFp.equals(myFingerprint, ignoreCase = true) && signerAcc == myAccountIndex
+        // Account-only — handles case 3 (passphrase wallet mismatch). Only
+        // safe if exactly one cosigner sits on this account; otherwise we
+        // can't tell which one is "me" without the fingerprint.
+        if (myAccountIndex != null) {
+            val matches = signers.indices.filter { accOf(signers[it]) == myAccountIndex }
+            if (matches.size == 1) return matches[0]
         }
-        if (!myFingerprint.isNullOrBlank() && signerFp != null) {
-            return signerFp.equals(myFingerprint, ignoreCase = true)
+
+        // Fingerprint-only — handles case 4 (signer has no originPath).
+        if (myFp != null) {
+            val matches = signers.indices.filter { fpOf(signers[it]) == myFp }
+            if (matches.size == 1) return matches[0]
         }
-        if (myAccountIndex != null && signerAcc != null) {
-            return signerAcc == myAccountIndex
-        }
-        return false
+
+        return -1
+    }
+
+    /*
+     * Trezor returns master fingerprints as a uint32 decimal string while
+     * Bitcoin output descriptors store them as 8-char lowercase hex. Both
+     * are the same bytes — we normalise to hex so equality checks line up.
+     */
+    private fun normalizeFingerprint(fp: String?): String? {
+        if (fp.isNullOrBlank()) return null
+        val asLong = fp.toLongOrNull()
+        return if (asLong != null) "%08x".format(asLong) else fp.lowercase()
     }
 
     fun dismissSignersDialog() {
