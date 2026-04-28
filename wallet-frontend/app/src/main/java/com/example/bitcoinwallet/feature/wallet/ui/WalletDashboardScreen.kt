@@ -216,7 +216,7 @@ private fun TransactionItem(
     val dateText = if (transaction.confirmed) {
         transaction.dateTime.format(dateTimeFormatter)
     } else {
-        "Pending"
+        "Unconfirmed"
     }
 
     Row(

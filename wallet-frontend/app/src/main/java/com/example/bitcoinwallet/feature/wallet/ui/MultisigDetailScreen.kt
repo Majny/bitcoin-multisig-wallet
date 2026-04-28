@@ -258,13 +258,12 @@ private fun MultisigTransactionItem(
     val amountText = String.format(java.util.Locale.US, "%.8f BTC", amountBtc)
     val typeColor = if (transaction.type == TransactionType.RECEIVED) ReceiveGreen else TextSecondary
     // Unconfirmed txs carry a 9999-12-31 sentinel from WalletRepository so
-    // they sort to the top of history; formatting that sentinel as
-    // "MMM dd, HH:mm" reads as "Dec 31, 23:59" which is nonsense to the
-    // user. Mirror the dashboard's "Pending" label instead.
+    // they sort to the top of history; formatting that as "MMM dd, HH:mm"
+    // would render as "Dec 31, 23:59".
     val dateText = if (transaction.confirmed) {
         transaction.dateTime.format(dateTimeFormatter)
     } else {
-        "Pending"
+        "Unconfirmed"
     }
 
     Row(

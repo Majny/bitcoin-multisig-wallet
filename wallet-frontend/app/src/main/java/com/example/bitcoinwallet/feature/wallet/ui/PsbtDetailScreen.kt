@@ -404,13 +404,15 @@ fun PsbtDetailScreen(
                         // callback gets rejected at the activity layer.
                         Button(
                             onClick = onCancelTrezorWait,
-                            colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = ErrorRed.copy(alpha = 0.5f)
+                            ),
                             shape = RoundedCornerShape(12.dp),
                             modifier = Modifier.fillMaxWidth().height(48.dp)
                         ) {
                             Text(
                                 "Cancel signing",
-                                color = TextSecondary,
+                                color = TextPrimary,
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 16.sp
                             )
