@@ -1,3 +1,4 @@
+package cz.majny.wallet.price
 
 import cz.majny.wallet.price.client.CoinGeckoClient
 import cz.majny.wallet.price.config.AppConfig
