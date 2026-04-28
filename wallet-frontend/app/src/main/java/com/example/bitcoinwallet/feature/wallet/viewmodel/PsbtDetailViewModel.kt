@@ -178,8 +178,9 @@ class PsbtDetailViewModel : ViewModel() {
                     val myAccountIndex = wallets
                         ?.firstOrNull { (it.walletId.ifBlank { it.id }) == walletId }
                         ?.accountIndex ?: SessionStore.activeAccountIndex
+                    val myFingerprint = SessionStore.session?.user?.trezorFingerprint
 
-                    val cosigners = buildCosignerList(signersResp, dto.status, myAccountIndex)
+                    val cosigners = buildCosignerList(signersResp, dto.status, myAccountIndex, myFingerprint)
                     _uiState.value = mapDtoToState(dto).copy(cosigners = cosigners)
                 }
             } catch (e: Exception) {
@@ -373,7 +374,8 @@ class PsbtDetailViewModel : ViewModel() {
             Log.d(TAG, "Loading signers for PSBT: $psbtId")
             val response = WalletApi.client.getSignerStatus(psbtId, accessToken)
             val myAccountIndex = resolveMyAccountIndex(response.walletId, accessToken)
-            val cosigners = buildCosignerList(response, _uiState.value.status, myAccountIndex)
+            val myFingerprint = SessionStore.session?.user?.trezorFingerprint
+            val cosigners = buildCosignerList(response, _uiState.value.status, myAccountIndex, myFingerprint)
             _uiState.value = _uiState.value.copy(
                 cosigners = cosigners,
                 signersLoading = false
@@ -399,7 +401,8 @@ class PsbtDetailViewModel : ViewModel() {
     private fun buildCosignerList(
         signersResp: SignerStatusResponseDto?,
         psbtStatus: String,
-        myAccountIndex: Int?
+        myAccountIndex: Int?,
+        myFingerprint: String?
     ): List<CosignerUiInfo> = signersResp?.signers?.map { signer ->
         val status = when {
             signer.signed -> SignerStatus.SIGNED
@@ -413,28 +416,48 @@ class PsbtDetailViewModel : ViewModel() {
             xpub = signer.xpub,
             status = status,
             deviceId = signer.deviceId,
-            isMe = isCurrentUser(signer, myAccountIndex),
+            isMe = isCurrentUser(signer, myAccountIndex, myFingerprint),
             label = signer.label
         )
     } ?: emptyList()
 
+    /*
+     * Decides whether a signer row represents the currently-active session.
+     * The two real configurations we have to handle:
+     *
+     *   • N Trezors, every cosigner on BIP-48 account 0 — fingerprint alone
+     *     identifies the row because every cosigner has a unique fingerprint.
+     *   • 1 Trezor signing as multiple cosigners through different BIP-48
+     *     accounts — every cosigner row carries the *same* fingerprint, so
+     *     the active accountIndex is what picks "the one that is me right
+     *     now". Fingerprint-only would over-match every row.
+     *
+     * Combined (fingerprint, accountIndex) match is the only path that gets
+     * both right. Fallbacks cover sessions where one of the two signals is
+     * unavailable (older session snapshots, signers without an originPath).
+     */
     private fun isCurrentUser(
         signer: SignerDetailDto,
-        myAccountIndex: Int?
+        myAccountIndex: Int?,
+        myFingerprint: String?
     ): Boolean {
-        if (myAccountIndex == null) return false
-        val originPath = signer.originPath ?: return false
-        // BIP-48: purpose'/coinType'/account'/scriptType' — segments[2] is account.
-        // Membership (device ↔ wallet) is proven by the wallet_members row whose
-        // accountIndex we already resolved via listWallets, so account-segment
-        // match is sufficient — no extra fingerprint gate.
-        val segments = originPath
-            .replace("'", "")
-            .replace("h", "")
-            .split("/")
-            .filter { it.isNotBlank() && it != "m" }
-        val cosAccount = if (segments.size >= 3) segments[2].toIntOrNull() else null
-        return cosAccount == myAccountIndex
+        val signerFp = signer.fingerprint.takeIf { it.isNotBlank() }
+        val signerAcc = signer.originPath?.let { path ->
+            val segs = path.replace("'", "").replace("h", "")
+                .split("/").filter { it.isNotBlank() && it != "m" }
+            if (segs.size >= 3) segs[2].toIntOrNull() else null
+        }
+
+        if (!myFingerprint.isNullOrBlank() && myAccountIndex != null && signerFp != null) {
+            return signerFp.equals(myFingerprint, ignoreCase = true) && signerAcc == myAccountIndex
+        }
+        if (!myFingerprint.isNullOrBlank() && signerFp != null) {
+            return signerFp.equals(myFingerprint, ignoreCase = true)
+        }
+        if (myAccountIndex != null && signerAcc != null) {
+            return signerAcc == myAccountIndex
+        }
+        return false
     }
 
     fun dismissSignersDialog() {

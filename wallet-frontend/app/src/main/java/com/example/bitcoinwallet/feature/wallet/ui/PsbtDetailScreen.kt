@@ -18,7 +18,6 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -382,19 +381,18 @@ fun PsbtDetailScreen(
                 // Cancel PSBT — destructive secondary action, hidden once the
                 // tx is broadcast (audit history is preserved on the backend).
                 if (!state.isBroadcast) {
-                    Spacer(modifier = Modifier.height(12.dp))
-                    OutlinedButton(
+                    Button(
                         onClick = { showCancelDialog = true },
                         enabled = !state.isLoading,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRed),
+                        colors = ButtonDefaults.buttonColors(containerColor = ErrorRed),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
+                        modifier = Modifier.fillMaxWidth().height(48.dp)
                     ) {
                         Text(
                             "Cancel PSBT",
-                            color = ErrorRed,
+                            color = TextPrimary,
                             fontWeight = FontWeight.SemiBold,
-                            fontSize = 15.sp
+                            fontSize = 16.sp
                         )
                     }
                 }

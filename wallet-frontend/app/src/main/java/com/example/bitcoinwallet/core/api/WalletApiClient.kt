@@ -322,18 +322,17 @@ class WalletApiClient(
                     Log.d("WalletApiClient", "Refresh token already rotated by sibling request")
                     return@withLock true
                 }
-                try {
-                    val plainClient = HttpClient(Android) {
-                        install(ContentNegotiation) {
-                            json(Json { ignoreUnknownKeys = true; isLenient = true })
-                        }
+                val plainClient = HttpClient(Android) {
+                    install(ContentNegotiation) {
+                        json(Json { ignoreUnknownKeys = true; isLenient = true })
                     }
+                }
+                try {
                     val baseUrl = com.example.bitcoinwallet.core.api.ApiConfig.API_GATEWAY_BASE_URL
                     val resp: TokenRefreshRespDto = plainClient.post("$baseUrl/auth/token/refresh") {
                         contentType(ContentType.Application.Json)
                         setBody(TokenRefreshReqDto(refreshToken = liveRefresh))
                     }.body()
-                    plainClient.close()
                     // Write through to SessionStore (triggers persistSession).
                     SessionStore.refreshToken = resp.refreshToken ?: liveRefresh
                     SessionStore.session = UserSession(
@@ -352,6 +351,11 @@ class WalletApiClient(
                 } catch (e: Exception) {
                     Log.w("WalletApiClient", "Token refresh failed", e)
                     false
+                } finally {
+                    // Always release the one-shot client — body() throwing on a
+                    // network blip used to leak it, slowly piling up Android
+                    // dispatcher threads across long sessions.
+                    plainClient.close()
                 }
             }
         }
