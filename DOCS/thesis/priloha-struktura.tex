@@ -1,0 +1,63 @@
+%%% Příloha A: Obsah elektronické přílohy
+
+\appendix
+\chapter{Obsah elektronické přílohy}
+\label{app:struktura}
+
+Elektronická příloha obsahuje kompletní zdrojové kódy aplikace potřebné
+pro její sestavení a~spuštění. Struktura kořenového adresáře je následující:
+
+\bigskip
+\begin{description}
+\item[\texttt{wallet-backend/}] Backendové mikroslužby implementované
+  v~jazyce Kotlin s~frameworkem Ktor. Adresář obsahuje:
+
+  \begin{description}
+  \item[\texttt{api-gateway/}] API Gateway -- vstupní bod pro mobilní
+    aplikaci, JWT autentizace, směrování požadavků na mikroslužby.
+  \item[\texttt{auth-service/}] Autentizační služba -- vydávání JWT
+    tokenů, správa identit zařízení.
+  \item[\texttt{wallet-registry/}] Správa peněženek -- import deskriptorů,
+    derivace adres, správa cosignerů.
+  \item[\texttt{explorer-service/}] Agregace dat -- zůstatky, historie
+    transakcí, UTXO pro konkrétní peněženku.
+  \item[\texttt{psbt-service/}] PSBT workflow -- tvorba, podepisování
+    a~broadcast transakcí.
+  \item[\texttt{blockchain-service/}] \hfill \\
+    Proxy k~blockchainovým API (Mempool.space, Blockstream Esplora).
+  \item[\texttt{price-service/}] Směnný kurz BTC vůči fiat měnám
+    (CoinGecko API).
+  \item[\texttt{docker-compose.yml}] Definice všech kontejnerů pro
+    spuštění celého backendu jedním příkazem
+    \texttt{docker compose up --build -d}.
+  \item[\texttt{init-db.sql}] Inicializační skript vytvářející databáze
+    při prvním spuštění.
+  \end{description}
+
+\item[\texttt{wallet-frontend/}] Mobilní aplikace pro Android
+  implementovaná v~jazyce Kotlin s~frameworkem Jetpack Compose. Klíčové
+  balíčky:
+
+  \begin{description}
+  \item[\texttt{core/api/}] HTTP klient a~repozitáře pro komunikaci
+    s~backendem.
+  \item[\texttt{core/trezor/}] Integrace s~hardwarovou peněženkou Trezor
+    prostřednictvím deeplink protokolu Trezor Connect.
+  \item[\texttt{core/session/}] Správa stavu přihlášení a~aktivní
+    peněženky.
+  \item[\texttt{feature/trezorconnect/}] Přihlašovací obrazovky --
+    připojení Trezoru a~výběr účtu.
+  \item[\texttt{feature/wallet/}] Hlavní funkcionalita -- dashboard,
+    odeslání a~příjem prostředků, coin control, multisig peněženky,
+    PSBT workflow.
+  \end{description}
+
+\item[\texttt{README.md}] Stručný popis projektu a~návod na sestavení.
+\end{description}
+
+\bigskip
+\noindent\textbf{Požadavky pro sestavení.}
+Pro spuštění backendu je potřeba Docker Engine a~Docker
+Compose~\cite{Docker}. Pro sestavení mobilní aplikace je potřeba Android
+Studio s~Gradle a~Android SDK (minimální API~24). Podrobný postup
+spuštění popisuje kapitola~\ref{chap:uzivatelska}.

@@ -337,11 +337,11 @@ zaměnit nebo přidat podporu vlastního full node bez zásahu do zbytku systém
 \subsection{Cenový zdroj: CoinGecko API}
 
 Pro zobrazení aktuální hodnoty prostředků ve fiat měně používáme
-CoinGecko API~\cite{CoinGeckoAPI}. CoinGecko nabízí bezplatný tier s~dostatečným limitem požadavků
-(30~volání za minutu), podporuje desítky fiat měn a~vyžaduje pouze
-bezplatnou registraci s~Demo API klíčem. Alternativou by bylo
-CoinMarketCap API, které rovněž vyžaduje registraci, ale omezuje
-bezplatné použití přísnějšími limity (20~volání denně).
+CoinGecko API~\cite{CoinGeckoAPI}. CoinGecko nabízí bezplatný tier
+s~dostatečným limitem požadavků (30~volání za minutu na Demo API
+klíči), podporuje desítky fiat měn a~vyžaduje pouze bezplatnou
+registraci. Alternativou by bylo CoinMarketCap API, které pro
+bezplatný plán nabízí méně velkorysé limity.
 
 %% -----------------------------------------------------------------------
 \section{Bezpečnostní model}
@@ -644,14 +644,14 @@ jejich životního cyklu:
   a~\texttt{serialized\_\allowbreak tx} (kompletní serializovaná
   transakce po~podpisu, pokud je dostupná).
 
-\item[\texttt{psbt\_\allowbreak signatures}] -- Sleduje, kteří
+\item[\texttt{psbt\_\allowbreak signatures}] {\sloppy -- Sleduje, kteří
   cosigneři již PSBT podepsali. Obsahuje
   \texttt{psbt\_\allowbreak id} (cizí klíč na \texttt{psbts.id}),
   \texttt{device\_\allowbreak id} (zařízení, které podepsalo),
   \texttt{fingerprint} (otisk kořenového klíče)
   a~\texttt{cosigner\_\allowbreak index} (index cosignera v~rámci
   peněženky). Tato tabulka zabraňuje duplicitnímu podpisu stejným
-  cosignerem.
+  cosignerem.\par}
 \end{description}
 
 Parametry pro Trezor Connect ukládáme jako serializovaný JSON
@@ -1007,8 +1007,9 @@ a~per-output sekcemi s~derivačními cestami. Každá sekce je ukončena nulový
 Pro každý vstup zapisujeme čtyři typy záznamů:
 \begin{itemize}
 \item \texttt{PSBT\_IN\_NON\_WITNESS\_UTXO} -- celá předchozí transakce v~raw
-  formátu. Firmware Trezor od verze~2.4 vyžaduje tento záznam i~pro nativní
-  SegWit vstupy, aby mohl ověřit částky vstupů a~zobrazit správný poplatek.
+  formátu. Firmware Trezor od verze~2.3.1 vyžaduje tento záznam i~pro nativní
+  SegWit vstupy~\cite{TrezorFirmwareDocs}, aby mohl ověřit částky vstupů
+  a~zobrazit správný poplatek.
 \item \texttt{PSBT\_IN\_WITNESS\_UTXO} -- částka a~scriptPubKey utrácené UTXO.
 \item \texttt{PSBT\_IN\_WITNESS\_SCRIPT} -- witness skript multisig transakce
   (pouze pro P2WSH) se~všemi veřejnými klíči v~BIP-67 pořadí.

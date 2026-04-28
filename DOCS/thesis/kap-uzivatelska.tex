@@ -454,9 +454,11 @@ podle BIP-67~\cite{BIP67}, a~uloží stav PSBT jako \uv{1 z~$M$ podpisů}.
 \includegraphics[height=0.22\textheight]{img/screen-psbt-detail.jpeg}\hfill
 \includegraphics[height=0.22\textheight]{img/screen-psbt-signers.jpeg}\hfill
 \includegraphics[height=0.22\textheight]{img/screen-psbt-broadcast.jpeg}
-\caption{PSBT workflow. Zleva: seznam PSBT transakcí; detail PSBT se stavem
-podpisů (1 ze~2); dialog signerů se stavy Signed~/~Pending a~příznakem
-\emph{YOU}; PSBT s~dosaženým prahem (2 ze~2) připravené k~broadcastu.}
+\caption{PSBT workflow. Zleva: seznam PSBT transakcí; detail PSBT
+bezprostředně po vytvoření (0 ze~2 podpisů) s~tlačítkem \emph{Cancel
+PSBT} pro stažení návrhu před podpisem; dialog signerů se stavy
+Signed~/~Pending a~příznakem \emph{YOU}; PSBT s~dosaženým prahem
+(2 ze~2) připravené k~broadcastu.}
 \label{fig:screen-psbt-flow}
 \end{figure}
 
@@ -478,6 +480,10 @@ odpovídající aktuálně přihlášenému účtu je označen příznakem \emph
 
 Pokud transakce čeká na podpis aktuálního cosignera, zobrazí se tlačítko
 \emph{Sign with Trezor}, které přesměruje uživatele do Trezor Suite Mobile.
+Návrh transakce, který ještě nebyl odeslán do sítě, lze tlačítkem
+\emph{Cancel PSBT} stáhnout -- backend záznam smaže a~uvolní zarezervované
+UTXO zpět k~použití v~jiné transakci. Po broadcastu se tlačítko skrývá,
+aby zůstal zachován audit záznam již odeslaných transakcí.
 
 \textbf{Doplnění podpisu dalším cosignerem.}
 Pro doplnění dalšího podpisu musí podepsat jiný cosigner. V~reálném nasazení

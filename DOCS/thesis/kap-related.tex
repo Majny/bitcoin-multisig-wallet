@@ -456,17 +456,17 @@ z~nich a~zdůvodňujeme volbu Trezoru.
 Trezor, vyvinutý českou společností SatoshiLabs, patří mezi nejrozšířenější
 hardwarové peněženky na trhu. Aktuální modelová řada zahrnuje několik zařízení
 -- od Trezor Safe 3 přes Safe 5 s~barevným dotykovým displejem až po nejnovější
-Safe 7, který jako první v~řadě podporuje bezdrátovou komunikaci
-prostřednictvím Bluetooth a~NFC. Starší modely se připojují výhradně přes USB.
-Všechna zařízení podporují protokol Bitcoin včetně SegWit a~multisig
-transakcí.
+Safe 7~\citep{TrezorSafe7} s~bezdrátovou Bluetooth konektivitou; starší
+modely se připojují výhradně přes USB. Všechna zařízení podporují protokol Bitcoin včetně SegWit
+a~multisig transakcí.
 
 Důležité je rozlišovat kompatibilitu s~mobilními zařízeními. Pro deeplink
 komunikaci zprostředkovanou aplikací Trezor Suite Mobile vyžadujeme modely
 z~aktuální řady Safe, konkrétně Trezor Safe~3, Safe~5 nebo Safe~7. Starší
-model \textbf{Trezor One} (první generace s~micro-USB konektorem) mobilní
-aplikaci nepodporuje a~lze jej použít pouze s~desktopovou verzí Trezor
-Suite, takže pro naši aplikaci není použitelný.
+model \textbf{Trezor One} (první generace s~micro-USB konektorem) sice
+s~aplikací Trezor Suite Mobile přes USB pracuje, ale deeplink rozhraní,
+na~kterém naše aplikace závisí, je primárně určené pro řadu Safe, takže
+pro naši aplikaci Trezor One použitelný není.
 
 Pro integraci s~aplikacemi třetích stran slouží rozhraní
 \textbf{Trezor Connect}~\citep{TrezorConnect}. Toto API poskytuje
@@ -634,10 +634,9 @@ klíčů s~možností testování podpisů (health check), kolaborativní podepi
 přes cloud synchronizaci a~podporu coin control. Nunchuk rovněž implementuje
 koncept \emph{inheritance planning} s~využitím časových zámků.
 
-\textbf{Omezení}: Pokročilé funkce Nunchuku, včetně kolaborativního
-podepisování, air-gapped klíčů a~inheritance planningu, jsou dostupné pouze
-v~rámci placeného předplatného (Nunchuk Premium). Bezplatná verze omezuje počet
-klíčů a~peněženek. Tento model předplatného může být překážkou pro uživatele,
+\textbf{Omezení}: Některé pokročilé funkce Nunchuku, jako jsou inheritance
+planning nebo asistovaný multisig se službou Nunchuk, jsou dostupné pouze
+v~rámci placeného předplatného. Tento model může být překážkou pro uživatele,
 kteří preferují plně otevřená řešení bez závislosti na službách třetí strany.
 Navíc cloudová synchronizace, byť end-to-end šifrovaná, přidává závislost
 na~externí infrastruktuře provozovatele.
