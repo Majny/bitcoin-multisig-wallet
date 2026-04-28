@@ -8,7 +8,9 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.Serializable
 import org.slf4j.LoggerFactory
@@ -165,10 +167,27 @@ data class FeeEstimates(
 
 class MempoolClientImpl(
     private val baseUrl: String = "https://mempool.space/api",
+    // Separate base URL for the fee oracle. Blockstream's /fee-estimates
+    // collapses to ~1 sat/vB across every target during low congestion, so
+    // we route fee queries to Mempool.space's /v1/fees/recommended which
+    // keeps the priority levels distinguishable. Defaults to baseUrl when
+    // not provided so test code that doesn't care can stay terse.
+    private val feesUrl: String = baseUrl,
     private val client: HttpClient
 ) : MempoolClient {
 
     private val log = LoggerFactory.getLogger(MempoolClientImpl::class.java)
+
+    // Fee estimate cache. Mempool.space's /v1/fees/recommended is rate-limited
+    // (~60 RPM anonymous) and fees realistically change on the order of one
+    // block (~10 min), so a 30 s in-memory cache covers every Send screen
+    // visit without hitting the upstream more than twice a minute even
+    // under heavy concurrent use. Mutex serialises the recompute so a
+    // simultaneous miss doesn't fan out into N requests.
+    @Volatile private var cachedFees: FeeEstimates? = null
+    @Volatile private var cachedFeesAt: Long = 0L
+    private val feesCacheMutex = Mutex()
+    private val feesTtlMillis: Long = 30_000L
 
     // 5 concurrent requests keeps Blockstream happy (no rate-limiting).
     // Higher concurrency causes 429s and hung connections that add 30+ s.
@@ -236,8 +255,54 @@ class MempoolClientImpl(
         getChecked("$baseUrl/address/$address/txs").body()
 
     override suspend fun getFeeEstimates(): FeeEstimates {
-        // Esplora /fee-estimates returns {"1": 10.0, "3": 7.0, "6": 5.0, ...}
-        // where the key is the confirmation target in blocks.
+        // Cached?
+        val now = System.currentTimeMillis()
+        val cached = cachedFees
+        if (cached != null && now - cachedFeesAt < feesTtlMillis) {
+            return cached
+        }
+
+        // Single-flight: serialise concurrent misses through a mutex so a
+        // burst of users hitting Send simultaneously only causes ONE upstream
+        // request, not N. The first holder fills the cache; everyone else
+        // either hits the cache on re-check or gets the fresh result.
+        return feesCacheMutex.withLock {
+            val recheck = cachedFees
+            if (recheck != null && System.currentTimeMillis() - cachedFeesAt < feesTtlMillis) {
+                return@withLock recheck
+            }
+            val fresh = fetchFeesFromUpstream()
+            cachedFees = fresh
+            cachedFeesAt = System.currentTimeMillis()
+            fresh
+        }
+    }
+
+    /*
+     * Bypasses the cache and goes straight to the upstream fee oracle. Try
+     * Mempool.space's /v1/fees/recommended first (priority levels stay
+     * distinct even when the mempool is empty), then fall back to Esplora's
+     * /fee-estimates if that is rate-limited or unavailable.
+     */
+    private suspend fun fetchFeesFromUpstream(): FeeEstimates {
+        // Primary: Mempool.space's /v1/fees/recommended. The response shape
+        // is exactly our FeeEstimates DTO so we deserialize it directly.
+        // Even when the mempool is empty this endpoint keeps the priority
+        // levels distinct (e.g. fastestFee=3, halfHourFee=1, hourFee=1)
+        // because it has its own block-time prediction model on top of the
+        // raw projections. The Esplora /fee-estimates endpoint, by contrast,
+        // collapses everything to ~1 sat/vB during low congestion which
+        // makes the Low/Medium/High selector meaningless.
+        try {
+            return getChecked("$feesUrl/v1/fees/recommended").body<FeeEstimates>()
+        } catch (e: Exception) {
+            log.warn("Mempool.space /v1/fees/recommended unavailable, falling back to /fee-estimates: {}", e.message)
+        }
+
+        // Fallback: Esplora /fee-estimates returns
+        // {"1": 10.0, "3": 7.0, "6": 5.0, ...} where the key is the
+        // confirmation target in blocks. Use the same baseUrl as the rest
+        // of the API since this is the chain's own oracle.
         val fees: Map<String, Double> = getChecked("$baseUrl/fee-estimates").body()
         fun pick(target: Int): Int {
             val exact = fees[target.toString()]

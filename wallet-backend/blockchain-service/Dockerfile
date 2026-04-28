@@ -29,7 +29,9 @@ COPY --from=builder /app/blockchain-service/build/install/blockchain-service ./
 
 ENV PORT=8086 \
     MAINNET_MEMPOOL_URL=https://blockstream.info/api \
-    TESTNET_MEMPOOL_URL=https://mempool.space/testnet4/api
+    TESTNET_MEMPOOL_URL=https://mempool.space/testnet4/api \
+    MAINNET_FEES_URL=https://mempool.space/api \
+    TESTNET_FEES_URL=https://mempool.space/testnet4/api
 
 EXPOSE 8086
 

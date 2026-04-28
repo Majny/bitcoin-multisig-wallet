@@ -54,10 +54,12 @@ fun main() {
 
     val mainnetClient = MempoolClientImpl(
         baseUrl = cfg.mainnetMempoolUrl,
+        feesUrl = cfg.mainnetFeesUrl,
         client = httpClient
     )
     val testnetClient = MempoolClientImpl(
         baseUrl = cfg.testnetMempoolUrl,
+        feesUrl = cfg.testnetFeesUrl,
         client = httpClient
     )
 
