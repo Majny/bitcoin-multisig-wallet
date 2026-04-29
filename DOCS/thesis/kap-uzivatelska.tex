@@ -161,7 +161,7 @@ ekvivalent ve zvolené fiat měně (CZK, USD nebo EUR -- volbu měny lze
 změnit v~nastavení aplikace, viz sekci~\ref{sec:user-nastaveni}). Pod
 zůstatkem se nachází chronologický seznam transakcí seřazený od nejnovější;
 u~každé transakce je uvedena částka, směr (odeslaná/přijatá), datum a~čas
-nebo příznak \emph{Pending} u~dosud nepotvrzených transakcí. V~dolní části
+nebo příznak \emph{Unconfirmed} u~dosud nepotvrzených transakcí. V~dolní části
 obrazovky jsou dvě hlavní tlačítka: \emph{Send BTC} pro vytvoření nové
 transakce a~\emph{Receive BTC} pro zobrazení přijímací adresy. V~levém
 horním rohu ikona hamburgeru otevírá postranní navigační menu
@@ -480,9 +480,16 @@ odpovídající aktuálně přihlášenému účtu je označen příznakem \emph
 
 Pokud transakce čeká na podpis aktuálního cosignera, zobrazí se tlačítko
 \emph{Sign with Trezor}, které přesměruje uživatele do Trezor Suite Mobile.
+Po stisknutí tlačítko zšedne a~popisek odráží aktuální fázi
+(\emph{Waiting for Trezor\ldots} během čekání na callback,
+\emph{Processing\ldots} při následném odesílání podpisů na backend),
+což brání opakovanému spuštění deeplinku.
 Návrh transakce, který ještě nebyl odeslán do sítě, lze tlačítkem
 \emph{Cancel PSBT} stáhnout -- backend záznam smaže a~uvolní zarezervované
-UTXO zpět k~použití v~jiné transakci. Po broadcastu se tlačítko skrývá,
+UTXO zpět k~použití v~jiné transakci. Po dobu čekání na Trezor se Cancel PSBT
+skrývá a~místo něj se zobrazí nedestruktivní \emph{Cancel signing}, které
+pouze ukončí čekání, aniž by draft smazalo -- případný pozdě dorazivší
+podpis tak nepadne na neexistující záznam. Po broadcastu obě tlačítka mizí,
 aby zůstal zachován audit záznam již odeslaných transakcí.
 
 \textbf{Doplnění podpisu dalším cosignerem.}
