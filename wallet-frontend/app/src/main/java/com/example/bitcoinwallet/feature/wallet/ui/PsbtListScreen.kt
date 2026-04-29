@@ -198,7 +198,7 @@ private fun PsbtListItemRow(
     }
 }
 
-// ============ Previews ============
+// Previews
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

@@ -38,11 +38,11 @@ import kotlinx.serialization.json.jsonPrimitive
 class SessionExpiredException(message: String) : Exception(message)
 
 /*
- * Thrown when a 401 was met with a successful refresh — the new access
+ * Thrown when a 401 was met with a successful refresh - the new access
  * token is already in SessionStore, the caller just needs to retry. ViewModels
  * typically re-trigger the action on the next user input.
  */
-class SessionRefreshedException(message: String = "Session refreshed — please retry") : Exception(message)
+class SessionRefreshedException(message: String = "Session refreshed - please retry") : Exception(message)
 
 /*
  * Single HTTP-level entry point for the app. Every call hits the gateway,
@@ -56,16 +56,16 @@ class WalletApiClient(
     private val client: HttpClient = defaultClient()
 ) {
 
-    // ============ Wallet Management Endpoints ============
+    // Wallet Management Endpoints
 
-    /* GET /wallets — every wallet attached to the authenticated device. */
+    /* GET /wallets - every wallet attached to the authenticated device. */
     suspend fun listWallets(accessToken: String): List<MultisigWalletSummaryDto> {
         return client.get("$baseUrl/wallets") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    /* POST /wallets/import — import via output descriptor. */
+    /* POST /wallets/import - import via output descriptor. */
     suspend fun importWallet(accessToken: String, request: ImportWalletRequestDto): ImportWalletResponseDto {
         return client.post("$baseUrl/wallets/import") {
             header("Authorization", "Bearer $accessToken")
@@ -74,16 +74,16 @@ class WalletApiClient(
         }.body()
     }
 
-    // ============ Explorer Endpoints (wallet-level) ============
+    // Explorer Endpoints (wallet-level)
 
-    /* GET /explorer/wallet/{walletId}/balance — aggregated across all addresses. */
+    /* GET /explorer/wallet/{walletId}/balance - aggregated across all addresses. */
     suspend fun getWalletBalance(walletId: String, accessToken: String): WalletBalanceDto {
         return client.get("$baseUrl/explorer/wallet/$walletId/balance") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    /* GET /explorer/wallet/{walletId}/transactions — history with SENT/RECEIVED
+    /* GET /explorer/wallet/{walletId}/transactions - history with SENT/RECEIVED
      * classification done backend-side so the UI doesn't need to diff vins/vouts. */
     suspend fun getWalletTransactions(
         walletId: String,
@@ -98,7 +98,7 @@ class WalletApiClient(
         }.body()
     }
 
-    /* GET /explorer/wallet/{walletId}/utxos — UTXO list enriched with address
+    /* GET /explorer/wallet/{walletId}/utxos - UTXO list enriched with address
      * metadata for coin control. */
     suspend fun getWalletUtxos(walletId: String, accessToken: String): WalletUtxosDto {
         return client.get("$baseUrl/explorer/wallet/$walletId/utxos") {
@@ -106,14 +106,14 @@ class WalletApiClient(
         }.body()
     }
 
-    /* GET /explorer/wallet/{walletId}/receive-address — first unused address. */
+    /* GET /explorer/wallet/{walletId}/receive-address - first unused address. */
     suspend fun getReceiveAddress(walletId: String, accessToken: String): ReceiveAddressDto {
         return client.get("$baseUrl/explorer/wallet/$walletId/receive-address") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    /* GET /psbt/verify-address — Trezor Connect getAddress params for on-device
+    /* GET /psbt/verify-address - Trezor Connect getAddress params for on-device
      * address verification (multisig needs the full pubkey set + path). */
     suspend fun getVerifyAddressParams(
         walletId: String,
@@ -131,7 +131,7 @@ class WalletApiClient(
         }.body()
     }
 
-    /* GET /explorer/tx/{txid} — single transaction with inputs/outputs. */
+    /* GET /explorer/tx/{txid} - single transaction with inputs/outputs. */
     suspend fun getTransactionDetail(txid: String, accessToken: String, walletId: String? = null): TransactionDetailDto {
         return client.get("$baseUrl/explorer/tx/$txid") {
             header("Authorization", "Bearer $accessToken")
@@ -139,16 +139,16 @@ class WalletApiClient(
         }.body()
     }
 
-    /* GET /explorer/fees — current sat/vB recommendations. */
+    /* GET /explorer/fees - current sat/vB recommendations. */
     suspend fun getFeeEstimates(accessToken: String): FeeEstimatesDto {
         return client.get("$baseUrl/explorer/fees") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    // ============ PSBT Endpoints ============
+    // PSBT Endpoints
 
-    /* POST /psbt — build a new PSBT (UTXO selection + change). */
+    /* POST /psbt - build a new PSBT (UTXO selection + change). */
     suspend fun createPsbt(
         accessToken: String,
         walletId: String,
@@ -177,21 +177,21 @@ class WalletApiClient(
         }.body()
     }
 
-    /* GET /psbt/{id} — full PSBT detail. */
+    /* GET /psbt/{id} - full PSBT detail. */
     suspend fun getPsbtDetail(psbtId: String, accessToken: String): PsbtDetailDto {
         return client.get("$baseUrl/psbt/$psbtId") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    /* GET /psbt/wallet/{walletId} — every PSBT (any state) for the wallet. */
+    /* GET /psbt/wallet/{walletId} - every PSBT (any state) for the wallet. */
     suspend fun listPsbtsForWallet(walletId: String, accessToken: String): PsbtListResponseDto {
         return client.get("$baseUrl/psbt/wallet/$walletId") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    /* DELETE /psbt/{id} — cancels a pending or signed PSBT and releases its
+    /* DELETE /psbt/{id} - cancels a pending or signed PSBT and releases its
      * reserved UTXOs so they can be used in a new transaction. The backend
      * rejects deletion of already-broadcast PSBTs (audit history). */
     suspend fun deletePsbt(psbtId: String, accessToken: String) {
@@ -204,7 +204,7 @@ class WalletApiClient(
         }
     }
 
-    /* POST /psbt/{id}/sign-trezor — submit Trezor Connect signatures (one per
+    /* POST /psbt/{id}/sign-trezor - submit Trezor Connect signatures (one per
      * input) plus the optional serializedTx for the singlesig fast-path. */
     suspend fun signTrezor(
         psbtId: String,
@@ -230,7 +230,7 @@ class WalletApiClient(
         }.body()
     }
 
-    /* POST /psbt/{id}/broadcast-raw — push the serializedTx Trezor returned.
+    /* POST /psbt/{id}/broadcast-raw - push the serializedTx Trezor returned.
      * Bypasses the addSignature/finalize round-trip used by multisig. */
     suspend fun broadcastRawTx(
         psbtId: String,
@@ -254,7 +254,7 @@ class WalletApiClient(
             Json { ignoreUnknownKeys = true }.decodeFromString<BroadcastResponseDto>(rawBody)
         } catch (e: Exception) {
             Log.e("WalletApiClient", "Failed to parse broadcast response, raw: $rawBody", e)
-            // Some upstreams return the txid as plain text on success — treat
+            // Some upstreams return the txid as plain text on success - treat
             // an unparseable 2xx body as success rather than failing the user.
             BroadcastResponseDto(
                 psbtId = psbtId,
@@ -264,14 +264,14 @@ class WalletApiClient(
         }
     }
 
-    /* GET /psbt/{id}/signers — per-cosigner signing status for the PSBT. */
+    /* GET /psbt/{id}/signers - per-cosigner signing status for the PSBT. */
     suspend fun getSignerStatus(psbtId: String, accessToken: String): SignerStatusResponseDto {
         return client.get("$baseUrl/psbt/$psbtId/signers") {
             header("Authorization", "Bearer $accessToken")
         }.body()
     }
 
-    /* PUT /wallets/{walletId}/cosigners/{idx}/label — rename a cosigner row
+    /* PUT /wallets/{walletId}/cosigners/{idx}/label - rename a cosigner row
      * (per-device label, not the wallet-wide nickname). */
     suspend fun updateCosignerLabel(walletId: String, cosignerIdx: Int, label: String, accessToken: String) {
         client.put("$baseUrl/wallets/$walletId/cosigners/$cosignerIdx/label") {
@@ -281,9 +281,9 @@ class WalletApiClient(
         }
     }
 
-    // ============ Price Endpoints ============
+    // Price Endpoints
 
-    /* GET /price — current BTC prices in CZK/USD/EUR (or any subset). */
+    /* GET /price - current BTC prices in CZK/USD/EUR (or any subset). */
     suspend fun getBitcoinPrices(accessToken: String, currencies: String = "czk,usd,eur"): BitcoinPricesDto {
         return client.get("$baseUrl/price") {
             header("Authorization", "Bearer $accessToken")
@@ -291,7 +291,7 @@ class WalletApiClient(
         }.body()
     }
 
-    /* GET /price/convert — sats → fiat (server-side using the cached price). */
+    /* GET /price/convert - sats → fiat (server-side using the cached price). */
     suspend fun convertSatsToFiat(accessToken: String, sats: Long, currency: String = "czk"): ConversionResultDto {
         return client.get("$baseUrl/price/convert") {
             header("Authorization", "Bearer $accessToken")
@@ -306,7 +306,7 @@ class WalletApiClient(
 
         /*
          * Swap the in-memory refresh token for a fresh access token. Returns
-         * true on success — the new token is already in SessionStore and
+         * true on success - the new token is already in SessionStore and
          * SessionPersistence by the time this returns. False means the
          * caller should propagate the original 401.
          */
@@ -316,7 +316,7 @@ class WalletApiClient(
             return refreshMutex.withLock {
                 // If a sibling request entered the mutex first and rotated the token,
                 // our captured value is now stale (auth-service invalidates old tokens
-                // on rotate). Treat that as success — the caller just needs to retry.
+                // on rotate). Treat that as success - the caller just needs to retry.
                 val liveRefresh = SessionStore.refreshToken ?: return@withLock false
                 if (liveRefresh != observedRefresh) {
                     Log.d("WalletApiClient", "Refresh token already rotated by sibling request")
@@ -343,7 +343,7 @@ class WalletApiClient(
                     Log.d("WalletApiClient", "Access token refreshed")
                     true
                 } catch (e: CancellationException) {
-                    // Honor structured concurrency — never swallow cancellation,
+                    // Honor structured concurrency - never swallow cancellation,
                     // otherwise a crash can follow: an exception thrown later in
                     // validateResponse would fire inside an already-cancelled
                     // coroutine and bypass the caller's try/catch.
@@ -352,7 +352,7 @@ class WalletApiClient(
                     Log.w("WalletApiClient", "Token refresh failed", e)
                     false
                 } finally {
-                    // Always release the one-shot client — body() throwing on a
+                    // Always release the one-shot client - body() throwing on a
                     // network blip used to leak it, slowly piling up Android
                     // dispatcher threads across long sessions.
                     plainClient.close()
@@ -411,7 +411,7 @@ class WalletApiClient(
     }
 }
 
-// ============ Explorer DTOs ============
+// Explorer DTOs
 
 @Serializable
 data class WalletBalanceDto(
@@ -518,7 +518,7 @@ data class TxOutputDto(
     val isMine: Boolean = false
 )
 
-// ============ Price DTOs ============
+// Price DTOs
 
 @Serializable
 data class FeeEstimatesDto(
@@ -549,7 +549,7 @@ data class ConversionResultDto(
     val fiatCurrency: String
 )
 
-// ============ PSBT DTOs ============
+// PSBT DTOs
 
 @Serializable
 data class PsbtTxOutputDto(
@@ -713,7 +713,7 @@ data class BroadcastResponseDto(
     val success: Boolean
 )
 
-// ============ Signer Status DTOs ============
+// Signer Status DTOs
 
 @Serializable
 data class SignerStatusResponseDto(
@@ -737,7 +737,7 @@ data class SignerDetailDto(
     val label: String? = null
 )
 
-// ============ Wallet Management DTOs ============
+// Wallet Management DTOs
 
 @Serializable
 data class MultisigWalletSummaryDto(

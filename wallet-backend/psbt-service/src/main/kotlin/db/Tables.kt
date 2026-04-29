@@ -5,7 +5,7 @@ import org.jetbrains.exposed.sql.javatime.timestampWithTimeZone
 
 /*
  * Stores PSBTs in their various lifecycle states (pending, signed, broadcast).
- * trezor_connect_params is a serialized JSON blob — we don't query into it,
+ * trezor_connect_params is a serialized JSON blob - we don't query into it,
  * just hand the whole thing back to the client.
  */
 object PsbtsTable : Table("psbts") {

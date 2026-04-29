@@ -39,7 +39,7 @@ fun TransactionSentScreen(
     ) {
         Spacer(modifier = Modifier.weight(0.3f))
 
-        // ===== Green checkmark circle =====
+        // Green checkmark circle
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -57,7 +57,7 @@ fun TransactionSentScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ===== Title =====
+        // Title
         Text(
             text = "Transaction Sent!",
             color = TextPrimary,
@@ -67,7 +67,7 @@ fun TransactionSentScreen(
 
         Spacer(modifier = Modifier.weight(0.25f))
 
-        // ===== Summary =====
+        // Summary
         Column(
             modifier = Modifier.fillMaxWidth(),
             verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -78,7 +78,7 @@ fun TransactionSentScreen(
 
         Spacer(modifier = Modifier.weight(0.35f))
 
-        // ===== Return button =====
+        // Return button
         PrimaryButton(
             text = "Return To Wallet",
             onClick = onReturnToWallet,
@@ -113,7 +113,7 @@ private fun formatBtcFull(sats: Long): String {
     return String.format(java.util.Locale.US, "%.8f BTC", btc)
 }
 
-// ===== Preview =====
+// Preview
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

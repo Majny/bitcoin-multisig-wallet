@@ -25,7 +25,7 @@ data class CreatePsbtRequest(
     val utxos: List<UtxoSelection>? = null,
     val rbf: Boolean = true,
     val label: String? = null,
-    // Trezor master fingerprint of the signing device — gateway fills this in
+    // Trezor master fingerprint of the signing device - gateway fills this in
     // from the JWT before forwarding to psbt-service so multisig cosigner
     // resolution does not collapse when two devices share an account index.
     val signerFingerprint: String? = null,
@@ -184,7 +184,7 @@ data class BroadcastResponse(
     val success: Boolean
 )
 
-// ========== Signers endpoint ==========
+// Signers endpoint
 
 @Serializable
 data class SignerStatusResponse(

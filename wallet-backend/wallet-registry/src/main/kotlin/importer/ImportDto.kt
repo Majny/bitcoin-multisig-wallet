@@ -3,16 +3,12 @@ package cz.majny.wallet.registry.importer
 import cz.majny.wallet.registry.api.WalletDetail
 import kotlinx.serialization.Serializable
 
-//
 // Request to import a wallet from an output descriptor.
-//
-// Example descriptor (2-of-3 multisig):
+// Example (2-of-3 multisig):
 //   wsh(sortedmulti(2,[aabbccdd/48'/0'/0'/2']xpub6D.../0/STAR,[eeff0011/48'/0'/0'/2']xpub6E.../0/STAR,[11223344/48'/0'/0'/2']xpub6F.../0/STAR))
-//
-// The descriptor can include a #checksum suffix which will be stripped.
-// You can provide both receive and change descriptors separated by a newline,
-// or just the receive descriptor and the change one will be auto-generated (/0/STAR -> /1/STAR).
-//
+// A trailing #checksum is stripped. Receive and change descriptors may be
+// supplied on separate lines; if only the receive descriptor is given, the
+// change one is derived by replacing /0/STAR with /1/STAR.
 @Serializable
 data class ImportWalletRequest(
     /** Raw output descriptor string (required) */

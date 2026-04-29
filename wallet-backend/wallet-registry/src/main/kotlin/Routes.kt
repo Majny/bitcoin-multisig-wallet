@@ -46,7 +46,7 @@ fun Application.configureRoutes(repo: Repository) {
             /*
              * POST /registry/wallets
              * Creates a new wallet (singlesig or multisig) with cosigners, members, and derived addresses.
-             * Idempotent — returns existing wallet if wallet_id already exists.
+             * Idempotent - returns existing wallet if wallet_id already exists.
              * Called by api-gateway during login (singlesig) or wallet creation.
              */
             post("/wallets") {

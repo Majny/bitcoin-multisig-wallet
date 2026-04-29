@@ -24,7 +24,7 @@ import com.example.bitcoinwallet.ui.theme.*
 private val currencies = listOf("CZK", "USD", "EUR")
 
 /*
- * Settings screen — Trezor device status, currency picker, app info.
+ * Settings screen - Trezor device status, currency picker, app info.
  */
 @Composable
 fun SettingsScreen(
@@ -197,7 +197,7 @@ private fun SettingsRow(label: String, value: String) {
     }
 }
 
-// ============ Preview ============
+// Preview
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

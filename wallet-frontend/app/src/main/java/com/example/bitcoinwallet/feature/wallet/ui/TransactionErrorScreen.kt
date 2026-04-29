@@ -39,7 +39,7 @@ fun TransactionErrorScreen(
     ) {
         Spacer(modifier = Modifier.weight(0.3f))
 
-        // ===== Red X circle =====
+        // Red X circle
         Box(
             modifier = Modifier
                 .size(100.dp)
@@ -57,7 +57,7 @@ fun TransactionErrorScreen(
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ===== Title =====
+        // Title
         Text(
             text = title,
             color = TextPrimary,
@@ -67,7 +67,7 @@ fun TransactionErrorScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ===== Message =====
+        // Message
         Text(
             text = message,
             color = TextSecondary,
@@ -78,7 +78,7 @@ fun TransactionErrorScreen(
 
         Spacer(modifier = Modifier.weight(0.5f))
 
-        // ===== Return button =====
+        // Return button
         PrimaryButton(
             text = "Return To Wallet",
             onClick = onReturn,
@@ -89,7 +89,7 @@ fun TransactionErrorScreen(
     }
 }
 
-// ===== Preview =====
+// Preview
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

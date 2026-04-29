@@ -22,7 +22,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
     private lateinit var client: HttpClient
     fun attach(http: HttpClient) { client = http }
 
-    /* GET /explorer/wallet/{walletId}/utxos — flat UTXO list, downscaled DTO
+    /* GET /explorer/wallet/{walletId}/utxos - flat UTXO list, downscaled DTO
      * (no scriptPubKey). Used by routes that don't need the full enriched view. */
     override suspend fun getUtxos(walletId: String): List<UtxoDto> {
         requireAttached(this::client.isInitialized, "explorer")
@@ -33,7 +33,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
         return body.utxos.map { UtxoDto(it.txid, it.vout, it.valueSats, it.address, null) }
     }
 
-    /* GET /explorer/wallet/{walletId}/balance — confirmed + unconfirmed totals. */
+    /* GET /explorer/wallet/{walletId}/balance - confirmed + unconfirmed totals. */
     override suspend fun getWalletBalance(walletId: String): WalletBalanceDto {
         requireAttached(this::client.isInitialized, "explorer")
         val resp = upstreamRequest("explorer") {
@@ -42,7 +42,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
         return resp.body()
     }
 
-    /* GET /explorer/wallet/{walletId}/transactions — paginated tx history with
+    /* GET /explorer/wallet/{walletId}/transactions - paginated tx history with
      * SENT/RECEIVED classification done on the explorer side. */
     override suspend fun getWalletTransactions(walletId: String, limit: Int?, offset: Int?): WalletTransactionsDto {
         requireAttached(this::client.isInitialized, "explorer")
@@ -55,7 +55,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
         return resp.body()
     }
 
-    /* GET /explorer/wallet/{walletId}/utxos — full UTXO list enriched with address
+    /* GET /explorer/wallet/{walletId}/utxos - full UTXO list enriched with address
      * derivation info, used by the coin-control screen. */
     override suspend fun getWalletUtxos(walletId: String): WalletUtxosDto {
         requireAttached(this::client.isInitialized, "explorer")
@@ -65,7 +65,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
         return resp.body()
     }
 
-    /* GET /explorer/wallet/{walletId}/receive-address — first unused receive
+    /* GET /explorer/wallet/{walletId}/receive-address - first unused receive
      * address. Discovers fresh ones if every pre-derived address is used. */
     override suspend fun getReceiveAddress(walletId: String): ReceiveAddressDto {
         requireAttached(this::client.isInitialized, "explorer")
@@ -75,7 +75,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
         return resp.body()
     }
 
-    /* GET /explorer/tx/{txid}/detail — inputs/outputs annotated with which
+    /* GET /explorer/tx/{txid}/detail - inputs/outputs annotated with which
      * addresses belong to the supplied walletId (for the YOURS badge). */
     override suspend fun getTransactionDetail(txid: String, walletId: String?): TransactionDetailDto {
         requireAttached(this::client.isInitialized, "explorer")
@@ -87,7 +87,7 @@ class ExplorerClientImpl(private val cfg: AppConfig) : ExplorerClient {
         return resp.body()
     }
 
-    /* GET /explorer/fees — current sat/vB recommendations (low/medium/high). */
+    /* GET /explorer/fees - current sat/vB recommendations (low/medium/high). */
     override suspend fun getFeeEstimates(): FeeEstimatesExplorerDto {
         requireAttached(this::client.isInitialized, "explorer")
         val resp = upstreamRequest("explorer") {

@@ -55,7 +55,7 @@ class ReceiveBtcViewModel : ViewModel() {
 
                 // Fetch Trezor Connect getAddress params from backend.
                 // For multisig we pass signerAccountIndex so the backend resolves the
-                // correct cosigner origin path — otherwise a non-first cosigner would
+                // correct cosigner origin path - otherwise a non-first cosigner would
                 // receive cosigner[0]'s path and Trezor would reject the derivation.
                 val verifyParams = try {
                     WalletApi.client.getVerifyAddressParams(

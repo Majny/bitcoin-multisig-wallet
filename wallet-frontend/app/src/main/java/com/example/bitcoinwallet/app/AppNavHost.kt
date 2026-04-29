@@ -31,7 +31,7 @@ fun AppNavHost(
     connectTrigger: Int
 ) {
     // If we already have an active session AND a selected wallet, jump
-    // straight into the wallet graph — otherwise start at the connect flow.
+    // straight into the wallet graph - otherwise start at the connect flow.
     val hasActiveSession = SessionStore.session != null && SessionStore.hasWalletSelected()
     val startDestination = if (hasActiveSession) WalletRoutes.Graph else TrezorRoutes.Graph
 
@@ -70,7 +70,7 @@ fun AppNavHost(
     // Session restored from disk only carries the JWT; rehydrate the wallet list
     // so screens that rely on SessionStore.session.user.wallets work. If the user
     // previously switched account and then killed the app, we still have a valid
-    // session but no wallet selected — route them directly to SelectAccount rather
+    // session but no wallet selected - route them directly to SelectAccount rather
     // than making them re-authenticate through Trezor.
     LaunchedEffect(Unit) {
         val s = SessionStore.session ?: return@LaunchedEffect

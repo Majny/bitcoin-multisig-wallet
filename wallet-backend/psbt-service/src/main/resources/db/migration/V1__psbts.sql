@@ -1,4 +1,4 @@
-/* PSBT storage — pending transactions, signing status, and Trezor Connect params. */
+/* PSBT storage - pending transactions, signing status, and Trezor Connect params. */
 
 CREATE TABLE psbts (
     id                      UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -19,7 +19,7 @@ CREATE TABLE psbts (
     serialized_tx           TEXT
 );
 
-/* Signature records — tracks which cosigners have signed each PSBT. */
+/* Signature records - tracks which cosigners have signed each PSBT. */
 CREATE TABLE psbt_signatures (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     psbt_id           UUID NOT NULL REFERENCES psbts(id) ON DELETE CASCADE,

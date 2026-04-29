@@ -226,7 +226,7 @@ private fun handleScannedText(
     onError: (String) -> Unit
 ) {
     if (!text.startsWith("ur:", ignoreCase = true)) {
-        // Plain text descriptor — accept as-is.
+        // Plain text descriptor - accept as-is.
         if (finished.compareAndSet(false, true)) onDescriptor(text.trim())
         return
     }

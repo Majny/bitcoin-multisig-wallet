@@ -1,6 +1,6 @@
 # Multi-stage build pro psbt-service microservice
 
-# === Build stage ===
+# Build stage
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
@@ -22,7 +22,7 @@ COPY psbt-service/src psbt-service/src
 # Builduj
 RUN ./gradlew :psbt-service:installDist --no-daemon
 
-# === Runtime stage ===
+# Runtime stage
 FROM eclipse-temurin:21-jre
 
 LABEL maintainer="majny"

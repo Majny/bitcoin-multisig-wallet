@@ -86,7 +86,7 @@ private fun DrawerMenuItem(
     }
 }
 
-// ============ Preview ============
+// Preview
 
 @Preview(showBackground = true, backgroundColor = 0xFF16213E)
 @Composable

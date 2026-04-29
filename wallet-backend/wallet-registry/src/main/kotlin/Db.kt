@@ -25,7 +25,7 @@ object Db {
         )
     }
 
-    /* Migrate then connect — Exposed always sees a complete schema. */
+    /* Migrate then connect - Exposed always sees a complete schema. */
     fun init(db: DbConfig) {
         Flyway.configure()
             .dataSource(db.url, db.user, db.password)

@@ -23,7 +23,7 @@ class PsbtRepository {
 
     /*
      * Inserts a new PSBT row. TrezorConnectParams are stripped of `refTxs`
-     * before storage — refTxs (full previous transactions) can be tens of KB
+     * before storage - refTxs (full previous transactions) can be tens of KB
      * each and we can re-fetch them from blockchain-service when needed.
      */
     fun create(
@@ -112,12 +112,12 @@ class PsbtRepository {
      * Records a cosigner's signature and bumps the PSBT counters in the same
      * transaction. INSERT into psbt_signatures runs first so the
      * UNIQUE(psbt_id, cosigner_index) constraint catches duplicate sign
-     * attempts before current_sigs is touched — a previous version did the
+     * attempts before current_sigs is touched - a previous version did the
      * UPDATE first, so a duplicated request would inflate current_sigs and
      * flip the PSBT to "signed" with a missing signature row underneath.
      *
      * On a duplicate, the underlying ExposedSQLException propagates out and
-     * the whole transaction rolls back — caller maps it to a 409 Conflict.
+     * the whole transaction rolls back - caller maps it to a 409 Conflict.
      */
     fun signWithAudit(
         id: UUID,
@@ -131,7 +131,7 @@ class PsbtRepository {
     ): Pair<Int, String> = transaction {
         val now = OffsetDateTime.now()
 
-        // INSERT first — UNIQUE(psbt_id, cosigner_index) is our guard against
+        // INSERT first - UNIQUE(psbt_id, cosigner_index) is our guard against
         // a double-sign racing past the early existence check in the route.
         PsbtSignaturesTable.insert {
             it[PsbtSignaturesTable.psbtId] = id
@@ -229,7 +229,7 @@ class PsbtRepository {
             .toSet()
     }
 
-    // ========== Helpers ==========
+    // Helpers
 
     /* Fetches all signature records for a PSBT. */
     private fun getSignatures(psbtId: UUID): List<SignatureInfo> =

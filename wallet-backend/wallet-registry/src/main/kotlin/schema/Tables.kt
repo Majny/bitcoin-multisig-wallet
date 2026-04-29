@@ -20,7 +20,7 @@ object WalletsTable : Table("wallets") {
     override val primaryKey = PrimaryKey(walletId)
 }
 
-/* Cosigners — one xpub at a specific derivation path. */
+/* Cosigners - one xpub at a specific derivation path. */
 object CosignersTable : Table("cosigners") {
     val cosignerId = text("cosigner_id")
     val fingerprint = text("fingerprint")
@@ -38,7 +38,7 @@ object WalletCosignersTable : Table("wallet_cosigners") {
     override val primaryKey = PrimaryKey(walletId, idx)
 }
 
-/* Per-device cosigner labels — each Trezor (device_id from JWT) has its own labels. */
+/* Per-device cosigner labels - each Trezor (device_id from JWT) has its own labels. */
 object CosignerLabelsTable : Table("cosigner_labels") {
     val deviceId = text("device_id")
     val walletId = text("wallet_id").references(WalletsTable.walletId)

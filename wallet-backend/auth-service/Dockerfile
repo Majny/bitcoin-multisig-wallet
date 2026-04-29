@@ -1,6 +1,6 @@
 # Multi-stage build pro auth-service
 
-# === Build stage ===
+# Build stage
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY auth-service/src auth-service/src
 
 RUN ./gradlew :auth-service:installDist --no-daemon
 
-# === Runtime stage ===
+# Runtime stage
 FROM eclipse-temurin:21-jre
 
 LABEL maintainer="majny"

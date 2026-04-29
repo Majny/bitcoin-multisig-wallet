@@ -1,6 +1,6 @@
 # Multi-stage build pro api-gateway
 
-# === Build stage ===
+# Build stage
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY api-gateway/src api-gateway/src
 
 RUN ./gradlew :api-gateway:installDist --no-daemon
 
-# === Runtime stage ===
+# Runtime stage
 FROM eclipse-temurin:21-jre
 
 LABEL maintainer="majny"

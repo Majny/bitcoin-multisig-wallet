@@ -18,7 +18,7 @@ import kotlinx.serialization.json.Json
  * Backend client used during the Trezor-login flow. Three responsibilities:
  *   1. Trade an xpub set for a JWT session (loginWithTrezor).
  *   2. Refresh that session via the rotating refresh token.
- *   3. Account discovery — ask the backend which derivation paths actually
+ *   3. Account discovery - ask the backend which derivation paths actually
  *      have on-chain activity so the user only sees real accounts.
  *
  * Distinct from WalletApiClient: that one is the post-login HTTP surface,
@@ -33,7 +33,7 @@ class MobileSigner(
      * Trade Trezor xpubs for a session. The backend scans every supplied
      * account for activity and auto-creates wallet rows for active ones.
      * The refresh token returned here must be stashed into
-     * SessionStore.refreshToken — it is intentionally not part of UserSession.
+     * SessionStore.refreshToken - it is intentionally not part of UserSession.
      */
     suspend fun loginWithTrezor(identities: List<TrezorDeviceIdentity>): LoginResult {
         val primary = identities.first()
@@ -80,7 +80,7 @@ class MobileSigner(
     }
 
     /*
-     * GET /wallets — list every wallet visible to the JWT. Maps the registry
+     * GET /wallets - list every wallet visible to the JWT. Maps the registry
      * DTO into the UI-shaped WalletSummary so the rest of the app doesn't
      * have to deal with the raw transport types.
      */
@@ -109,7 +109,7 @@ class MobileSigner(
 
 
     /*
-     * POST /accounts/scan — backend probes each derivation path for activity.
+     * POST /accounts/scan - backend probes each derivation path for activity.
      * Drives the post-Trezor-connect screen that lets the user pick an active
      * account instead of starting from m/84'/0'/0' every time.
      */
@@ -145,15 +145,15 @@ class MobileSigner(
     }
 }
 
-/* ---------- MODELS ---------- */
+/* MODELS */
 
-/* loginWithTrezor result — session plus the one-time refresh token. */
+/* loginWithTrezor result - session plus the one-time refresh token. */
 data class LoginResult(
     val session: UserSession,
     val refreshToken: String?
 )
 
-/* refreshTokens result — new access token + (optional) rotated refresh token. */
+/* refreshTokens result - new access token + (optional) rotated refresh token. */
 data class RefreshResult(
     val accessToken: String,
     val refreshToken: String?
@@ -251,7 +251,7 @@ data class WalletLoginSerializable(
     val balanceSats: Long? = null
 )
 
-/* ---------- ACCOUNT DISCOVERY ---------- */
+/* ACCOUNT DISCOVERY */
 
 @Serializable
 data class AccountToScan(

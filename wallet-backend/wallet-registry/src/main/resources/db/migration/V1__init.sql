@@ -1,4 +1,4 @@
--- ===== wallets =====
+-- wallets
 CREATE TABLE IF NOT EXISTS wallets (
   wallet_id              TEXT PRIMARY KEY,
   network                TEXT NOT NULL,
@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS wallets (
 
 CREATE INDEX IF NOT EXISTS wallets_type_idx ON wallets(type);
 
--- ===== cosigners =====
+-- cosigners
 CREATE TABLE IF NOT EXISTS cosigners (
   cosigner_id     TEXT PRIMARY KEY,
   fingerprint     TEXT NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE IF NOT EXISTS cosigners (
   UNIQUE(fingerprint, origin_path, xpub_root)
 );
 
--- ===== wallet_cosigners =====
+-- wallet_cosigners
 CREATE TABLE IF NOT EXISTS wallet_cosigners (
   wallet_id    TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
   idx          INT  NOT NULL,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS wallet_cosigners (
   UNIQUE(wallet_id, cosigner_id)
 );
 
--- ===== cosigner_labels =====
+-- cosigner_labels
 -- Per-device labels for cosigner positions. Each Trezor (device_id from JWT,
 -- deterministic UUID derived from master fingerprint) has its own labels so they
 -- don't leak to other members of the same multisig wallet.
@@ -50,7 +50,7 @@ CREATE TABLE IF NOT EXISTS cosigner_labels (
 
 CREATE INDEX IF NOT EXISTS cosigner_labels_wallet_idx ON cosigner_labels(wallet_id);
 
--- ===== wallet_members =====
+-- wallet_members
 CREATE TABLE IF NOT EXISTS wallet_members (
   wallet_id       TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
   device_id       TEXT NOT NULL,
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS wallet_members (
 
 CREATE INDEX IF NOT EXISTS wallet_members_device_idx ON wallet_members(device_id);
 
--- ===== wallet_addresses =====
+-- wallet_addresses
 CREATE TABLE IF NOT EXISTS wallet_addresses (
   wallet_id       TEXT NOT NULL REFERENCES wallets(wallet_id) ON DELETE CASCADE,
   address_type    TEXT NOT NULL,           -- 'receive' or 'change'

@@ -7,7 +7,7 @@ import org.slf4j.LoggerFactory
 /* Orchestrates wallet import from an output descriptor. Steps:
  *   1. Parse descriptor (type, M/N, cosigners, script type).
  *   2. Validate that the caller's active account is actually a cosigner
- *      (for multisig) — surfaces a friendly error to the UI otherwise.
+ *      (for multisig) - surfaces a friendly error to the UI otherwise.
  *   3. Dedup: if a wallet with the same ID already exists, return it and
  *      auto-attach the calling device as a new member.
  *   4. Otherwise create wallet + cosigners and pre-derive addresses. */

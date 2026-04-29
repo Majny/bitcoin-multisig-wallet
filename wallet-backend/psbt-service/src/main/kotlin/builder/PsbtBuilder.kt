@@ -64,7 +64,7 @@ object PsbtBuilder {
             )
         }
 
-        // Dust limit check — change below threshold is added to the fee instead
+        // Dust limit check - change below threshold is added to the fee instead
         val dustLimit = 546L
         val finalChange = if (changeAmount > dustLimit) {
             changeAmount
@@ -134,7 +134,7 @@ object PsbtBuilder {
         return overhead + outputSize + inputSize
     }
 
-    // ========== Internal PSBT Construction ==========
+    // Internal PSBT Construction
 
     /*
      * Builds the full PSBT binary structure and returns it as base64.
@@ -204,7 +204,7 @@ object PsbtBuilder {
 
         // Per-input sections
         for (utxo in utxos) {
-            // PSBT_IN_NON_WITNESS_UTXO (key 0x00) — full previous transaction.
+            // PSBT_IN_NON_WITNESS_UTXO (key 0x00) - full previous transaction.
             // Trezor firmware 2.4+ requires this for ALL inputs (even P2WPKH)
             // to verify output amounts and display the correct fee.
             if (utxo.rawTxHex != null) {
@@ -212,7 +212,7 @@ object PsbtBuilder {
                     PsbtEncoding.hexToBytes(utxo.rawTxHex))
             }
 
-            // PSBT_IN_WITNESS_UTXO (key 0x01) — amount + scriptPubKey of the spent output
+            // PSBT_IN_WITNESS_UTXO (key 0x01) - amount + scriptPubKey of the spent output
             val witnessUtxo = PsbtEncoding.buildWitnessUtxo(utxo.value, utxo.scriptPubKey)
             psbt.add(0x01) // key length
             psbt.add(0x01) // key type = PSBT_IN_WITNESS_UTXO
@@ -245,7 +245,7 @@ object PsbtBuilder {
                         cosignerPubkeys
                     }
 
-                    // PSBT_IN_WITNESS_SCRIPT (key 0x05) — multisig redeem script
+                    // PSBT_IN_WITNESS_SCRIPT (key 0x05) - multisig redeem script
                     val witnessScript = PsbtEncoding.buildMultisigWitnessScript(m, sorted.map { it.second })
                     PsbtEncoding.writeKv(psbt, PSBT_IN_WITNESS_SCRIPT, ByteArray(0), witnessScript)
                 }
@@ -356,7 +356,7 @@ object PsbtBuilder {
     }
 }
 
-// ========== Data Classes ==========
+// Data Classes
 
 data class SelectedUtxo(
     val txid: String,

@@ -19,7 +19,7 @@ import org.json.JSONObject
  * relaunches MainActivity so the in-flight Compose flow can pick it up.
  *
  * Defense-in-depth: also checks that the responding device's fingerprint
- * matches the session — guards the "user logged in with Trezor A but tried
+ * matches the session - guards the "user logged in with Trezor A but tried
  * to sign with Trezor B" case before the signature ever reaches the backend.
  */
 class TrezorCallbackActivity : ComponentActivity() {
@@ -39,7 +39,7 @@ class TrezorCallbackActivity : ComponentActivity() {
 
         // Validate the id matches the request we launched. Guards against stale
         // callbacks (app was killed and an old intent gets redelivered) and
-        // against callbacks spoofed by another app — the id is generated from
+        // against callbacks spoofed by another app - the id is generated from
         // SecureRandom so an attacker cannot guess it.
         val callbackId = data.getQueryParameter("id")
         val expectedId = SessionStore.pendingRequestId
@@ -74,7 +74,7 @@ class TrezorCallbackActivity : ComponentActivity() {
                 Log.d("TrezorCallback", "Address verification completed")
                 // Bring our app back to the foreground explicitly. Without
                 // this we'd just finish() the callback activity and Android
-                // would return to whoever launched the deeplink — Trezor
+                // would return to whoever launched the deeplink - Trezor
                 // Suite, which then re-renders the just-completed getAddress
                 // request because it retains the deeplink state. The user
                 // sees the same Show on Trezor prompt twice, even though
@@ -90,7 +90,7 @@ class TrezorCallbackActivity : ComponentActivity() {
     }
 
     /*
-     * Handle getPublicKey callback — used for login/account discovery.
+     * Handle getPublicKey callback - used for login/account discovery.
      * Supports bundle mode: Trezor returns all xpubs in a single callback.
      */
     private fun handleAuthCallback(responseJson: String) {
@@ -127,7 +127,7 @@ class TrezorCallbackActivity : ComponentActivity() {
     }
 
     /*
-     * Handle signTransaction callback — user confirmed tx on Trezor.
+     * Handle signTransaction callback - user confirmed tx on Trezor.
      * Trezor Connect returns serializedTx (raw signed tx hex).
      * Legacy PSBT signing returns signedPsbt.
      */
@@ -138,7 +138,7 @@ class TrezorCallbackActivity : ComponentActivity() {
         // signing" case earlier than broadcast failure (singlesig) or backend
         // signature verification (multisig).
         if (isResponseFromDifferentDevice(responseJson)) {
-            Log.w("TrezorCallback", "Sign response from a Trezor whose fingerprint differs from session — rejecting")
+            Log.w("TrezorCallback", "Sign response from a Trezor whose fingerprint differs from session - rejecting")
             SessionStore.setPendingSignedPsbt("WRONG_DEVICE")
             startActivity(
                 Intent(this@TrezorCallbackActivity, MainActivity::class.java)
@@ -185,7 +185,7 @@ class TrezorCallbackActivity : ComponentActivity() {
             val code = payload?.optString("code", "") ?: ""
             val msg = (payload?.optString("error") ?: root.optString("error", "")).lowercase()
             // Firmware rejects when the requested derivation has no matching key on
-            // the connected device — practically means a different Trezor than the
+            // the connected device - practically means a different Trezor than the
             // one that produced the wallet's xpub is plugged in.
             val looksWrongDevice = msg.contains("forbidden key path") ||
                 msg.contains("path not allowed") ||
@@ -206,7 +206,7 @@ class TrezorCallbackActivity : ComponentActivity() {
     /*
      * Returns true when the Trezor that produced this response identifies itself
      * with a different master fingerprint than the one we authenticated with.
-     * Returns false if either fingerprint is missing — we cannot verify, so we
+     * Returns false if either fingerprint is missing - we cannot verify, so we
      * fall through to the existing error paths (firmware key check, broadcast).
      */
     private fun isResponseFromDifferentDevice(responseJson: String): Boolean {
@@ -229,8 +229,8 @@ class TrezorCallbackActivity : ComponentActivity() {
 
     /*
      * Parses a Trezor sign response and distinguishes serializedTx
-     * (Trezor Connect signTransaction — singlesig fast-path) from signedPsbt
-     * (legacy PSBT flow — multisig). Returns Pair(data, type) or null on
+     * (Trezor Connect signTransaction - singlesig fast-path) from signedPsbt
+     * (legacy PSBT flow - multisig). Returns Pair(data, type) or null on
      * failure. For multisig also extracts the per-input `signatures` array
      * and parks it in SessionStore for the multisig submit path.
      */
@@ -265,8 +265,8 @@ class TrezorCallbackActivity : ComponentActivity() {
                 SessionStore.setPendingTrezorSignatures(null)
             }
 
-            // signTransaction returns serializedTx — the complete signed tx,
-            // already finalized — used for the singlesig broadcast-raw fast-path.
+            // signTransaction returns serializedTx - the complete signed tx,
+            // already finalized - used for the singlesig broadcast-raw fast-path.
             val serializedTx = payload.optString("serializedTx", "")
             if (serializedTx.isNotBlank()) {
                 Log.d("TrezorCallback", "Received serializedTx (${serializedTx.length} chars)")

@@ -30,7 +30,7 @@ class RefreshStore(
 ) {
 
     /* Creates a new refresh token and returns the plaintext value. Callers
-     * must hand it to the client immediately — the value is not recoverable
+     * must hand it to the client immediately - the value is not recoverable
      * from the DB (only the hash is kept). */
     fun issue(deviceId: String, fingerprint: String?): String = transaction {
         issueInternal(deviceId, fingerprint)

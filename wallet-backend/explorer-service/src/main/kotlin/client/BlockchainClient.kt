@@ -41,7 +41,7 @@ class BlockchainClient(
         val cacheKey = "$network:$address"
         val now = System.currentTimeMillis()
 
-        // Lazy eviction — good enough for a dev-scale service. The 10k
+        // Lazy eviction - good enough for a dev-scale service. The 10k
         // threshold is a rough guardrail against unbounded memory growth.
         if (addressInfoCache.size > 10_000) {
             addressInfoCache.entries.removeIf { now - it.value.first > CACHE_TTL }
@@ -148,7 +148,7 @@ class BlockchainClient(
 @kotlinx.serialization.Serializable
 data class TipHeightResponse(val height: Int)
 
-// ============ DTOs (mirror blockchain-service / Mempool.space responses) ============
+// DTOs (mirror blockchain-service / Mempool.space responses)
 
 @Serializable
 data class AddressInfo(

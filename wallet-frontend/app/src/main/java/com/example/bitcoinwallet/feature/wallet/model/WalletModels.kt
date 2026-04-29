@@ -3,7 +3,7 @@ package com.example.bitcoinwallet.feature.wallet.model
 import java.time.LocalDateTime
 
 /* UI-shaped transaction row. Derived from WalletTransactionDto by
- * WalletRepository — amount is the signed net effect on the wallet. */
+ * WalletRepository - amount is the signed net effect on the wallet. */
 data class Transaction(
     val id: String,
     val txid: String,

@@ -13,7 +13,7 @@ import io.ktor.server.routing.*
 fun Route.walletRoutes() {
     authenticate("auth-jwt") {
 
-        /* GET /api/v1/wallets — wallets the caller is a member of. */
+        /* GET /api/v1/wallets - wallets the caller is a member of. */
         get("/wallets") {
             val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
             val deviceId = principal.payload.getClaim("device_id").asString()
@@ -23,7 +23,7 @@ fun Route.walletRoutes() {
             call.respond(wallets)
         }
 
-        /* POST /api/v1/wallets — creates a wallet (single-sig or multisig).
+        /* POST /api/v1/wallets - creates a wallet (single-sig or multisig).
          * The request body is forwarded to wallet-registry after ensuring the
          * caller is listed as a member so they get access immediately. */
         post("/wallets") {
@@ -51,7 +51,7 @@ fun Route.walletRoutes() {
             }
         }
 
-        /* POST /api/v1/wallets/import — imports a wallet from an output
+        /* POST /api/v1/wallets/import - imports a wallet from an output
          * descriptor (typically produced in Sparrow). Gateway enriches the
          * registry request with deviceId + fingerprint from the JWT so the
          * registry knows who the caller is. */
@@ -96,7 +96,7 @@ fun Route.walletRoutes() {
             }
         }
 
-        /* GET /api/v1/wallets/{walletId}/address — one derived address from the
+        /* GET /api/v1/wallets/{walletId}/address - one derived address from the
          * registry's pre-derived pool. Query params: type (receive/change,
          * default receive), index (default 0). Enforces membership before
          * proxying. */
@@ -135,7 +135,7 @@ fun Route.walletRoutes() {
             call.respond(addressResponse)
         }
 
-        /* PUT /api/v1/wallets/{walletId}/cosigners/{idx}/label — upserts the
+        /* PUT /api/v1/wallets/{walletId}/cosigners/{idx}/label - upserts the
          * caller's own label for a cosigner position. Scoped by device_id from
          * the JWT: labels are private to each Trezor and never leak between
          * members of the same multisig wallet. */

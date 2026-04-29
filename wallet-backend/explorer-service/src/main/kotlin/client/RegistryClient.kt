@@ -11,7 +11,7 @@ private val log = LoggerFactory.getLogger("RegistryClient")
 
 /*
  * HTTP client for wallet-registry from explorer-service's side. Only needs
- * address lookups and on-demand derivation — we don't go near wallet
+ * address lookups and on-demand derivation - we don't go near wallet
  * creation from here.
  */
 class RegistryClient(
@@ -33,7 +33,7 @@ class RegistryClient(
      * Asks registry to derive (and persist) an address past the existing
      * gap limit. Drives the privacy-critical getNext*Address flow: once
      * every pre-derived address has on-chain activity we must extend the
-     * window instead of reusing. Idempotent — existing rows are returned
+     * window instead of reusing. Idempotent - existing rows are returned
      * as-is. */
     suspend fun deriveAdditionalAddress(
         walletId: String,
@@ -55,7 +55,7 @@ data class DeriveAdditionalAddressRequest(
     val index: Int
 )
 
-// ============ DTOs (mirror wallet-registry responses) ============
+// DTOs (mirror wallet-registry responses)
 
 @Serializable
 data class WalletAddress(

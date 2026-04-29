@@ -25,7 +25,7 @@ import com.example.bitcoinwallet.ui.components.SecondaryButton
 import com.example.bitcoinwallet.ui.theme.*
 
 /*
- * Coin Control screen — UTXO selection for advanced send.
+ * Coin Control screen - UTXO selection for advanced send.
  *
  * Layout based on mockup:
  *   - "UTXOs" title with close button
@@ -51,7 +51,7 @@ fun CoinControlScreen(
             .background(DarkBackground)
             .padding(horizontal = 20.dp, vertical = 16.dp)
     ) {
-        // ===== Header =====
+        // Header
         Box(modifier = Modifier.fillMaxWidth()) {
             Text(
                 text = "UTXOs",
@@ -72,7 +72,7 @@ fun CoinControlScreen(
             }
         }
 
-        // ===== Selection summary =====
+        // Selection summary
         Text(
             text = "${state.selectedCount} selected  ${state.formatSelectedBtc()}",
             color = TextSecondary,
@@ -82,7 +82,7 @@ fun CoinControlScreen(
                 .padding(top = 4.dp, bottom = 16.dp)
         )
 
-        // ===== Action buttons =====
+        // Action buttons
         PrimaryButton(
             text = "Confirmation",
             onClick = onConfirm,
@@ -110,7 +110,7 @@ fun CoinControlScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ===== Loading / Error =====
+        // Loading / Error
         if (state.isLoading) {
             Box(
                 modifier = Modifier.fillMaxWidth().weight(1f),
@@ -133,7 +133,7 @@ fun CoinControlScreen(
                 Text(text = "No UTXOs available", color = TextMuted, fontSize = 14.sp)
             }
         } else {
-            // ===== UTXO list =====
+            // UTXO list
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(0.dp)
@@ -151,7 +151,7 @@ fun CoinControlScreen(
     }
 }
 
-// ===== UTXO Row =====
+// UTXO Row
 
 @Composable
 private fun UtxoRow(
@@ -166,7 +166,7 @@ private fun UtxoRow(
             .padding(vertical = 12.dp, horizontal = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Left side: amount + address — tapping navigates to transaction detail
+        // Left side: amount + address - tapping navigates to transaction detail
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -223,7 +223,7 @@ private fun UtxoRow(
             }
         }
 
-        // Checkbox — disabled for reserved UTXOs
+        // Checkbox - disabled for reserved UTXOs
         Checkbox(
             checked = utxo.selected,
             onCheckedChange = if (utxo.reserved) null else { { onToggle() } },
@@ -239,7 +239,7 @@ private fun UtxoRow(
     }
 }
 
-// ===== Sort Order Dialog =====
+// Sort Order Dialog
 
 @Composable
 private fun SortOrderDialog(
@@ -284,7 +284,7 @@ private fun SortOrderDialog(
     )
 }
 
-// ===== Preview =====
+// Preview
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

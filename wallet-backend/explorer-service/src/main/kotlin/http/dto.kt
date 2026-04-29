@@ -2,7 +2,7 @@ package cz.majny.wallet.explorer.http
 
 import kotlinx.serialization.Serializable
 
-// ============ Wallet Balance ============
+// Wallet Balance
 
 @Serializable
 data class WalletBalanceResponse(
@@ -14,7 +14,7 @@ data class WalletBalanceResponse(
     val addressCount: Int
 )
 
-// ============ Wallet Transactions ============
+// Wallet Transactions
 
 @Serializable
 data class WalletTransactionsResponse(
@@ -41,7 +41,7 @@ data class WalletTransaction(
     val weight: Int = 0
 )
 
-// ============ Wallet UTXOs ============
+// Wallet UTXOs
 
 @Serializable
 data class WalletUtxosResponse(
@@ -64,7 +64,7 @@ data class WalletUtxo(
     val blockTime: Long? = null
 )
 
-// ============ Receive Address ============
+// Receive Address
 
 @Serializable
 data class ReceiveAddressResponse(
@@ -74,7 +74,7 @@ data class ReceiveAddressResponse(
     val isNew: Boolean = true
 )
 
-// ============ Transaction Detail ============
+// Transaction Detail
 
 @Serializable
 data class TransactionDetailResponse(

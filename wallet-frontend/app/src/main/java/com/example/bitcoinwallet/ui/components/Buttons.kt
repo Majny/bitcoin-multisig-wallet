@@ -16,7 +16,7 @@ import com.example.bitcoinwallet.ui.theme.AccentTeal
 import com.example.bitcoinwallet.ui.theme.DarkCard
 import com.example.bitcoinwallet.ui.theme.TextPrimary
 
-/* Primary action button — teal background. */
+/* Primary action button - teal background. */
 @Composable
 fun PrimaryButton(
     text: String,
@@ -45,7 +45,7 @@ fun PrimaryButton(
     }
 }
 
-/* Secondary action button — dark background. */
+/* Secondary action button - dark background. */
 @Composable
 fun SecondaryButton(
     text: String,

@@ -40,7 +40,7 @@ class RegistryClientImpl(
             "RegistryClientImpl is not attached. Call deps.attachHttpClients(application) first."
         }
 
-    /* POST /registry/wallets — creates a wallet record (singlesig or multisig). */
+    /* POST /registry/wallets - creates a wallet record (singlesig or multisig). */
     override suspend fun createWallet(req: CreateWalletRequest): WalletDetail {
         return client().post("$baseUrl/registry/wallets") {
             contentType(ContentType.Application.Json)
@@ -48,12 +48,12 @@ class RegistryClientImpl(
         }.body()
     }
 
-    /* GET /registry/wallets/{walletId} — full wallet detail including cosigners. */
+    /* GET /registry/wallets/{walletId} - full wallet detail including cosigners. */
     override suspend fun getWallet(walletId: String): WalletDetail {
         return client().get("$baseUrl/registry/wallets/$walletId").body()
     }
 
-    /* POST /registry/wallets/{walletId}/members/attach — adds a device as a member. */
+    /* POST /registry/wallets/{walletId}/members/attach - adds a device as a member. */
     override suspend fun attachMember(walletId: String, req: MemberAttach) {
         val resp = client().post("$baseUrl/registry/wallets/$walletId/members/attach") {
             contentType(ContentType.Application.Json)
@@ -62,14 +62,14 @@ class RegistryClientImpl(
         resp.bodyAsText()
     }
 
-    /* GET /registry/wallets?device_id=... — wallets where the device is a member. */
+    /* GET /registry/wallets?device_id=... - wallets where the device is a member. */
     override suspend fun listWallets(deviceId: String): List<RegistryWalletSummary> {
         return client().get("$baseUrl/registry/wallets") {
             url { parameters.append("device_id", deviceId) }
         }.body()
     }
 
-    /* GET /registry/wallets/{walletId}/addresses — single receive/change address by index. */
+    /* GET /registry/wallets/{walletId}/addresses - single receive/change address by index. */
     override suspend fun getWalletAddress(walletId: String, type: String, index: Int): WalletAddressResponse {
         return client().get("$baseUrl/registry/wallets/$walletId/addresses") {
             url {
@@ -79,7 +79,7 @@ class RegistryClientImpl(
         }.body()
     }
 
-    /* POST /registry/wallets/import — imports a multisig wallet from a descriptor.
+    /* POST /registry/wallets/import - imports a multisig wallet from a descriptor.
      * Translates non-2xx responses into an ImportWalletGatewayResponse(success=false)
      * so route handlers can surface the upstream error message verbatim to the UI. */
     override suspend fun importWallet(req: ImportWalletGatewayRequest): ImportWalletGatewayResponse {
@@ -99,7 +99,7 @@ class RegistryClientImpl(
         }
     }
 
-    /* POST /registry/derive-addresses — stateless derivation from a descriptor,
+    /* POST /registry/derive-addresses - stateless derivation from a descriptor,
      * used during account-discovery without creating a wallet yet. */
     override suspend fun deriveAddresses(descriptor: String, network: String, count: Int): List<String> {
         val resp: DeriveAddressesResponse = client().post("$baseUrl/registry/derive-addresses") {
@@ -109,7 +109,7 @@ class RegistryClientImpl(
         return resp.addresses
     }
 
-    /* PUT /registry/wallets/{walletId}/cosigners/{idx}/label — upserts a
+    /* PUT /registry/wallets/{walletId}/cosigners/{idx}/label - upserts a
      * per-device cosigner label. Labels are scoped to the caller's device so
      * personal notes don't leak between multisig members. */
     override suspend fun updateCosignerLabel(
@@ -124,7 +124,7 @@ class RegistryClientImpl(
         }
     }
 
-    /* GET /registry/wallets/{walletId}/cosigner-labels?device_id=... — fetches
+    /* GET /registry/wallets/{walletId}/cosigner-labels?device_id=... - fetches
      * the caller's own labels to layer onto generic signer responses. */
     override suspend fun getCosignerLabels(walletId: String, deviceId: String): Map<Int, String> {
         val resp: CosignerLabelsResponse = client().get("$baseUrl/registry/wallets/$walletId/cosigner-labels") {

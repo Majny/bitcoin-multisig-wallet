@@ -13,7 +13,7 @@ data class UtxoDto(
     val confirmations: Int? = null
 )
 
-// ============ Explorer Service DTOs ============
+// Explorer Service DTOs
 
 @Serializable
 data class WalletBalanceDto(

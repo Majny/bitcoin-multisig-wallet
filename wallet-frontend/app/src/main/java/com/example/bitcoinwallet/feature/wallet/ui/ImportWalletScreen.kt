@@ -205,7 +205,7 @@ private fun ImportErrorCard(message: String) {
     }
 }
 
-// ============ Preview ============
+// Preview
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

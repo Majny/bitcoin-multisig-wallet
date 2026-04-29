@@ -62,7 +62,7 @@ fun Route.authRoutes() {
 
                 if (hasActivity) {
                     log.info("Account {} has activity, creating wallet {}", account.derivationPath, walletCreate.walletId)
-                    // createWallet / attachMember both upsert — duplicate errors
+                    // createWallet / attachMember both upsert - duplicate errors
                     // on subsequent logins are expected and swallowed.
                     try {
                         call.application.deps.registry.createWallet(walletCreate)
@@ -77,11 +77,11 @@ fun Route.authRoutes() {
                     }
                 } else {
                     // BIP-44 gap limit: first inactive account ends discovery.
-                    log.info("Account {} has no activity — BIP-44 gap limit reached, stopping discovery", account.derivationPath)
+                    log.info("Account {} has no activity - BIP-44 gap limit reached, stopping discovery", account.derivationPath)
                     break
                 }
             } catch (e: Exception) {
-                // Any upstream/network error on a single account is non-fatal —
+                // Any upstream/network error on a single account is non-fatal
                 // the user still gets a session; missing wallets recover on refresh.
                 log.warn("Account {} scan failed ({}), skipping", account.derivationPath, e.message)
             }

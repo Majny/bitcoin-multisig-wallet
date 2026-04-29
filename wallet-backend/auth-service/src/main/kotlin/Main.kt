@@ -36,7 +36,7 @@ fun main() {
 
         val issuer = System.getenv("JWT_ISSUER") ?: "wallet-auth"
         val audience = System.getenv("JWT_AUDIENCE") ?: "wallet-gateway"
-        // 24h default — short access tokens (15 min) caused frequent refresh
+        // 24h default - short access tokens (15 min) caused frequent refresh
         // round-trips, multiplying the chance of hitting a transient backend issue.
         val accessTtl = (System.getenv("JWT_ACCESS_TTL_SECONDS") ?: "86400").toLong()
         val refreshTtl = (System.getenv("JWT_REFRESH_TTL_SECONDS") ?: (30L * 24 * 60 * 60).toString()).toLong()

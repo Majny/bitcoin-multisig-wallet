@@ -50,7 +50,7 @@ class WalletExplorer(
         val network = detectNetwork(addresses)
 
         // AddressInfo carries confirmed/unconfirmed balances directly; no need
-        // to walk the UTXO set just to sum them up — saves ~30 mempool.space
+        // to walk the UTXO set just to sum them up - saves ~30 mempool.space
         // calls on a typical wallet.
         val infoList = addresses.map { addr ->
             async {
@@ -76,9 +76,7 @@ class WalletExplorer(
         )
     }
 
-    // ========================================================================
     // TRANSACTIONS
-    // ========================================================================
 
     /*
      * Wallet transaction history. Fans out per address, dedups by txid
@@ -127,7 +125,7 @@ class WalletExplorer(
             }
         }
 
-        // Only fetch full tx lists for addresses that actually have activity —
+        // Only fetch full tx lists for addresses that actually have activity
         // skips ~80% of a fresh wallet's addresses.
         val activeAddresses = infoFetch.awaitAll()
             .filterNotNull()
@@ -190,7 +188,7 @@ class WalletExplorer(
                     val info = blockchain.getAddressInfo(addr.address, network)
                     if (info.utxoCount > 0) addr else null
                 } catch (e: Exception) {
-                    // Err on the side of fetching — a failed info call
+                    // Err on the side of fetching - a failed info call
                     // shouldn't hide real UTXOs.
                     addr
                 }
@@ -220,7 +218,7 @@ class WalletExplorer(
             }
         }.awaitAll().flatten()
 
-        // Confirmed first, then by value desc — matches the coin-control
+        // Confirmed first, then by value desc - matches the coin-control
         // display preference.
         val sorted = enrichedUtxos.sortedWith(
             compareByDescending<WalletUtxo> { it.confirmed }
@@ -246,7 +244,7 @@ class WalletExplorer(
 
     /*
      * First change address with no on-chain activity. Called by psbt-service
-     * during PSBT assembly — privacy invariant: every outgoing tx burns a
+     * during PSBT assembly - privacy invariant: every outgoing tx burns a
      * fresh change output, never a reused one.
      */
     suspend fun getNextChangeAddress(walletId: String): ReceiveAddressResponse {
@@ -257,12 +255,12 @@ class WalletExplorer(
     /*
      * Shared logic for /receive-address and /change-address. If every
      * pre-derived address already has activity, asks registry to derive a new
-     * one past the gap limit. A freshly derived address is normally clean —
+     * one past the gap limit. A freshly derived address is normally clean -
      * but we check anyway to defend against the odd race where someone sent
      * to it before derivation (e.g. paper-trail recovery), and extend up to
      * MAX_DERIVATION_ATTEMPTS times before giving up.
      *
-     * We deliberately don't catch exceptions from the activity check —
+     * We deliberately don't catch exceptions from the activity check -
      * swallowing a blockchain error could let us return a dirty address and
      * quietly break the no-reuse invariant.
      */
@@ -312,7 +310,7 @@ class WalletExplorer(
                 walletId, type, idx, derived.address)
         }
 
-        // Essentially never hit in practice — give up rather than loop forever.
+        // Essentially never hit in practice - give up rather than loop forever.
         error("Failed to find unused $type address for wallet $walletId after " +
                 "$MAX_DERIVATION_ATTEMPTS derivation attempts starting at index $baseIndex")
     }
@@ -336,12 +334,12 @@ class WalletExplorer(
 
     /*
      * Classifies a raw transaction from the wallet's perspective.
-     *   SENT     — at least one input belongs to us
-     *   RECEIVED — no inputs are ours, at least one output is
+     *   SENT     - at least one input belongs to us
+     *   RECEIVED - no inputs are ours, at least one output is
      * Amount semantics:
-     *   SENT     — sum(my inputs) − sum(my outputs, i.e. change) = what
+     *   SENT     - sum(my inputs) − sum(my outputs, i.e. change) = what
      *              actually left + fee
-     *   RECEIVED — sum(outputs paying us)
+     *   RECEIVED - sum(outputs paying us)
      */
     private fun classifyTransaction(
         tx: RawTransaction,
@@ -365,7 +363,7 @@ class WalletExplorer(
 
         if (isSent) {
             type = "SENT"
-            // What I spent = my inputs - my outputs (the change) — includes
+            // What I spent = my inputs - my outputs (the change) - includes
             // the fee plus the actual amount the counterparty received.
             amount = myInputSum - myOutputSum
         } else {

@@ -60,7 +60,7 @@ data class PsbtDetailUiState(
     val isLoading: Boolean = true,
     val error: String? = null,
     val broadcastSuccess: Boolean = false,
-    // Set after the user successfully cancels a draft PSBT — UI uses it to
+    // Set after the user successfully cancels a draft PSBT - UI uses it to
     // navigate back to the PSBT list once.
     val deleteSuccess: Boolean = false,
     // True while waiting for Trezor Suite to return a sign callback.
@@ -75,9 +75,9 @@ data class PsbtDetailUiState(
 
     /*
      * True when the PSBT can be broadcast.
-     *   "signed"    — enough signatures collected; backend finalises on
+     *   "signed"    - enough signatures collected; backend finalises on
      *                 broadcast so this counts as ready.
-     *   "finalized" — PSBT was explicitly finalised.
+     *   "finalized" - PSBT was explicitly finalised.
      */
     val canBroadcast: Boolean
         get() = (status == "finalized" || (status == "signed" && isFullySigned))
@@ -88,7 +88,7 @@ data class PsbtDetailUiState(
 
     /*
      * True when this device already contributed its signature.
-     * Used to hide the Sign button once the user has signed — re-signing with the
+     * Used to hide the Sign button once the user has signed - re-signing with the
      * same key crashes Trezor Suite and cannot add a new signature anyway.
      */
     val currentUserSigned: Boolean
@@ -175,7 +175,7 @@ class PsbtDetailViewModel : ViewModel() {
                     val wallets = walletsDeferred.await()
 
                     val walletId = signersResp?.walletId ?: dto.walletId
-                    // Prefer the active session's account index — for a single
+                    // Prefer the active session's account index - for a single
                     // Trezor that imported the same multisig under several
                     // BIP-48 accounts, listWallets returns one row per (device,
                     // account) pair and a plain firstOrNull(walletId) is
@@ -293,7 +293,7 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     /*
-     * Cancels the current PSBT — backend deletes the row and releases its
+     * Cancels the current PSBT - backend deletes the row and releases its
      * UTXO reservations. Callable while the PSBT is pending or partially
      * signed; refuses on already-broadcast PSBTs (audit history). On success
      * the caller's [onSuccess] is invoked to drive navigation.
@@ -384,7 +384,7 @@ class PsbtDetailViewModel : ViewModel() {
 
     /*
      * Open the signers dialog. Cosigners are loaded eagerly on detail fetch,
-     * so this just flips the flag. If they were missed, refetch defensively.
+     * so this just flips the flag. If they were missed, refetch.
      */
     fun showSignersDialog() {
         _uiState.value = _uiState.value.copy(showSignersDialog = true)
@@ -421,7 +421,7 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     private suspend fun resolveMyAccountIndex(walletId: String, accessToken: String): Int? {
-        // Same disambiguation as fetchPsbtDetail — restrict the wallets-list
+        // Same disambiguation as fetchPsbtDetail - restrict the wallets-list
         // lookup to the active account so a multisig with multiple membership
         // rows does not pick a random one.
         val activeAccount = SessionStore.activeAccountIndex
@@ -447,7 +447,7 @@ class PsbtDetailViewModel : ViewModel() {
     ): List<CosignerUiInfo> {
         val signers = signersResp?.signers ?: return emptyList()
         // Compute "which row is me" once across the whole roster instead of
-        // per-row — the right answer depends on what the OTHER cosigners look
+        // per-row - the right answer depends on what the OTHER cosigners look
         // like (e.g. whether an ambiguous account-only fallback is safe), and
         // a per-row decision can't see that.
         val meIdx = findMyCosignerIndex(signers, myAccountIndex, myFingerprint)
@@ -471,30 +471,16 @@ class PsbtDetailViewModel : ViewModel() {
     }
 
     /*
-     * Picks the signer row that represents the currently-active session.
-     * The four configurations we have to handle:
-     *
-     *   1. N Trezors, every cosigner on BIP-48 account 0 — different
-     *      fingerprints, same accountIndex. (fp, acc) strict match wins.
-     *   2. 1 Trezor signing as multiple cosigners via different BIP-48
-     *      accounts — same fingerprint, different accountIndex. (fp, acc)
-     *      strict match again wins.
-     *   3. Multisig was imported with cosigners derived from a Trezor
-     *      passphrase wallet (fingerprint X) but the user's CURRENT login
-     *      session is on a different passphrase (fingerprint Y). Strict
-     *      match fails because session.fp ≠ cosigner.fp on every row, but
-     *      account-only is unambiguous because the multisig has at most one
-     *      cosigner per account index. Fall back to account-only when the
-     *      match is unique.
-     *   4. Some signers are missing originPath — fall back to fingerprint
-     *      alone when that match is unique.
-     *
-     * Returns -1 if no row can be confidently identified as "me", and the
-     * UI shows nothing for YOU rather than guessing.
-     *
-     * Fingerprints arrive in two flavours from Trezor Connect (uint32 as
-     * decimal, e.g. "400209115") versus output descriptors (8-char hex,
-     * e.g. "17dab4db"). normalizeFingerprint folds both to the same form.
+     * Picks the signer row that represents the active session. Tries strict
+     * (fingerprint, accountIndex) match first - that handles N Trezors on
+     * the same account, and one Trezor split across multiple BIP-48 accounts.
+     * Falls back to account-only when the imported cosigners come from a
+     * different Trezor passphrase than the current login (fingerprints all
+     * mismatch, but account index is still unique per row). Last fallback is
+     * fingerprint alone for older clients with no originPath. Returns -1 if
+     * no row matches confidently. normalizeFingerprint folds the decimal
+     * uint32 form Trezor Connect returns and the 8-char hex from descriptors
+     * into the same shape before comparing.
      */
     private fun findMyCosignerIndex(
         signers: List<SignerDetailDto>,
@@ -511,13 +497,13 @@ class PsbtDetailViewModel : ViewModel() {
         }
         val fpOf: (SignerDetailDto) -> String? = { signer -> normalizeFingerprint(signer.fingerprint) }
 
-        // Strict (fp, acc) — handles cases 1 and 2.
+        // Strict (fp, acc) - handles cases 1 and 2.
         if (myFp != null && myAccountIndex != null) {
             val idx = signers.indexOfFirst { fpOf(it) == myFp && accOf(it) == myAccountIndex }
             if (idx >= 0) return idx
         }
 
-        // Account-only — handles case 3 (passphrase wallet mismatch). Only
+        // Account-only - handles case 3 (passphrase wallet mismatch). Only
         // safe if exactly one cosigner sits on this account; otherwise we
         // can't tell which one is "me" without the fingerprint.
         if (myAccountIndex != null) {
@@ -525,7 +511,7 @@ class PsbtDetailViewModel : ViewModel() {
             if (matches.size == 1) return matches[0]
         }
 
-        // Fingerprint-only — handles case 4 (signer has no originPath).
+        // Fingerprint-only - handles case 4 (signer has no originPath).
         if (myFp != null) {
             val matches = signers.indices.filter { fpOf(signers[it]) == myFp }
             if (matches.size == 1) return matches[0]
@@ -537,7 +523,7 @@ class PsbtDetailViewModel : ViewModel() {
     /*
      * Trezor returns master fingerprints as a uint32 decimal string while
      * Bitcoin output descriptors store them as 8-char lowercase hex. Both
-     * are the same bytes — we normalise to hex so equality checks line up.
+     * are the same bytes - we normalise to hex so equality checks line up.
      */
     private fun normalizeFingerprint(fp: String?): String? {
         if (fp.isNullOrBlank()) return null
@@ -621,7 +607,7 @@ class PsbtDetailViewModel : ViewModel() {
                 )
             },
             // Preserve UI-only state that should survive a data refresh.
-            // broadcastSuccess is an *action* signal (user just broadcast) — never
+            // broadcastSuccess is an *action* signal (user just broadcast) - never
             // derive it from dto.status, otherwise opening an already-broadcast PSBT
             // bounces the user to the "Transaction Sent" screen as if they just sent it.
             showSignersDialog = current.showSignersDialog,

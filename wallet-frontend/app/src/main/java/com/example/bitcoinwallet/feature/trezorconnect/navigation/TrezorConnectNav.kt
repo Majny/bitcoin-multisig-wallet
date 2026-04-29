@@ -27,7 +27,7 @@ object TrezorRoutes {
  * Resolve (exchange xpubs for a session, run discovery) → SelectAccount
  * (pick which discovered wallet to open). Everything outside here treats
  * "session with active wallet" as the only valid entry into the wallet
- * graph — this graph is what establishes both.
+ * graph - this graph is what establishes both.
  */
 fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
     navigation(
@@ -81,7 +81,7 @@ fun NavGraphBuilder.trezorConnectGraph(navController: NavController) {
                         throw Exception("No identities received from Trezor")
                     }
 
-                    // Login with all collected xpubs — backend scans and creates wallets for active accounts.
+                    // Login with all collected xpubs - backend scans and creates wallets for active accounts.
                     // Store the refresh token BEFORE the session so persistSession() picks it up.
                     val loginResult = signer.loginWithTrezor(identities)
                     SessionStore.refreshToken = loginResult.refreshToken

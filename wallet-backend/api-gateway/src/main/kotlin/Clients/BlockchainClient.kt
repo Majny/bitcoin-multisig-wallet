@@ -19,7 +19,7 @@ interface BlockchainClient {
     suspend fun broadcastTransaction(hex: String, network: String = "mainnet"): BroadcastResponse
 }
 
-// ============ Response DTOs ============
+// Response DTOs
 
 @Serializable
 data class AddressInfoResponse(
@@ -90,7 +90,7 @@ data class BroadcastRequest(
     val hex: String
 )
 
-// ============ Implementation ============
+// Implementation
 
 class BlockchainClientImpl(
     private val baseUrl: String
@@ -109,7 +109,7 @@ class BlockchainClientImpl(
         return client
     }
 
-    /* GET /address/{addr} — tx_count + balance, lightweight lookup used by
+    /* GET /address/{addr} - tx_count + balance, lightweight lookup used by
      * account discovery. */
     override suspend fun getAddressInfo(address: String, network: String): AddressInfoResponse {
         return requireClient().get("$baseUrl/api/v1/blockchain/address/$address") {
@@ -117,7 +117,7 @@ class BlockchainClientImpl(
         }.body()
     }
 
-    /* GET /address/{addr}/utxos — UTXO list for a single address. psbt-service
+    /* GET /address/{addr}/utxos - UTXO list for a single address. psbt-service
      * calls this per wallet address when assembling inputs. */
     override suspend fun getAddressUtxos(address: String, network: String): List<UtxoResponse> {
         return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/utxos") {
@@ -125,14 +125,14 @@ class BlockchainClientImpl(
         }.body()
     }
 
-    /* GET /address/{addr}/txs — confirmed + mempool txs touching an address. */
+    /* GET /address/{addr}/txs - confirmed + mempool txs touching an address. */
     override suspend fun getAddressTransactions(address: String, network: String): List<TransactionResponse> {
         return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/txs") {
             parameter("network", network)
         }.body()
     }
 
-    /* GET /address/{addr}/has-activity — one-call activity check used during
+    /* GET /address/{addr}/has-activity - one-call activity check used during
      * BIP-44 account discovery to decide whether to keep scanning. */
     override suspend fun hasActivity(address: String, network: String): HasActivityResponse {
         return requireClient().get("$baseUrl/api/v1/blockchain/address/$address/has-activity") {
@@ -140,14 +140,14 @@ class BlockchainClientImpl(
         }.body()
     }
 
-    /* GET /fees — raw Mempool.space-style fee estimates (sat/vB per priority). */
+    /* GET /fees - raw Mempool.space-style fee estimates (sat/vB per priority). */
     override suspend fun getFeeEstimates(network: String): FeeEstimatesResponse {
         return requireClient().get("$baseUrl/api/v1/blockchain/fees") {
             parameter("network", network)
         }.body()
     }
 
-    /* GET /tx/{txid} — transaction metadata. Full hex is fetched via a separate
+    /* GET /tx/{txid} - transaction metadata. Full hex is fetched via a separate
      * /tx/{txid}/hex endpoint directly on blockchain-service. */
     override suspend fun getTransaction(txid: String, network: String): TransactionResponse {
         return requireClient().get("$baseUrl/api/v1/blockchain/tx/$txid") {
@@ -155,7 +155,7 @@ class BlockchainClientImpl(
         }.body()
     }
 
-    /* POST /tx/broadcast — submits a raw signed transaction hex to the network. */
+    /* POST /tx/broadcast - submits a raw signed transaction hex to the network. */
     override suspend fun broadcastTransaction(hex: String, network: String): BroadcastResponse {
         return requireClient().post("$baseUrl/api/v1/blockchain/tx/broadcast") {
             contentType(ContentType.Application.Json)

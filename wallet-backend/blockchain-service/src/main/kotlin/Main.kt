@@ -27,12 +27,12 @@ import org.slf4j.event.Level
  * client, and exposes them through blockchainRoutes on port 8086 by default.
  *
  * OkHttp engine was picked over CIO after repeated "Connection reset" errors
- * against mempool.space/testnet4 — see memory/bug #19.
+ * against mempool.space/testnet4 - see memory/bug #19.
  */
 fun main() {
     val cfg = AppConfig.fromEnv()
 
-    // Shared HTTP client for both mainnet and testnet — upstream APIs are
+    // Shared HTTP client for both mainnet and testnet - upstream APIs are
     // Esplora-compatible so only the base URL differs.
     val httpClient = HttpClient(OkHttp) {
         install(ClientContentNegotiation) {
@@ -45,7 +45,7 @@ fun main() {
             level = LogLevel.INFO
         }
         install(HttpTimeout) {
-            // Fail fast when Blockstream/mempool hangs — MempoolClient retries
+            // Fail fast when Blockstream/mempool hangs - MempoolClient retries
             // once anyway, so a 15 s ceiling is enough.
             requestTimeoutMillis = 15_000
             connectTimeoutMillis = 10_000

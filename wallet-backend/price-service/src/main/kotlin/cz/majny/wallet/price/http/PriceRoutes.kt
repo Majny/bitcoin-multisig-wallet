@@ -8,7 +8,7 @@ import io.ktor.server.routing.*
 import kotlinx.serialization.Serializable
 
 /*
- * REST surface for BTC price data. Two endpoints — current prices and
+ * REST surface for BTC price data. Two endpoints - current prices and
  * sats→fiat conversion. The /health probe lives in Main.kt at the routing
  * root so docker-compose can hit /health directly without a per-service
  * special case.
@@ -17,7 +17,7 @@ fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
 
     route("/price") {
 
-        /* GET /price?currencies=czk,usd,eur — current BTC prices with 24 h
+        /* GET /price?currencies=czk,usd,eur - current BTC prices with 24 h
          * change. Response is whatever CoinGeckoClient has cached (or fresh
          * if TTL expired). Defaults to the three wallet-supported fiats. */
         get {
@@ -28,7 +28,7 @@ fun Route.priceRoutes(coinGeckoClient: CoinGeckoClient) {
             call.respond(prices)
         }
 
-        /* GET /price/convert?sats=…&currency=czk — sats → fiat. Source of
+        /* GET /price/convert?sats=…&currency=czk - sats → fiat. Source of
          * truth for the send-screen currency toggle; returns 400 on a
          * missing sats param or a currency the upstream didn't include. */
         get("/convert") {

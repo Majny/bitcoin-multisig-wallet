@@ -28,17 +28,17 @@ dependencies {
     implementation("io.ktor:ktor-server-auth-jvm:3.0.0")
     implementation("io.ktor:ktor-server-auth-jwt-jvm:3.0.0")
 
-    // -------- JWT --------
+    // JWT
     implementation("com.auth0:java-jwt:4.4.0")
 
-    // -------- KTOR CLIENT --------
+    // KTOR CLIENT
     implementation("io.ktor:ktor-client-core:3.0.0")
     implementation("io.ktor:ktor-client-cio:3.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
     implementation("io.ktor:ktor-client-logging:3.0.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
 
-    // -------- LOGGING --------
+    // LOGGING
     implementation("ch.qos.logback:logback-classic:1.5.6")
     implementation("io.github.cdimascio:dotenv-kotlin:6.4.1")
     implementation("com.auth0:jwks-rsa:0.22.1")

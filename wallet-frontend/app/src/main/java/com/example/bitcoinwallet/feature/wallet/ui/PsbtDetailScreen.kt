@@ -156,7 +156,7 @@ fun PsbtDetailScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp)
             ) {
-                // Status badge — shows "Broadcasted" for already-sent PSBTs,
+                // Status badge - shows "Broadcasted" for already-sent PSBTs,
                 // otherwise the signature progress (e.g. "2 of 3 required").
                 val badgeColor = if (state.isBroadcast || state.isFullySigned || state.canBroadcast)
                     ReceiveGreen else AccentTeal
@@ -339,7 +339,7 @@ fun PsbtDetailScreen(
                         )
                     }
                 } else if (state.currentUserSigned && !state.isBroadcast) {
-                    // This device already signed — re-signing crashes Trezor Suite.
+                    // This device already signed - re-signing crashes Trezor Suite.
                     // Tinted with ReceiveGreen to mirror the "Signed" status colour
                     // used in the Signatures card; the disabled button reads as a
                     // success-in-progress, not an error.
@@ -367,7 +367,7 @@ fun PsbtDetailScreen(
                     // Sign button: clickable only at rest. While the deeplink
                     // is in flight (awaitingTrezor) or the post-Trezor submit
                     // is running (isLoading) the button is disabled and the
-                    // text reflects which phase we're in — prevents
+                    // text reflects which phase we're in - prevents
                     // double-tap races that would fire two deeplinks.
                     val signLabel = when {
                         state.awaitingTrezor -> "Waiting for Trezor…"
@@ -396,7 +396,7 @@ fun PsbtDetailScreen(
                 if (!state.isBroadcast) {
                     if (state.awaitingTrezor) {
                         // While we're waiting on Trezor the destructive
-                        // "Cancel PSBT" is hidden — deleting the draft mid-
+                        // "Cancel PSBT" is hidden - deleting the draft mid-
                         // sign would leave the eventual Trezor callback
                         // submitting against a 404. Instead surface a
                         // non-destructive "Cancel signing" that just aborts
@@ -418,7 +418,7 @@ fun PsbtDetailScreen(
                             )
                         }
                     } else {
-                        // Cancel PSBT — destructive secondary action, hidden
+                        // Cancel PSBT - destructive secondary action, hidden
                         // once the tx is broadcast (audit history is
                         // preserved on the backend).
                         Button(
@@ -645,7 +645,7 @@ private fun SignersDialog(
     }
 }
 
-// ============ Previews ============
+// Previews
 
 @Preview(showBackground = true, backgroundColor = 0xFF1A1A2E)
 @Composable

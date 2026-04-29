@@ -34,7 +34,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.ensureWalletAccess(wal
 fun Route.explorerRoutes() {
     authenticate("auth-jwt") {
 
-        /* GET /api/v1/wallets/{walletId}/utxos — legacy path kept for older
+        /* GET /api/v1/wallets/{walletId}/utxos - legacy path kept for older
          * clients. New callers should use /explorer/wallet/{id}/utxos. */
         get("/wallets/{walletId}/utxos") {
             val walletId = call.parameters["walletId"] ?: error("walletId missing")
@@ -45,7 +45,7 @@ fun Route.explorerRoutes() {
 
         route("/explorer") {
 
-            /* GET /api/v1/explorer/wallet/{walletId}/balance — aggregated balance. */
+            /* GET /api/v1/explorer/wallet/{walletId}/balance - aggregated balance. */
             get("/wallet/{walletId}/balance") {
                 val walletId = call.parameters["walletId"] ?: error("walletId missing")
                 if (!ensureWalletAccess(walletId)) return@get
@@ -53,7 +53,7 @@ fun Route.explorerRoutes() {
                 call.respond(balance)
             }
 
-            /* GET /api/v1/explorer/wallet/{walletId}/transactions — paginated
+            /* GET /api/v1/explorer/wallet/{walletId}/transactions - paginated
              * tx history already classified as SENT / RECEIVED by explorer. */
             get("/wallet/{walletId}/transactions") {
                 val walletId = call.parameters["walletId"] ?: error("walletId missing")
@@ -64,7 +64,7 @@ fun Route.explorerRoutes() {
                 call.respond(txs)
             }
 
-            /* GET /api/v1/explorer/wallet/{walletId}/utxos — full UTXO list
+            /* GET /api/v1/explorer/wallet/{walletId}/utxos - full UTXO list
              * (coin-control view) with derivation info per UTXO. */
             get("/wallet/{walletId}/utxos") {
                 val walletId = call.parameters["walletId"] ?: error("walletId missing")
@@ -73,7 +73,7 @@ fun Route.explorerRoutes() {
                 call.respond(utxos)
             }
 
-            /* GET /api/v1/explorer/wallet/{walletId}/receive-address — first
+            /* GET /api/v1/explorer/wallet/{walletId}/receive-address - first
              * unused receive address, derives more if the gap limit is hit. */
             get("/wallet/{walletId}/receive-address") {
                 val walletId = call.parameters["walletId"] ?: error("walletId missing")
@@ -82,7 +82,7 @@ fun Route.explorerRoutes() {
                 call.respond(addr)
             }
 
-            /* GET /api/v1/explorer/tx/{txid} — tx detail with YOURS flags for
+            /* GET /api/v1/explorer/tx/{txid} - tx detail with YOURS flags for
              * the supplied ?walletId. Not wallet-membership guarded because the
              * underlying data is public on-chain. */
             get("/tx/{txid}") {
@@ -92,7 +92,7 @@ fun Route.explorerRoutes() {
                 call.respond(detail)
             }
 
-            /* GET /api/v1/explorer/fees — current sat/vB recommendations. */
+            /* GET /api/v1/explorer/fees - current sat/vB recommendations. */
             get("/fees") {
                 val fees = call.application.deps.explorer.getFeeEstimates()
                 call.respond(fees)

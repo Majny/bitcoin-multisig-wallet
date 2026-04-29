@@ -5,7 +5,7 @@ import java.util.*
 
 /*
  * Low-level Bitcoin and PSBT (BIP-174) binary encoding and parsing utilities.
- * Contains no business logic — just byte manipulation, hex/bech32 conversions,
+ * Contains no business logic - just byte manipulation, hex/bech32 conversions,
  * script construction, and PSBT structural parsing.
  */
 object PsbtEncoding {
@@ -20,7 +20,7 @@ object PsbtEncoding {
     const val PSBT_OUT_BIP32_DERIVATION = 0x02
     const val PSBT_GLOBAL_UNSIGNED_TX = 0x00
 
-    // ========== BIP-174 Key-Value Encoding ==========
+    // BIP-174 Key-Value Encoding
 
     /*
      * Writes a single BIP-174 key-value pair into the PSBT byte buffer.
@@ -35,7 +35,7 @@ object PsbtEncoding {
         buf.addAll(value.toList())
     }
 
-    // ========== Integer Encoding ==========
+    // Integer Encoding
 
     /* Encodes a variable-length integer in Bitcoin CompactSize format. */
     fun writeVarInt(value: Long): List<Byte> = when {
@@ -56,7 +56,7 @@ object PsbtEncoding {
     fun longToLE(value: Long): List<Byte> =
         (0 until 8).map { ((value shr (it * 8)) and 0xff).toByte() }
 
-    // ========== Hex Conversion ==========
+    // Hex Conversion
 
     /* Converts a hex string to a byte array. */
     fun hexToBytes(hex: String): ByteArray {
@@ -75,7 +75,7 @@ object PsbtEncoding {
     fun bytesToHex(bytes: ByteArray): String =
         bytes.joinToString("") { "%02x".format(it) }
 
-    // ========== Bitcoin Address → Script ==========
+    // Bitcoin Address → Script
 
     /*
      * Converts a Bitcoin address to its scriptPubKey byte array.
@@ -119,7 +119,7 @@ object PsbtEncoding {
     /* Converts a Bitcoin address to its scriptPubKey hex string. */
     fun addressToScriptHex(address: String): String = bytesToHex(addressToScript(address))
 
-    // ========== Witness UTXO / Script Construction ==========
+    // Witness UTXO / Script Construction
 
     /* Builds the witness UTXO field (amount + scriptPubKey) for PSBT_IN_WITNESS_UTXO. */
     fun buildWitnessUtxo(value: Long, scriptPubKeyHex: String?): ByteArray {
@@ -179,7 +179,7 @@ object PsbtEncoding {
         return buf.toByteArray()
     }
 
-    // ========== Bech32 Decoding ==========
+    // Bech32 Decoding
 
     /* Decodes a bech32/bech32m address to its witness program bytes. */
     fun bech32Decode(address: String): ByteArray {
@@ -199,7 +199,7 @@ object PsbtEncoding {
         return convertBits(values, 5, 8)
     }
 
-    // ========== Base58Check Decoding ==========
+    // Base58Check Decoding
 
     private const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
@@ -240,7 +240,7 @@ object PsbtEncoding {
         return result.toByteArray()
     }
 
-    // ========== Raw Transaction Parsing ==========
+    // Raw Transaction Parsing
 
     data class ParsedRawTx(
         val version: Int,
@@ -342,7 +342,7 @@ object PsbtEncoding {
         return v
     }
 
-    // ========== PSBT Parsing (BIP-174) ==========
+    // PSBT Parsing (BIP-174)
 
     data class PsbtKV(
         val keyType: Int,

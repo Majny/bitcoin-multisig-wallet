@@ -7,7 +7,7 @@ package cz.majny.wallet.price.config
 object AppConfig {
     val PORT: Int = System.getenv("PORT")?.toIntOrNull() ?: 8087
 
-    // CoinGecko public API — no key needed on the free tier, at the cost of
+    // CoinGecko public API - no key needed on the free tier, at the cost of
     // a relatively low rate limit (hence the aggressive caching below).
     val COINGECKO_BASE_URL: String = System.getenv("COINGECKO_BASE_URL")
         ?: "https://api.coingecko.com/api/v3"

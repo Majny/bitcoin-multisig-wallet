@@ -26,7 +26,7 @@ object Db {
         )
     }
 
-    /* Migrate first, then connect — guarantees Exposed never sees a half-applied schema. */
+    /* Migrate first, then connect - guarantees Exposed never sees a half-applied schema. */
     fun init(db: DbConfig) {
         Flyway.configure()
             .dataSource(db.url, db.user, db.password)

@@ -15,7 +15,7 @@ import java.security.SecureRandom
 /*
  * Builds Trezor Connect deeplinks and hands them to Trezor Suite Mobile via
  * Intent.ACTION_VIEW. Every call generates a random request id, parks it in
- * SessionStore, and embeds it in the callback URL — TrezorCallbackActivity
+ * SessionStore, and embeds it in the callback URL - TrezorCallbackActivity
  * checks the returned id against the stored one to reject stale or spoofed
  * callbacks from other apps.
  */
@@ -38,7 +38,7 @@ class TrezorDeeplinkLauncher(
         return id
     }
 
-    /* getPublicKey for a single derivation path — used during initial Trezor
+    /* getPublicKey for a single derivation path - used during initial Trezor
      * connect to grab one xpub. Returns false if Trezor Suite Mobile is not
      * installed (no app handles the deeplink). */
     fun openGetPublicKey(
@@ -75,7 +75,7 @@ class TrezorDeeplinkLauncher(
     }
 
     /*
-     * Sign a PSBT — opens Trezor Suite, user confirms on the device, callback
+     * Sign a PSBT - opens Trezor Suite, user confirms on the device, callback
      * carries the signed PSBT base64 back. Used by the multisig flow where
      * the backend hands us a serialized PSBT to forward unchanged.
      */
@@ -113,7 +113,7 @@ class TrezorDeeplinkLauncher(
 
     /*
      * Sign a tx using structured Trezor Connect params (inputs/outputs/refTxs)
-     * rather than a serialized PSBT. Required for singlesig — Trezor Connect
+     * rather than a serialized PSBT. Required for singlesig - Trezor Connect
      * deeplink does NOT accept tx_hex for refTxs, so the backend pre-parses
      * each previous tx into version/inputs/bin_outputs/lock_time and we
      * marshal the whole structure into JSON here.
@@ -162,7 +162,7 @@ class TrezorDeeplinkLauncher(
             }
             put("outputs", outputsArray)
 
-            // Include refTxs in structured format — Trezor Connect deeplink
+            // Include refTxs in structured format - Trezor Connect deeplink
             // does NOT support tx_hex, needs parsed version/inputs/bin_outputs/lock_time.
             if (params.refTxs != null && params.refTxs.isNotEmpty()) {
                 val refTxsArray = JSONArray()
@@ -227,7 +227,7 @@ class TrezorDeeplinkLauncher(
     /*
      * Show an address on the Trezor screen so the user can compare it byte-by-byte
      * with what the phone displays. For multisig, the full cosigner pubkey set
-     * (the `multisig` field) is required — without it firmware can't recompute
+     * (the `multisig` field) is required - without it firmware can't recompute
      * the script and refuses to display the address.
      */
     fun openGetAddress(
@@ -272,8 +272,8 @@ class TrezorDeeplinkLauncher(
 
     /*
      * Builds the Trezor Connect `multisig` JSON. Firmware needs HDNodeType
-     * objects (depth, fingerprint, child_num, chain_code, public_key) — not
-     * raw xpub strings — so the backend pre-converts and we copy the fields
+     * objects (depth, fingerprint, child_num, chain_code, public_key) - not
+     * raw xpub strings - so the backend pre-converts and we copy the fields
      * across.
      */
     private fun buildMultisigJson(ms: TrezorConnectMultisigDto): JSONObject {
@@ -302,7 +302,7 @@ class TrezorDeeplinkLauncher(
     }
 
     /*
-     * Bundle getPublicKey — fetches multiple xpubs in a single deeplink so
+     * Bundle getPublicKey - fetches multiple xpubs in a single deeplink so
      * account discovery doesn't require N round-trips through Trezor Suite.
      * Returns the request id for trace logging or null if the deeplink
      * couldn't be launched.

@@ -48,7 +48,7 @@ fun main() {
             priceRoutes(coinGeckoClient)
         }
 
-        // Release the upstream HttpClient on shutdown — otherwise CIO's
+        // Release the upstream HttpClient on shutdown - otherwise CIO's
         // worker threads keep the JVM from exiting cleanly in tests.
         environment.monitor.subscribe(ApplicationStopped) {
             coinGeckoClient.close()

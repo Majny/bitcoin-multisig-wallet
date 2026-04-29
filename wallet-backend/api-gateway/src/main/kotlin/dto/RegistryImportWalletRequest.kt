@@ -94,7 +94,7 @@ data class WalletDetail(
 
 
 /* Adapter from the registry-shaped summary to the frontend-shaped one.
- * Balance is intentionally 0 here — the dashboard fetches it lazily from
+ * Balance is intentionally 0 here - the dashboard fetches it lazily from
  * explorer-service so that the wallet list endpoint stays cheap. */
 fun RegistryWalletSummary.toGatewayWalletSummary(): WalletSummarySerializable =
     WalletSummarySerializable(
@@ -134,7 +134,7 @@ data class RegistryWalletSummary(
     val accountIndex: Int? = null
 )
 
-// ---- Address DTOs (mirrors wallet-registry API) ----
+// Address DTOs (mirrors wallet-registry API)
 
 @Serializable
 data class WalletAddressResponse(
@@ -144,7 +144,7 @@ data class WalletAddressResponse(
     val type: String    // "receive" or "change"
 )
 
-// ---- Per-device cosigner labels ----
+// Per-device cosigner labels
 
 @Serializable
 data class UpdateCosignerLabelRegistryRequest(

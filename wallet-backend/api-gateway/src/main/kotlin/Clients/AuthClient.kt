@@ -20,7 +20,7 @@ class AuthClientImpl(private val cfg: AppConfig) : AuthClient {
     /* Called once by attachHttpClients after the shared HttpClient is created. */
     fun attach(http: HttpClient) { client = http }
 
-    /* POST /auth/trezor/login — creates a device + issues access/refresh tokens. */
+    /* POST /auth/trezor/login - creates a device + issues access/refresh tokens. */
     override suspend fun trezorLogin(req: TrezorLoginRequest): TrezorLoginResponse {
         requireAttached(this::client.isInitialized, "auth")
 
@@ -34,7 +34,7 @@ class AuthClientImpl(private val cfg: AppConfig) : AuthClient {
         return resp.body()
     }
 
-    /* POST /auth/token/refresh — single-use rotation of a refresh token for a
+    /* POST /auth/token/refresh - single-use rotation of a refresh token for a
      * new access/refresh pair. */
     override suspend fun refresh(req: RefreshTokenRequest): RefreshTokenResponse {
         requireAttached(this::client.isInitialized, "auth")
@@ -49,7 +49,7 @@ class AuthClientImpl(private val cfg: AppConfig) : AuthClient {
         return resp.body()
     }
 
-    /* POST /auth/device — upserts extended device metadata (model, label) that
+    /* POST /auth/device - upserts extended device metadata (model, label) that
      * isn't captured by the login flow. */
     override suspend fun upsertDevice(req: UpsertDeviceRequest): UpsertDeviceResponse {
         requireAttached(this::client.isInitialized, "auth")

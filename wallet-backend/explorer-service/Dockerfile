@@ -1,6 +1,6 @@
 # Multi-stage build pro explorer-service
 
-# === Build stage ===
+# Build stage
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY explorer-service/src explorer-service/src
 
 RUN ./gradlew :explorer-service:installDist --no-daemon
 
-# === Runtime stage ===
+# Runtime stage
 FROM eclipse-temurin:21-jre
 
 LABEL maintainer="majny"

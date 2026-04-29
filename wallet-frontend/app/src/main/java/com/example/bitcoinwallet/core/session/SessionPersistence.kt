@@ -5,22 +5,11 @@ import android.content.SharedPreferences
 import android.util.Log
 
 /*
- * Persists the essential pieces of a user session across process death so
- * the app can resume instead of sending the user back to the Trezor login
- * screen.
- *
- * NOT encrypted — plain SharedPreferences file. Acceptable for the thesis
- * demo because tokens are short-lived and re-issued via the refresh flow;
- * a production build should swap this for EncryptedSharedPreferences
- * (androidx.security:security-crypto) or the Android Keystore.
- *
- * Persisted: access + refresh tokens, user id / display name / fingerprint,
- * active wallet id + account index, selected network and preferred currency.
- *
- * Not persisted: wallet list (re-fetched from backend on restore — the
- * token is enough), pendingSignedPsbt / pendingTrezorSignatures (ephemeral
- * per-flow state), pendingRequestId (a stale callback after process death
- * must be rejected anyway).
+ * SharedPreferences-backed persistence for the user session. Stores tokens,
+ * device identity, active wallet selection, network and preferred currency,
+ * so a process restart resumes instead of going back to the connect screen.
+ * Wallet list and pending-sign state are not persisted - the wallet list is
+ * re-fetched on restore and pending-sign state is per-flow only.
  */
 object SessionPersistence {
 
@@ -84,7 +73,7 @@ object SessionPersistence {
 
     fun save(snapshot: Snapshot) {
         val p = prefs ?: run {
-            Log.w(TAG, "save() called before init() — session will not survive process death")
+            Log.w(TAG, "save() called before init() - session will not survive process death")
             return
         }
         p.edit().apply {

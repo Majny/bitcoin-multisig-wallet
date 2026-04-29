@@ -168,7 +168,7 @@ class Repository {
             )
             .where { WalletCosignersTable.walletId eq walletId }
             .map { row ->
-                // label is null here by design — per-device labels are fetched
+                // label is null here by design - per-device labels are fetched
                 // separately via getCosignerLabels(deviceId, walletId) and layered
                 // in by the api-gateway. See cosigner_labels table.
                 CosignerInWallet(
@@ -287,7 +287,7 @@ class Repository {
 
     /* Derives + stores a single address past the initial gap limit. Used when
      * every pre-derived address of a kind is already on-chain and we need a
-     * fresh one (change outputs, receive addresses). Idempotent — if the
+     * fresh one (change outputs, receive addresses). Idempotent - if the
      * (walletId, type, index) row already exists, returns it as-is. Callers
      * should still verify on-chain freshness before committing to the address. */
     fun deriveAdditionalAddress(

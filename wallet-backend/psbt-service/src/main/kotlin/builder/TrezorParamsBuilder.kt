@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory
 
 /*
  * Builds Trezor Connect signTransaction parameters from wallet and UTXO data.
- * Trezor firmware does not accept PSBT directly — it needs a custom JSON structure
+ * Trezor firmware does not accept PSBT directly - it needs a custom JSON structure
  * with derivation paths, multisig metadata, and reference transactions.
  */
 object TrezorParamsBuilder {
@@ -32,7 +32,7 @@ object TrezorParamsBuilder {
         val coin = if (wallet.network.lowercase() in listOf("mainnet", "bitcoin")) "Bitcoin" else "Testnet"
 
         // Build reference transactions in structured format for Trezor Connect.
-        // Trezor Connect deeplink does NOT support tx_hex — needs parsed fields.
+        // Trezor Connect deeplink does NOT support tx_hex - needs parsed fields.
         val refTxs = utxos.mapNotNull { utxo ->
             val hex = utxo.rawTxHex ?: return@mapNotNull null
             try {
@@ -63,7 +63,7 @@ object TrezorParamsBuilder {
         }.distinctBy { it.hash }.ifEmpty { null }
 
         if (refTxs == null) {
-            log.warn("No raw tx hex available for refTxs — Trezor may fail to verify inputs")
+            log.warn("No raw tx hex available for refTxs - Trezor may fail to verify inputs")
         } else {
             log.info("Built {} refTxs for Trezor Connect", refTxs.size)
         }
@@ -147,7 +147,7 @@ object TrezorParamsBuilder {
      * Builds Trezor Connect params for multisig P2WSH transactions.
      * Each input and change output contains a multisig object with all cosigner
      * pubkeys in BIP-67 sorted order. address_n is the signer's derivation path.
-     * Trezor firmware does NOT sort pubkeys internally — the order we provide must
+     * Trezor firmware does NOT sort pubkeys internally - the order we provide must
      * exactly match the witness script order.
      */
     private fun buildMultisigParams(
@@ -260,7 +260,7 @@ object TrezorParamsBuilder {
         )
     }
 
-    // ========== Key Conversion Helpers ==========
+    // Key Conversion Helpers
 
     /*
      * Parses an origin path like "84h/1h/0h" or "84'/1'/0'" into a list of uint32 values.

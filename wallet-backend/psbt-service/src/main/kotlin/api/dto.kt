@@ -2,7 +2,7 @@ package cz.majny.wallet.psbt.api
 
 import kotlinx.serialization.Serializable
 
-// ========== Request DTOs ==========
+// Request DTOs
 
 /* Request for creating a new PSBT transaction. */
 @Serializable
@@ -14,12 +14,12 @@ data class CreatePsbtRequest(
     val rbf: Boolean = true,                // Replace-by-fee enabled (BIP-125)
     val label: String? = null,
     // Trezor master fingerprint of the signing device. Primary key for resolving
-    // which cosigner row in a multisig wallet maps to the caller — unique per
+    // which cosigner row in a multisig wallet maps to the caller - unique per
     // physical device, so it survives the case where multiple cosigners share
     // the same BIP-48 account index. Gateway injects from JWT.
     val signerFingerprint: String? = null,
     // BIP-48 account index of the signing cosigner. Kept as a fallback when the
-    // fingerprint isn't available (older clients) — but ambiguous on its own
+    // fingerprint isn't available (older clients) - but ambiguous on its own
     // when two cosigners on different devices both use account 0.
     val signerAccountIndex: Int? = null
 )
@@ -37,7 +37,7 @@ data class UtxoSelection(
     val address: String? = null  // if provided, skips full wallet scan
 )
 
-// ========== Response DTOs ==========
+// Response DTOs
 
 @Serializable
 data class PsbtResponse(
@@ -88,7 +88,7 @@ data class BroadcastResponse(
     val success: Boolean
 )
 
-// ========== Signers Endpoint ==========
+// Signers Endpoint
 
 @Serializable
 data class SignerStatusResponse(
@@ -112,7 +112,7 @@ data class SignerDetail(
     val label: String? = null
 )
 
-// ========== Trezor Connect DTOs ==========
+// Trezor Connect DTOs
 
 /*
  * HD node structure for Trezor Connect.
@@ -183,7 +183,7 @@ data class TrezorConnectOutput(
 
 /*
  * Reference transaction for Trezor Connect (structured format).
- * Trezor Connect deeplink does NOT support raw tx_hex — it needs parsed fields:
+ * Trezor Connect deeplink does NOT support raw tx_hex - it needs parsed fields:
  * version, inputs (with script_sig), bin_outputs (with amount + script_pubkey), lock_time.
  */
 @Serializable
@@ -250,7 +250,7 @@ data class AddTrezorSignaturesRequest(
     val signerAccountIndex: Int? = null
 )
 
-// ========== Internal DTOs (communication with other services) ==========
+// Internal DTOs (communication with other services)
 
 @Serializable
 data class UtxoDto(

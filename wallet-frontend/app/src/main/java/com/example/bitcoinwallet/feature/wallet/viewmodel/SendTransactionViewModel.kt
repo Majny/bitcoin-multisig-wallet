@@ -30,7 +30,7 @@ data class SelectedUtxoInfo(
 }
 
 /*
- * Fee priority level — maps to different fee rate estimates.
+ * Fee priority level - maps to different fee rate estimates.
  */
 enum class FeePriority {
     LOW,
@@ -40,7 +40,7 @@ enum class FeePriority {
 
 /*
  * Unit the user is entering the amount in. FIAT uses [SendTransactionUiState.fiatCurrency]
- * (CZK/USD/EUR, picked from settings). BTC is the canonical unit — sats are
+ * (CZK/USD/EUR, picked from settings). BTC is the canonical unit - sats are
  * always derived from [SendTransactionUiState.amountInput] so transaction value
  * does not drift as the exchange rate moves.
  */
@@ -53,7 +53,7 @@ data class SendTransactionUiState(
     val recipientAddress: String = "",
     // Raw text the user typed. Interpreted in [amountUnit]. BTC is the source of
     // truth for [amountSats]; when the user enters FIAT we convert via
-    // [btcFiatRate] but never round-trip — flipping the unit keeps the
+    // [btcFiatRate] but never round-trip - flipping the unit keeps the
     // already-committed BTC value untouched so the satoshi amount is stable.
     val amountInput: String = "",
     val amountUnit: AmountUnit = AmountUnit.BTC,
@@ -61,7 +61,7 @@ data class SendTransactionUiState(
     val btcFiatRate: Double? = null,   // price of 1 BTC in [fiatCurrency]
     val feePriority: FeePriority = FeePriority.MEDIUM,
     val autoSelect: Boolean = true,
-    val customFeeRate: String = "",   // sat/vB — used when autoSelect is off
+    val customFeeRate: String = "",   // sat/vB - used when autoSelect is off
     val selectedUtxoCount: Int = 0,   // how many UTXOs manually selected
     val selectedUtxos: List<SelectedUtxoInfo> = emptyList(),
 
@@ -138,7 +138,7 @@ class SendTransactionViewModel : ViewModel() {
                 val fees = try {
                     repository.getFeeEstimates(accessToken)
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to fetch fee estimates — user must enter a custom fee rate", e)
+                    Log.w(TAG, "Failed to fetch fee estimates - user must enter a custom fee rate", e)
                     null
                 }
 
@@ -152,13 +152,13 @@ class SendTransactionViewModel : ViewModel() {
                         else -> prices.czk
                     }
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to fetch BTC price — fiat input will be disabled", e)
+                    Log.w(TAG, "Failed to fetch BTC price - fiat input will be disabled", e)
                     null
                 }
 
-                // How many sats are locked by pending PSBTs? Reserved amount =
+                // How many sats are locked by pending PSBTs? Reserved amount
                 // sum of INPUT UTXOs (the whole UTXO is locked until the tx
-                // confirms — change only reappears as a new UTXO).
+                // confirms - change only reappears as a new UTXO).
                 val reserved = try {
                     val psbts = WalletApi.client.listPsbtsForWallet(walletId, accessToken)
                     psbts.psbts
@@ -197,7 +197,7 @@ class SendTransactionViewModel : ViewModel() {
         }
     }
 
-    // ========== User Actions ==========
+    // User Actions
 
     /*
      * Resets Trezor-related state when signing is cancelled or times out.
@@ -269,7 +269,7 @@ class SendTransactionViewModel : ViewModel() {
      * Flip the entry unit between BTC and the user's fiat currency.
      * With a working rate we convert in place so the sats value stays stable
      * across the toggle. Without a rate (price-service unreachable) the
-     * toggle still flips the unit label — the user can re-enter the amount
+     * toggle still flips the unit label - the user can re-enter the amount
      * in the chosen unit. Conversion is silently skipped: there is no rate
      * to multiply by, but the user can still pick which unit they're typing
      * in. Validation downstream will surface the missing-rate situation
@@ -396,7 +396,7 @@ class SendTransactionViewModel : ViewModel() {
 
                 Log.d(TAG, "PSBT created: id=${response.id}, fee=${response.estimatedFee} sats, vsize=${response.estimatedVsize}, trezorConnect=${response.trezorConnectParams != null}")
 
-                // Verbose TrezorConnectParams dump — keeps the deeplink
+                // Verbose TrezorConnectParams dump - keeps the deeplink
                 // payload auditable when debugging firmware rejections.
                 response.trezorConnectParams?.let { tcp ->
                     Log.d(TAG, "=== TrezorConnectParams ===")
@@ -513,7 +513,7 @@ class SendTransactionViewModel : ViewModel() {
                     SessionStore.setPendingTrezorSignatures(null)
 
                     if (result.currentSigs >= result.requiredSigs) {
-                        // Enough signatures — try to broadcast serializedTx directly
+                        // Enough signatures - try to broadcast serializedTx directly
                         Log.d(TAG, "Multisig fully signed (${result.currentSigs}/${result.requiredSigs}), broadcasting...")
                         val broadcastResp = WalletApi.client.broadcastRawTx(
                             psbtId = psbtId,
@@ -535,7 +535,7 @@ class SendTransactionViewModel : ViewModel() {
                         )
                     }
                 } else {
-                    // No per-input signatures — try broadcast-raw as fallback
+                    // No per-input signatures - try broadcast-raw as fallback
                     Log.w(TAG, "No Trezor signatures array, attempting broadcast-raw...")
                     val broadcastResp = WalletApi.client.broadcastRawTx(
                         psbtId = psbtId,
@@ -561,7 +561,7 @@ class SendTransactionViewModel : ViewModel() {
 
     /*
      * Handle raw serialized tx from Trezor Connect.
-     * Skip addSignature/finalize — broadcast directly.
+     * Skip addSignature/finalize - broadcast directly.
      */
     private fun onTrezorSerializedTx(serializedTxHex: String, onBroadcastSuccess: () -> Unit) {
         viewModelScope.launch {
@@ -609,11 +609,11 @@ class SendTransactionViewModel : ViewModel() {
         }
     }
 
-    // ========== Internal ==========
+    // Internal
 
     private fun recalculate() {
         val state = _uiState.value
-        // Sats are always derived — user types in either BTC or fiat, we normalise here.
+        // Sats are always derived - user types in either BTC or fiat, we normalise here.
         val amountSats = when (state.amountUnit) {
             AmountUnit.BTC -> {
                 val btc = state.amountInput.toBigDecimalOrNull() ?: java.math.BigDecimal.ZERO
@@ -671,7 +671,7 @@ class SendTransactionViewModel : ViewModel() {
             val customRate = state.customFeeRate.toDoubleOrNull()
             if (customRate != null && customRate > 0) return customRate
         }
-        // Fee estimates not loaded — return 0 so validation blocks send until
+        // Fee estimates not loaded - return 0 so validation blocks send until
         // the user enters a custom rate or fees come back online.
         val fees = state.feeEstimates ?: return 0.0
         return when (state.feePriority) {
@@ -750,7 +750,7 @@ class SendTransactionViewModel : ViewModel() {
     private fun validateBitcoinAddress(address: String, walletNetwork: String): String? {
         val mainnet = walletNetwork == "mainnet"
 
-        // Bech32/Bech32m — mandatory lowercase, checked by BIP-173.
+        // Bech32/Bech32m - mandatory lowercase, checked by BIP-173.
         if (address.startsWith("bc1", ignoreCase = true) || address.startsWith("tb1", ignoreCase = true)) {
             val hasUpper = address.any { it.isUpperCase() }
             val hasLower = address.any { it.isLowerCase() }
@@ -764,7 +764,7 @@ class SendTransactionViewModel : ViewModel() {
             return null
         }
 
-        // Legacy P2PKH/P2SH — base58, case-sensitive.
+        // Legacy P2PKH/P2SH - base58, case-sensitive.
         val firstChar = address.firstOrNull() ?: return "Invalid Bitcoin address"
         val isMainnetLegacy = firstChar == '1' || firstChar == '3'
         val isTestnetLegacy = firstChar == 'm' || firstChar == 'n' || firstChar == '2'

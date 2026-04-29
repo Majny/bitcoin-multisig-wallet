@@ -12,14 +12,14 @@ fun Route.priceRoutes() {
 
     route("/price") {
 
-        /* GET /api/v1/price — BTC prices in CZK/USD/EUR (or whatever ?currencies= asks). */
+        /* GET /api/v1/price - BTC prices in CZK/USD/EUR (or whatever ?currencies= asks). */
         get {
             val currencies = call.request.queryParameters["currencies"] ?: "czk,usd,eur"
             val prices = priceClient.getBitcoinPrices(currencies)
             call.respond(prices)
         }
 
-        /* GET /api/v1/price/convert?sats=N&currency=czk — sats → fiat. */
+        /* GET /api/v1/price/convert?sats=N&currency=czk - sats → fiat. */
         get("/convert") {
             val sats = call.request.queryParameters["sats"]?.toLongOrNull()
             if (sats == null) {

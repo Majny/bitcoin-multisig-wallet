@@ -129,11 +129,11 @@ fun SendTransactionScreen(
                     when {
                         err != null -> Text(err, color = ErrorRed, fontSize = 12.sp)
                         // Warn the user when they've toggled into FIAT but the
-                        // rate is missing — without a rate the amount converts to
+                        // rate is missing - without a rate the amount converts to
                         // 0 sats and the Create button will reject it. The hint
                         // points them back to BTC.
                         state.amountUnit == AmountUnit.FIAT && !rateAvailable -> Text(
-                            "Exchange rate unavailable — switch back to BTC to enter the amount.",
+                            "Exchange rate unavailable - switch back to BTC to enter the amount.",
                             color = BitcoinOrangeLight,
                             fontSize = 12.sp
                         )
@@ -150,7 +150,7 @@ fun SendTransactionScreen(
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                 trailingIcon = {
-                    // Toggle is always clickable — the unit label is a user
+                    // Toggle is always clickable - the unit label is a user
                     // setting independent of whether we can do the math. The
                     // pill is dimmed when the rate is missing so the user
                     // knows the conversion isn't going to round-trip.
@@ -293,9 +293,9 @@ fun SendTransactionScreen(
             // race us into a second PSBT (which would orphan the first
             // alongside its UTXO reservation). The label tracks which
             // phase we're in so the user sees the wait explicitly:
-            //   isSending      — POST /psbt/create in flight
-            //   awaitingTrezor — deeplink launched, waiting for callback
-            //   isSubmitting   — got Trezor result, posting signatures
+            //   isSending      - POST /psbt/create in flight
+            //   awaitingTrezor - deeplink launched, waiting for callback
+            //   isSubmitting   - got Trezor result, posting signatures
             val createLabel = when {
                 state.isSending -> "Creating..."
                 state.awaitingTrezor -> "Waiting for Trezor…"
@@ -503,7 +503,7 @@ private fun formatFee(sats: Long, rateSatVb: Double): String {
 
 /*
  * Clickable pill showing the current amount unit. Tapping always flips
- * BTC ↔ fiat — the toggle is a UI control independent of whether the
+ * BTC ↔ fiat - the toggle is a UI control independent of whether the
  * conversion math succeeds. When the BTC/fiat rate is unavailable we mute
  * the pill colour so the user can tell at a glance that conversions
  * aren't going to round-trip, but they can still pick which unit they

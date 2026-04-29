@@ -43,7 +43,7 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-jdbc:0.53.0")
     implementation("org.jetbrains.exposed:exposed-java-time:0.53.0")
 
-    // BitcoinJ — low-level Bitcoin primitives used when assembling PSBTs
+    // BitcoinJ - low-level Bitcoin primitives used when assembling PSBTs
     implementation("org.bitcoinj:bitcoinj-core:0.17")
 }
 

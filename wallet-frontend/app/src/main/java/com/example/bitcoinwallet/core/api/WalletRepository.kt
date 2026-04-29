@@ -12,7 +12,7 @@ import java.time.ZoneId
  * Domain-shaped facade over WalletApiClient. Maps backend DTOs to the
  * UI's model types (WalletBalance, Transaction) and folds in fiat
  * conversion so callers don't need to know about price-service. Direct
- * passthroughs are kept too — viewmodels that don't need mapping use
+ * passthroughs are kept too - viewmodels that don't need mapping use
  * those.
  */
 class WalletRepository(
@@ -22,7 +22,7 @@ class WalletRepository(
     /*
      * Aggregated wallet balance + fiat conversion. Falls back to 0 fiat
      * if price-service is unreachable rather than failing the dashboard
-     * load — the sats balance is what actually matters.
+     * load - the sats balance is what actually matters.
      */
     suspend fun getWalletBalance(
         walletId: String,
@@ -64,7 +64,7 @@ class WalletRepository(
                 else   -> TransactionType.RECEIVED
             }
 
-            // Unconfirmed txs have no blockTime — push them to a sentinel
+            // Unconfirmed txs have no blockTime - push them to a sentinel
             // far-future date so they sort to the top of the history list.
             val dateTime = tx.blockTime?.let { timestamp ->
                 Instant.ofEpochSecond(timestamp)
@@ -84,13 +84,13 @@ class WalletRepository(
         }
     }
 
-    /* First unused receive address — backend handles gap-limit derivation. */
+    /* First unused receive address - backend handles gap-limit derivation. */
     suspend fun getReceiveAddress(walletId: String, accessToken: String): String {
         val dto = apiClient.getReceiveAddress(walletId, accessToken)
         return dto.address
     }
 
-    /* Wallet UTXOs (passthrough) — coin control screen consumes the DTO directly. */
+    /* Wallet UTXOs (passthrough) - coin control screen consumes the DTO directly. */
     suspend fun getWalletUtxos(walletId: String, accessToken: String): WalletUtxosDto {
         return apiClient.getWalletUtxos(walletId, accessToken)
     }

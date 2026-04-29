@@ -15,7 +15,7 @@ import io.ktor.server.routing.*
 fun Route.accountDiscoveryRoutes() {
     authenticate("auth-jwt") {
 
-    /* POST /api/v1/accounts/scan — bulk scan for a list of (xpub, derivationPath)
+    /* POST /api/v1/accounts/scan - bulk scan for a list of (xpub, derivationPath)
      * pairs, returning per-account activity metadata. Used during onboarding to
      * surface which BIP-44 accounts are worth importing. */
     post("/accounts/scan") {
@@ -38,7 +38,7 @@ fun Route.accountDiscoveryRoutes() {
         )
     }
 
-    /* POST /api/v1/accounts/scan-single — one-shot variant, fingerprint via
+    /* POST /api/v1/accounts/scan-single - one-shot variant, fingerprint via
      * ?fingerprint= query param. */
     post("/accounts/scan-single") {
         val account = call.receive<AccountToScan>()
@@ -54,7 +54,7 @@ fun Route.accountDiscoveryRoutes() {
         call.respond(result)
     }
     
-    /* GET /api/v1/accounts/check-address/{address} — activity probe for a
+    /* GET /api/v1/accounts/check-address/{address} - activity probe for a
      * single derived address. Used by the frontend when it derives addresses
      * itself and wants per-address checks. */
     get("/accounts/check-address/{address}") {

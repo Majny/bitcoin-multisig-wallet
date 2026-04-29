@@ -224,7 +224,7 @@ object AddressDerivation {
     /* Converts byte array to hex string (used for BIP-67 pubkey sorting). */
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
-    // --- Bech32 encoding (BitcoinJ 0.17 lacks a public segwitToBech32 method) ---
+    // Bech32 encoding (BitcoinJ 0.17 lacks a public segwitToBech32 method)
 
     private val BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
 

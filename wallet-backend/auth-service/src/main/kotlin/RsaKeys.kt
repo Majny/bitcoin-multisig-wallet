@@ -24,7 +24,7 @@ data class RsaKeyMaterial(
 object RsaKeys {
 
     /* Loads PEM-encoded keys from env, or generates an ephemeral pair if the
-     * dev opt-in flag is set. Throws otherwise — we don't silently fall back
+     * dev opt-in flag is set. Throws otherwise - we don't silently fall back
      * to generated keys in production. */
     fun fromEnvOrGenerate(): RsaKeyMaterial {
         val kid = System.getenv("JWT_KID") ?: "dev-kid"

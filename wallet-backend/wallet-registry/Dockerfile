@@ -1,6 +1,6 @@
 # Multi-stage build pro wallet-registry
 
-# === Build stage ===
+# Build stage
 FROM eclipse-temurin:21-jdk AS builder
 
 WORKDIR /app
@@ -17,7 +17,7 @@ COPY wallet-registry/src wallet-registry/src
 
 RUN ./gradlew :wallet-registry:installDist --no-daemon
 
-# === Runtime stage ===
+# Runtime stage
 FROM eclipse-temurin:21-jre
 
 LABEL maintainer="majny"

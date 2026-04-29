@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory
 import java.io.IOException
 
 /*
- * Client for Esplora-compatible blockchain APIs — used with Blockstream on
+ * Client for Esplora-compatible blockchain APIs - used with Blockstream on
  * mainnet and Mempool.space on testnet4. Both expose the same endpoint shape
  * so a single interface covers both.
  *
@@ -26,7 +26,7 @@ import java.io.IOException
  */
 interface MempoolClient {
 
-    /* Address info — tx_count + funded/spent sums. Used both for dashboard
+    /* Address info - tx_count + funded/spent sums. Used both for dashboard
      * balance and BIP-44 account discovery. */
     suspend fun getAddressInfo(address: String): AddressInfo
 
@@ -46,7 +46,7 @@ interface MempoolClient {
      * MempoolBroadcastException with the upstream body on rejection. */
     suspend fun broadcastTransaction(hex: String): String
 
-    /* Activity probe used during gap-limit scanning — just the boolean. */
+    /* Activity probe used during gap-limit scanning - just the boolean. */
     suspend fun hasActivity(address: String): Boolean
 
     /* Current chain tip height. Needed to convert a tx's block_height into
@@ -54,12 +54,12 @@ interface MempoolClient {
     suspend fun getTipHeight(): Int
 
     /* Raw hex of the full transaction (witness serialization). Needed for
-     * PSBT_IN_NON_WITNESS_UTXO — Trezor firmware 2.4+ requires the full
+     * PSBT_IN_NON_WITNESS_UTXO - Trezor firmware 2.4+ requires the full
      * previous tx for every input, even native segwit. */
     suspend fun getRawTransaction(txid: String): String
 }
 
-// ============ DTOs ============
+// DTOs
 
 @Serializable
 data class AddressInfo(
@@ -163,7 +163,7 @@ data class FeeEstimates(
     val minimumFee: Int
 )
 
-// ============ Implementation ============
+// Implementation
 
 class MempoolClientImpl(
     private val baseUrl: String = "https://mempool.space/api",
@@ -198,7 +198,7 @@ class MempoolClientImpl(
      * connect/socket timeout, generic IO error). The 1 s delay is deliberately
      * outside withPermit so other queued requests can proceed during the wait.
      *
-     * Only one retry — if the IP is in a penalty box, retrying further just
+     * Only one retry - if the IP is in a penalty box, retrying further just
      * keeps the queue backed up for 20+ s; better to fail fast.
      *
      * Catching IOException on the first attempt is load-bearing for account
@@ -218,7 +218,7 @@ class MempoolClientImpl(
             log.warn("Mempool socket timeout on first attempt, will retry: {}", url)
             null
         } catch (e: IOException) {
-            // Connection reset, broken pipe, etc. — transport-level failures
+            // Connection reset, broken pipe, etc. - transport-level failures
             log.warn("Mempool IO error on first attempt ({}), will retry: {}", e.message, url)
             null
         }
@@ -329,7 +329,7 @@ class MempoolClientImpl(
     }
 
     override suspend fun broadcastTransaction(hex: String): String {
-        // Broadcast is intentionally not routed through getChecked — a retry
+        // Broadcast is intentionally not routed through getChecked - a retry
         // on a timeout could double-submit the same tx.
         val response: HttpResponse = client.post("$baseUrl/tx") {
             contentType(ContentType.Text.Plain)
@@ -342,7 +342,7 @@ class MempoolClientImpl(
     }
 
     override suspend fun hasActivity(address: String): Boolean {
-        // Don't swallow errors — the caller needs to distinguish "no activity"
+        // Don't swallow errors - the caller needs to distinguish "no activity"
         // from "blockchain unreachable", otherwise account discovery would
         // treat a transient outage as an empty account.
         val info = getAddressInfo(address)

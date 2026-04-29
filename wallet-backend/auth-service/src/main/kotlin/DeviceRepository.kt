@@ -36,8 +36,8 @@ data class DeviceResponse(
 class DeviceRepository {
 
     /* Insert if new, otherwise refresh model + label so a re-login can update
-     * the cached device metadata. fingerprint is also overwritten — should be
-     * stable, but defensively kept in sync with whatever the request supplies. */
+     * the cached device metadata. fingerprint is also overwritten - it should
+     * be stable, but we keep it in sync with whatever the request supplies. */
     fun upsertDevice(req: UpsertDeviceRequest): DeviceResponse = transaction {
         val existing = DevicesTable
             .selectAll()

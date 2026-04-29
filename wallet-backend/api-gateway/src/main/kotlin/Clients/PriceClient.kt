@@ -13,7 +13,7 @@ interface PriceClient {
     suspend fun convertSatsToFiat(sats: Long, currency: String = "czk"): ConversionResultResponse
 }
 
-// ============ Response DTOs ============
+// Response DTOs
 
 @Serializable
 data class BitcoinPricesResponse(
@@ -35,14 +35,14 @@ data class ConversionResultResponse(
     val fiatCurrency: String
 )
 
-// ============ Implementation ============
+// Implementation
 
 class HttpPriceClient(
     private val baseUrl: String,
     private val httpClient: HttpClient
 ) : PriceClient {
     
-    /* GET /price — BTC price in CZK/USD/EUR + 24h change. Cached server-side
+    /* GET /price - BTC price in CZK/USD/EUR + 24h change. Cached server-side
      * so repeated calls don't hit CoinGecko's rate limit. */
     override suspend fun getBitcoinPrices(currencies: String): BitcoinPricesResponse {
         val response: HttpResponse = httpClient.get("$baseUrl/price") {
@@ -56,7 +56,7 @@ class HttpPriceClient(
         return response.body()
     }
     
-    /* GET /price/convert — sats → fiat using the cached rate. */
+    /* GET /price/convert - sats → fiat using the cached rate. */
     override suspend fun convertSatsToFiat(sats: Long, currency: String): ConversionResultResponse {
         val response: HttpResponse = httpClient.get("$baseUrl/price/convert") {
             parameter("sats", sats)

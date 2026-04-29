@@ -160,7 +160,7 @@ class CoinControlViewModel : ViewModel() {
         }
     }
 
-    // ========== User Actions ==========
+    // User Actions
 
     fun toggleUtxo(key: String) {
         _uiState.value = _uiState.value.copy(
@@ -188,7 +188,7 @@ class CoinControlViewModel : ViewModel() {
     fun getSelectedUtxos(): List<SelectableUtxo> =
         _uiState.value.utxos.filter { it.selected }
 
-    // ========== Internal ==========
+    // Internal
 
     private fun sortUtxos(utxos: List<SelectableUtxo>, order: UtxoSortOrder): List<SelectableUtxo> =
         when (order) {

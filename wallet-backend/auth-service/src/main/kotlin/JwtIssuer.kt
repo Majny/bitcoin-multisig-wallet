@@ -8,7 +8,7 @@ import java.util.Date
 import java.util.UUID
 
 /* Issues short-lived access tokens for the gateway to validate. Default TTL
- * is 24 h — long enough that refresh round-trips don't dominate normal use,
+ * is 24 h - long enough that refresh round-trips don't dominate normal use,
  * short enough that a leaked token is not a long-term liability. */
 class JwtIssuer(
     private val issuer: String,

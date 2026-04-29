@@ -82,7 +82,7 @@ private fun startStalePsbtCleanup(repository: PsbtRepository) {
                 val removed = repository.deleteStale(cutoff)
                 if (removed > 0) log.info("Cleaned up {} stale pending/signed PSBTs older than {}", removed, cutoff)
             } catch (e: Exception) {
-                // Single-iteration failure shouldn't kill the cleanup loop —
+                // Single-iteration failure shouldn't kill the cleanup loop
                 // log and try again on the next tick.
                 log.warn("PSBT cleanup failed", e)
             }
@@ -122,7 +122,7 @@ fun Application.configureApp(
 }
 
 /*
- * Hikari pool with REPEATABLE_READ isolation — needed because the
+ * Hikari pool with REPEATABLE_READ isolation - needed because the
  * sign-trezor flow does a "read current_sigs, decide status, write back"
  * sequence that must observe a stable snapshot.
  */

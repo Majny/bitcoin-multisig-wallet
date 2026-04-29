@@ -14,7 +14,7 @@ fun Route.psbtRoutes() {
     authenticate("auth-jwt") {
         route("/psbt") {
 
-            /* POST /api/v1/psbt — creates a PSBT for the supplied walletId.
+            /* POST /api/v1/psbt - creates a PSBT for the supplied walletId.
              * Ownership is enforced: caller must be a member of that wallet.
              * The Trezor master fingerprint is pulled from the JWT and pinned
              * onto the request so psbt-service can map (fingerprint, account)
@@ -33,7 +33,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            /* GET /api/v1/psbt/{id} — full PSBT detail. */
+            /* GET /api/v1/psbt/{id} - full PSBT detail. */
             get("/{id}") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -43,7 +43,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            /* GET /api/v1/psbt/wallet/{walletId} — PSBT list, optional ?status= filter. */
+            /* GET /api/v1/psbt/wallet/{walletId} - PSBT list, optional ?status= filter. */
             get("/wallet/{walletId}") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
                 val deviceId = principal.payload.getClaim("device_id").asString()
@@ -54,7 +54,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            /* POST /api/v1/psbt/{id}/broadcast-raw — propagates a complete signed
+            /* POST /api/v1/psbt/{id}/broadcast-raw - propagates a complete signed
              * tx (the one Trezor Connect returned as serializedTx) to the network. */
             post("/{id}/broadcast-raw") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
@@ -67,7 +67,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            /* POST /api/v1/psbt/{id}/sign-trezor — records a cosigner's signatures
+            /* POST /api/v1/psbt/{id}/sign-trezor - records a cosigner's signatures
              * (multisig path). psbt-service handles BIP-67 placement server-side. */
             post("/{id}/sign-trezor") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")
@@ -81,7 +81,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            /* GET /api/v1/psbt/{id}/signers — per-cosigner signing state, enriched
+            /* GET /api/v1/psbt/{id}/signers - per-cosigner signing state, enriched
              * with the caller's private labels. Label lookup failures are
              * non-fatal: we return the generic response without labels. */
             get("/{id}/signers") {
@@ -104,7 +104,7 @@ fun Route.psbtRoutes() {
                 call.respond(enriched)
             }
 
-            /* GET /api/v1/psbt/verify-address — returns Trezor Connect getAddress
+            /* GET /api/v1/psbt/verify-address - returns Trezor Connect getAddress
              * params for on-device verification of a receive address (Show On
              * Trezor button). Pulls the caller's fingerprint from the JWT so
              * psbt-service can identify the right cosigner row in a wallet
@@ -128,7 +128,7 @@ fun Route.psbtRoutes() {
                 call.respond(resp)
             }
 
-            /* DELETE /api/v1/psbt/{id} — drops an unsent PSBT and releases its
+            /* DELETE /api/v1/psbt/{id} - drops an unsent PSBT and releases its
              * reserved UTXOs back into the available pool. */
             delete("/{id}") {
                 val principal = call.principal<JWTPrincipal>() ?: error("JWT principal missing")

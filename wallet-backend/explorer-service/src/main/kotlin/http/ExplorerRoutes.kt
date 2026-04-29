@@ -11,7 +11,7 @@ private val log = LoggerFactory.getLogger("ExplorerRoutes")
 
 /*
  * explorer-service routes. All endpoints are wallet-level aggregations on top
- * of blockchain-service per-address calls — they hide the N+1 problem from
+ * of blockchain-service per-address calls - they hide the N+1 problem from
  * the frontend by fanning out internally.
  */
 fun Route.explorerRoutes(
@@ -171,7 +171,7 @@ fun Route.explorerRoutes(
         /*
          * GET /explorer/tx/{txid}/detail?walletId={walletId}
          * Same as /tx/{txid} but each input/output is annotated with isMine
-         * relative to the supplied wallet — drives the YOURS badge in the
+         * relative to the supplied wallet - drives the YOURS badge in the
          * transaction-detail UI.
          */
         get("/tx/{txid}/detail") {
@@ -240,9 +240,9 @@ fun Route.explorerRoutes(
             }
         }
 
-        // ========== Fee estimates (proxied) ==========
+        // Fee estimates (proxied)
 
-        /* GET /explorer/fees — current sat/vB recommendations. */
+        /* GET /explorer/fees - current sat/vB recommendations. */
         get("/fees") {
             try {
                 val fees = blockchainClient.getFeeEstimates()

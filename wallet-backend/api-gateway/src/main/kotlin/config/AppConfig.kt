@@ -14,7 +14,7 @@ data class AppConfig(
     val jwksUrl: String,
 ) {
     companion object {
-        /* Reads env vars with localhost defaults (dev) — docker-compose provides
+        /* Reads env vars with localhost defaults (dev) - docker-compose provides
          * the service-name URLs in production. */
         fun fromEnv(): AppConfig {
             fun env(name: String, default: String) = System.getenv(name) ?: default

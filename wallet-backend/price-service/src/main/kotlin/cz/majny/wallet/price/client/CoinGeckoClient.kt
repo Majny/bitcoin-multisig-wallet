@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicReference
  * /simple/price and caches the full response in-memory for
  * PRICE_CACHE_DURATION_MS (default 5 min) so the free-tier rate limit
  * isn't the bottleneck. On upstream failure the client falls back to
- * whatever stale entry is in the cache — better to serve a slightly old
+ * whatever stale entry is in the cache - better to serve a slightly old
  * price than to crash the wallet dashboard.
  */
 class CoinGeckoClient {
@@ -39,7 +39,7 @@ class CoinGeckoClient {
         }
     }
 
-    // Lock-free cache slot — a single AtomicReference is enough because we
+    // Lock-free cache slot - a single AtomicReference is enough because we
     // always replace the whole BitcoinPrices record atomically.
     private data class CacheEntry(val prices: BitcoinPrices, val timestamp: Long)
     private val cache = AtomicReference<CacheEntry?>(null)
@@ -81,7 +81,7 @@ class CoinGeckoClient {
             cache.set(CacheEntry(prices, now))
             prices
         } catch (e: Exception) {
-            // Serve stale cache rather than failing — CoinGecko outages are
+            // Serve stale cache rather than failing - CoinGecko outages are
             // common on the free tier and a slightly old price is fine.
             if (cached != null) {
                 log.warn("CoinGecko API failed, serving stale cache (age: {}s): {}",
@@ -116,7 +116,7 @@ class CoinGeckoClient {
     }
 }
 
-// ============ DTOs ============
+// DTOs
 
 @Serializable
 data class CoinGeckoResponse(

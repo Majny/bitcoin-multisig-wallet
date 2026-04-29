@@ -14,7 +14,7 @@ fun Route.blockchainRoutes() {
     authenticate("auth-jwt") {
     route("/blockchain") {
 
-        /* GET /api/v1/blockchain/address/{address} — tx_count + balance. */
+        /* GET /api/v1/blockchain/address/{address} - tx_count + balance. */
         get("/address/{address}") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -22,7 +22,7 @@ fun Route.blockchainRoutes() {
             call.respond(info)
         }
 
-        /* GET /api/v1/blockchain/address/{address}/utxos — UTXO list. */
+        /* GET /api/v1/blockchain/address/{address}/utxos - UTXO list. */
         get("/address/{address}/utxos") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -30,7 +30,7 @@ fun Route.blockchainRoutes() {
             call.respond(utxos)
         }
 
-        /* GET /api/v1/blockchain/address/{address}/txs — confirmed + mempool tx history. */
+        /* GET /api/v1/blockchain/address/{address}/txs - confirmed + mempool tx history. */
         get("/address/{address}/txs") {
             val address = call.parameters["address"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing address")
@@ -38,7 +38,7 @@ fun Route.blockchainRoutes() {
             call.respond(txs)
         }
 
-        /* GET /api/v1/blockchain/address/{address}/has-activity — single-call
+        /* GET /api/v1/blockchain/address/{address}/has-activity - single-call
          * activity probe used by account discovery to avoid pulling full tx lists. */
         get("/address/{address}/has-activity") {
             val address = call.parameters["address"]
@@ -47,13 +47,13 @@ fun Route.blockchainRoutes() {
             call.respond(result)
         }
 
-        /* GET /api/v1/blockchain/fees — current sat/vB recommendations. */
+        /* GET /api/v1/blockchain/fees - current sat/vB recommendations. */
         get("/fees") {
             val fees = application.deps.blockchain.getFeeEstimates()
             call.respond(fees)
         }
 
-        /* GET /api/v1/blockchain/tx/{txid} — transaction metadata. */
+        /* GET /api/v1/blockchain/tx/{txid} - transaction metadata. */
         get("/tx/{txid}") {
             val txid = call.parameters["txid"]
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "Missing txid")
@@ -61,7 +61,7 @@ fun Route.blockchainRoutes() {
             call.respond(tx)
         }
 
-        /* POST /api/v1/blockchain/tx/broadcast — submit raw signed tx to network. */
+        /* POST /api/v1/blockchain/tx/broadcast - submit raw signed tx to network. */
         post("/tx/broadcast") {
             val request = call.receive<BroadcastTxRequest>()
             val result = application.deps.blockchain.broadcastTransaction(request.hex)

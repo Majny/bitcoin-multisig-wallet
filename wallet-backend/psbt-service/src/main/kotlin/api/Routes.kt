@@ -43,7 +43,7 @@ private fun isUniqueViolation(e: Throwable): Boolean {
  * 8-character lowercase hex string ("17d8b19b"). Both representations point
  * at the same four bytes. Equality across the two is the load-bearing check
  * for "is this signer me?", so we normalise everything to the descriptor
- * shape before comparing — otherwise the fp leg of resolveCosignerIdx
+ * shape before comparing - otherwise the fp leg of resolveCosignerIdx
  * silently misses for every multisig signed by a freshly-logged-in device.
  */
 private fun normalizeFingerprint(fp: String?): String? {
@@ -61,7 +61,7 @@ private fun normalizeFingerprint(fp: String?): String? {
  *      identifies the row.
  *   B) 1 Trezor signing as multiple cosigners via different BIP-48 accounts.
  *      All cosigner rows share the same fingerprint, so accountIndex is what
- *      separates them — fingerprint alone would always pick cosigner 0.
+ *      separates them - fingerprint alone would always pick cosigner 0.
  *
  * The combined (fingerprint, accountIndex) match handles both at once. Single-
  * signal fallbacks stay in for older clients (no fingerprint sent) and for the
@@ -90,7 +90,7 @@ private fun resolveCosignerIdx(
         if (byBoth >= 0) return byBoth
     }
 
-    // Fingerprint alone — only safe when EXACTLY one cosigner carries that
+    // Fingerprint alone - only safe when EXACTLY one cosigner carries that
     // fingerprint. The single-Trezor-multi-account case has every cosigner
     // sharing the same fingerprint, so an indexOfFirst here would silently
     // collapse them all onto position 0 and the wrong cosigner would record
@@ -101,7 +101,7 @@ private fun resolveCosignerIdx(
         if (matches.size == 1) return matches[0]
     }
 
-    // Account index alone — legacy client that never sent a fingerprint.
+    // Account index alone - legacy client that never sent a fingerprint.
     if (accountIndex != null) {
         val byAcc = sorted.indexOfFirst { accountOf(it) == accountIndex }
         if (byAcc >= 0) return byAcc
@@ -126,7 +126,7 @@ fun Route.psbtRoutes(
          * POST /psbt/create
          * Builds a new PSBT end-to-end:
          *   1. Pull wallet detail (descriptors, cosigners) from registry.
-         *   2. Pick UTXOs — manual list from coin-control, or largest-first auto.
+         *   2. Pick UTXOs - manual list from coin-control, or largest-first auto.
          *   3. Fetch raw hex of every previous tx (Trezor 2.4+ requires it
          *      as PSBT_IN_NON_WITNESS_UTXO even for native segwit inputs).
          *   4. Reserve a fresh change address from explorer (no reuse).
@@ -192,7 +192,7 @@ fun Route.psbtRoutes(
                     // Manual selection (coin control)
                     selectSpecificUtxos(request.utxos, request.walletId, wallet.network, blockchainClient, registryClient)
                 } else {
-                    // Auto selection — largest-first, fee calculated per wallet type
+                    // Auto selection - largest-first, fee calculated per wallet type
                     val totalNeeded = request.outputs.sumOf { it.amountSats }
                     autoSelectUtxos(wallet, totalNeeded, request.feeRate, request.outputs.size, blockchainClient, registryClient, reservedUtxos)
                 }
@@ -230,7 +230,7 @@ fun Route.psbtRoutes(
 
                 // Explorer derives a new change address past the gap limit
                 // if every pre-derived one is already used. We always burn
-                // a fresh change address per tx — no reuse, even if the
+                // a fresh change address per tx - no reuse, even if the
                 // previous one received nothing.
                 val changeAddress = explorerClient.getNextChangeAddress(request.walletId)
                 log.info("Next unused change address: addr={} index={}",
@@ -261,7 +261,7 @@ fun Route.psbtRoutes(
                             request.signerFingerprint, request.signerAccountIndex, match)
                         match
                     } else {
-                        log.warn("Could not map signer (fp={} acc={}) to a cosigner — defaulting to 0",
+                        log.warn("Could not map signer (fp={} acc={}) to a cosigner - defaulting to 0",
                             request.signerFingerprint, request.signerAccountIndex)
                         0
                     }
@@ -336,7 +336,7 @@ fun Route.psbtRoutes(
                     val m = wallet.m ?: 2
                     val sortedCosigners = wallet.cosigners.sortedBy { it.idx }
                     // Resolve which cosigner is asking. Fingerprint wins because
-                    // it's unique per device — accountIndex collides whenever
+                    // it's unique per device - accountIndex collides whenever
                     // two cosigners both use BIP-48 account 0 on different
                     // Trezors. Falls back to the legacy explicit cosignerIndex
                     // when neither signal identifies a match.
@@ -548,7 +548,7 @@ fun Route.psbtRoutes(
                 }
             }
 
-            // Update TrezorConnectParams — place signatures at correct BIP-67 position
+            // Update TrezorConnectParams - place signatures at correct BIP-67 position
             val updatedParams = existing.trezorConnectParams?.let { params ->
                 val updatedInputs = params.inputs.mapIndexed { inputIndex, input ->
                     val ms = input.multisig ?: return@mapIndexed input
@@ -582,7 +582,7 @@ fun Route.psbtRoutes(
             // Insert audit row + bump currentSigs atomically. The audit row
             // INSERT happens first inside the transaction, so a duplicate
             // sign attempt (same psbt × cosigner) hits the UNIQUE constraint
-            // and rolls back the whole transaction — currentSigs cannot drift
+            // and rolls back the whole transaction - currentSigs cannot drift
             // past the actual number of recorded signatures.
             val (newSigCount, newStatus) = try {
                 repository.signWithAudit(
@@ -649,7 +649,7 @@ fun Route.psbtRoutes(
         /*
          * POST /psbt/{id}/broadcast-raw
          * Broadcasts a raw signed transaction hex to the Bitcoin network.
-         * Skips PSBT sign/finalize — Trezor returns a complete signed transaction.
+         * Skips PSBT sign/finalize - Trezor returns a complete signed transaction.
          * Called by frontend after Trezor signs the last required signature.
          */
         post("/{id}/broadcast-raw") {
@@ -736,7 +736,7 @@ fun Route.psbtRoutes(
          * GET /psbt/{id}/signers
          * Joins the wallet's cosigner roster with the per-cosigner signature
          * audit trail and returns one SignerDetail per cosigner. Per-device
-         * labels are intentionally null here — the gateway layers them in
+         * labels are intentionally null here - the gateway layers them in
          * via registry's /cosigner-labels endpoint so that each caller only
          * sees their own labels.
          */
@@ -776,7 +776,7 @@ fun Route.psbtRoutes(
                         deviceId = sig?.deviceId,
                         signedAt = sig?.signedAt,
                         // Labels are per-device and are layered in by api-gateway
-                        // via registry's /cosigner-labels endpoint — see PsbtRoutes.
+                        // via registry's /cosigner-labels endpoint - see PsbtRoutes.
                         label = null
                     )
                 }
@@ -798,7 +798,7 @@ fun Route.psbtRoutes(
     }
 }
 
-// ========== UTXO Selection Helpers ==========
+// UTXO Selection Helpers
 
 /*
  * Selects specific UTXOs by txid:vout from the user's coin control list.
@@ -814,14 +814,14 @@ private suspend fun selectSpecificUtxos(
 ): List<SelectedUtxo> = coroutineScope {
     val selectionSet = selections.map { "${it.txid}:${it.vout}" }.toSet()
 
-    // Fast path: selections have addresses — query only those (no full wallet scan)
+    // Fast path: selections have addresses - query only those (no full wallet scan)
     val knownAddresses = selections.mapNotNull { it.address }.distinct()
     val addressesToScan = if (knownAddresses.size == selections.size) {
         val allAddresses = registryClient.getAllAddresses(walletId)
         val addrMap = allAddresses.associateBy { it.address }
         knownAddresses.mapNotNull { addrMap[it] }
     } else {
-        // Slow path: some selections missing address — scan all wallet addresses
+        // Slow path: some selections missing address - scan all wallet addresses
         registryClient.getAllAddresses(walletId)
     }
 

@@ -9,7 +9,7 @@ repositories {
 }
 
 dependencies {
-    // --- Ktor server ---
+    // Ktor server
     implementation("io.ktor:ktor-server-core-jvm:3.0.0")
     implementation("io.ktor:ktor-server-netty-jvm:3.0.0")
     implementation("io.ktor:ktor-server-content-negotiation-jvm:3.0.0")
@@ -17,17 +17,17 @@ dependencies {
     implementation("io.ktor:ktor-server-status-pages-jvm:3.0.0")
     implementation("io.ktor:ktor-server-call-logging-jvm:3.0.0")
 
-    // --- Ktor client (for CoinGecko API) ---
+    // Ktor client (for CoinGecko API)
     implementation("io.ktor:ktor-client-core:3.0.0")
     implementation("io.ktor:ktor-client-cio:3.0.0")
     implementation("io.ktor:ktor-client-content-negotiation:3.0.0")
     implementation("io.ktor:ktor-client-logging:3.0.0")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.0.0")
 
-    // --- Logging ---
+    // Logging
     implementation("ch.qos.logback:logback-classic:1.5.6")
 
-    // --- Tests ---
+    // Tests
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host-jvm:3.0.0")
 }

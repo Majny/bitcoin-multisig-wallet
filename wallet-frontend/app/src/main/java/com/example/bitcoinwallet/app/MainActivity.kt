@@ -63,7 +63,7 @@ class MainActivity : ComponentActivity() {
     }
 
     // Deeplinks from Trezor Suite Mobile come in via new intents rather than
-    // a fresh activity launch when singleTask is set — re-check the extras.
+    // a fresh activity launch when singleTask is set - re-check the extras.
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

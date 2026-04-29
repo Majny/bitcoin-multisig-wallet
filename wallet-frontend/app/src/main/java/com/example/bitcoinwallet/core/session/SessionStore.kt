@@ -98,7 +98,7 @@ object SessionStore {
      * [TrezorDeeplinkLauncher] generates a random id, stores it here, and
      * embeds the same id in the callback URL. [TrezorCallbackActivity] then
      * compares the returned id against this value and drops callbacks that do
-     * not match — guarding against stale, replayed, or spoofed callbacks from
+     * not match - guarding against stale, replayed, or spoofed callbacks from
      * other apps.
      */
     @Volatile var pendingRequestId: String? = null
@@ -107,7 +107,7 @@ object SessionStore {
      * The PSBT id the deeplink was launched for, when the active flow is
      * [SignFlow.PSBT_DETAIL]. PsbtDetail's LaunchedEffect on
      * [pendingSignedPsbt] checks this against its own psbtId before
-     * consuming the callback — without it a callback for PSBT A would be
+     * consuming the callback - without it a callback for PSBT A would be
      * processed by PSBT B's screen if the user navigated between them
      * before Trezor responded, submitting the wrong signature against the
      * wrong tx hash. Null when no PSBT-detail sign is in flight.
@@ -125,7 +125,7 @@ object SessionStore {
 
     /*
      * One-shot reason shown on the Trezor connect screen after a forced logout
-     * (e.g. wrong-device sign attempt). Set this *before* calling [clearAuth] —
+     * (e.g. wrong-device sign attempt). Set this *before* calling [clearAuth] -
      * [clearAuth] intentionally does NOT wipe it, otherwise the user would see
      * the login screen with no explanation. The connect screen consumes the
      * value via [setPendingLogoutReason] (null) once it has been shown.
@@ -150,7 +150,7 @@ object SessionStore {
     /*
      * Called from the HTTP layer when a 401 could not be recovered via refresh.
      * Sets the banner reason, wipes auth, then raises the flag so the UI
-     * navigates. Safe to call from any thread — StateFlow writes are atomic.
+     * navigates. Safe to call from any thread - StateFlow writes are atomic.
      */
     fun signalSessionExpired(
         reason: String = "Session expired. Please reconnect your Trezor."
@@ -183,17 +183,10 @@ object SessionStore {
     }
 
     /*
-     * Aborts an in-flight Trezor sign request from the UI side. Wipes every
-     * signal tied to the deeplink round-trip so a callback that arrives after
-     * the user gave up cannot be processed:
-     *   • pendingRequestId — TrezorCallbackActivity rejects callbacks whose id
-     *     does not match this; clearing it forces any late callback to be
-     *     dropped at the activity level rather than reaching a stale flow.
-     *   • pendingSignedPsbt / pendingSignType / pendingTrezorSignatures —
-     *     drop any partially-buffered result.
-     *   • activeSignFlow — release the SEND/PSBT_DETAIL claim.
-     * Auth (session/refresh) is intentionally untouched — this is a per-sign
-     * cancel, not a logout.
+     * Aborts an in-flight Trezor sign request from the UI side. Clears the
+     * request id (so a late callback gets dropped in TrezorCallbackActivity),
+     * the buffered signing result, and the active flow claim. Auth state is
+     * left alone - this is a per-sign cancel, not a logout.
      */
     fun clearPendingSignRequest() {
         pendingRequestId = null

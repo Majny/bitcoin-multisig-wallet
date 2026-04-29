@@ -4,11 +4,11 @@ import org.slf4j.LoggerFactory
 import java.security.MessageDigest
 
 /* Output-descriptor parser (BIP-380 / BIP-383). Handles:
- *   wsh(sortedmulti(M, ...))   — P2WSH multisig (BIP-67 sorted)
- *   wsh(multi(M, ...))         — P2WSH multisig (unsorted)
- *   sh(wsh(sortedmulti(M,...))) — P2SH-P2WSH multisig
- *   wpkh([fp/path]xpub/chain/STAR) — P2WPKH single-sig
- *   tr([fp/path]xpub/chain/STAR)   — P2TR single-sig
+ *   wsh(sortedmulti(M, ...))   - P2WSH multisig (BIP-67 sorted)
+ *   wsh(multi(M, ...))         - P2WSH multisig (unsorted)
+ *   sh(wsh(sortedmulti(M,...))) - P2SH-P2WSH multisig
+ *   wpkh([fp/path]xpub/chain/STAR) - P2WPKH single-sig
+ *   tr([fp/path]xpub/chain/STAR)   - P2TR single-sig
  * Checksum (`#xxxxxxxx`) is stripped and ignored; caller is expected to have
  * validated it if they care. */
 object DescriptorParser {
@@ -70,9 +70,7 @@ object DescriptorParser {
         }
     }
 
-    // ------------------------------------------------------------------
     // Multisig parsing
-    // ------------------------------------------------------------------
 
     private fun parseMultisig(
         receiveDesc: String,
@@ -120,7 +118,7 @@ object DescriptorParser {
         // Validate change descriptor has same structure
         val changeKeys = KEY_ORIGIN_RE.findAll(changeDesc).toList()
         if (changeKeys.size != n) {
-            log.warn("Change descriptor has {} keys, expected {} — using generated change", changeKeys.size, n)
+            log.warn("Change descriptor has {} keys, expected {} - using generated change", changeKeys.size, n)
         }
 
         log.info("Parsed multisig: {}of{}, script={}, sorted={}, keys={}",
@@ -149,9 +147,7 @@ object DescriptorParser {
         )
     }
 
-    // ------------------------------------------------------------------
     // Single-sig parsing
-    // ------------------------------------------------------------------
 
     private fun parseSinglesig(
         receiveDesc: String,
@@ -192,9 +188,7 @@ object DescriptorParser {
         )
     }
 
-    // ------------------------------------------------------------------
     // Helpers
-    // ------------------------------------------------------------------
 
     /**
      * Strip the #checksum suffix from a descriptor.
@@ -208,7 +202,7 @@ object DescriptorParser {
         // For descriptors ending with /0/* → replace with /1/*
         val result = receiveDesc.replace("/0/*", "/1/*")
         if (result == receiveDesc) {
-            log.warn("Could not derive change descriptor — no /0/* found, using receive as-is")
+            log.warn("Could not derive change descriptor - no /0/* found, using receive as-is")
         }
         return result
     }
@@ -252,9 +246,7 @@ object DescriptorParser {
     }
 }
 
-// ------------------------------------------------------------------
 // Data classes
-// ------------------------------------------------------------------
 
 data class ParsedDescriptor(
     val walletId: String,

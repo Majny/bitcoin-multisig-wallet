@@ -65,7 +65,7 @@ fun Application.configureAuthRoutes(
     routing {
         route("/auth") {
 
-            /* GET /auth/.well-known/jwks.json — public key published for the
+            /* GET /auth/.well-known/jwks.json - public key published for the
              * gateway's JWKS verifier so it can check RS256 signatures without
              * sharing a secret. */
             get("/.well-known/jwks.json") {
@@ -73,7 +73,7 @@ fun Application.configureAuthRoutes(
                 call.respondText(jwks, ContentType.Application.Json)
             }
 
-            /* POST /auth/trezor/login — creates/updates a device record and
+            /* POST /auth/trezor/login - creates/updates a device record and
              * issues an initial access + refresh token pair. device_id is
              * derived deterministically from the Trezor fingerprint so
              * repeated logins from the same device resolve to the same ID. */
@@ -108,7 +108,7 @@ fun Application.configureAuthRoutes(
                 )
             }
 
-            /* POST /auth/device — upserts extended device metadata (model, label).
+            /* POST /auth/device - upserts extended device metadata (model, label).
              * The login flow calls this right after issuing the token so that
              * the Trezor Suite model/label make it into the devices row. */
             post("/device") {
@@ -117,7 +117,7 @@ fun Application.configureAuthRoutes(
                 call.respond(out)
             }
 
-            /* GET /auth/device/{id} — single-row device lookup. */
+            /* GET /auth/device/{id} - single-row device lookup. */
             get("/device/{id}") {
                 val id = call.parameters["id"] ?: return@get call.respond(
                     HttpStatusCode.BadRequest, mapOf("error" to "missing device id")
@@ -130,7 +130,7 @@ fun Application.configureAuthRoutes(
                 }
             }
 
-            /* POST /auth/token/refresh — single-use refresh token rotation.
+            /* POST /auth/token/refresh - single-use refresh token rotation.
              * Delegates atomicity to RefreshStore.rotate, which makes sure
              * concurrent rotations of the same token don't hand out two
              * valid replacements. */
