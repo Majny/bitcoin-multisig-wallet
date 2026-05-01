@@ -148,6 +148,19 @@ object SessionStore {
     val sessionExpired: StateFlow<Boolean> = _sessionExpired.asStateFlow()
 
     /*
+     * Raised by TrezorDeeplinkLauncher when an Intent for a Trezor Connect
+     * deeplink finds no handler - i.e. Trezor Suite Mobile is not installed.
+     * Observed at the nav-host level to show a dialog with a Play Store link.
+     * Consumers call [setTrezorSuiteMissing] (false) once dismissed.
+     */
+    private val _trezorSuiteMissing = MutableStateFlow(false)
+    val trezorSuiteMissing: StateFlow<Boolean> = _trezorSuiteMissing.asStateFlow()
+
+    fun setTrezorSuiteMissing(value: Boolean) {
+        _trezorSuiteMissing.value = value
+    }
+
+    /*
      * Called from the HTTP layer when a 401 could not be recovered via refresh.
      * Sets the banner reason, wipes auth, then raises the flag so the UI
      * navigates. Safe to call from any thread - StateFlow writes are atomic.

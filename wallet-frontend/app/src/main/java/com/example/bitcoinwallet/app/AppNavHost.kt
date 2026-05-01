@@ -10,6 +10,7 @@ import com.example.bitcoinwallet.core.api.ApiConfig
 import com.example.bitcoinwallet.core.session.SessionStore
 import com.example.bitcoinwallet.core.signer.MobileSigner
 import com.example.bitcoinwallet.core.signer.UserSession
+import com.example.bitcoinwallet.core.trezor.TrezorSuiteMissingDialog
 import com.example.bitcoinwallet.feature.trezorconnect.navigation.TrezorRoutes
 import com.example.bitcoinwallet.feature.trezorconnect.navigation.trezorConnectGraph
 import com.example.bitcoinwallet.feature.wallet.navigation.WalletRoutes
@@ -42,6 +43,10 @@ fun AppNavHost(
         trezorConnectGraph(navController)
         walletGraph(navController)
     }
+
+    // Shown over any screen when a Trezor Connect deeplink fails because
+    // Trezor Suite Mobile is not installed.
+    TrezorSuiteMissingDialog()
 
     // Each new Trezor auth callback increments connectTrigger → re-navigate to Resolve.
     LaunchedEffect(connectTrigger) {

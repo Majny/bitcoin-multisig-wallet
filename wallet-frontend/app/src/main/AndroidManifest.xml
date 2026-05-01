@@ -5,6 +5,17 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.CAMERA" />
 
+    <!--
+        Android 11+ (SDK 30) restricts visibility of other installed packages.
+        We need to query the Trezor Suite Mobile package to detect whether it
+        is installed before attempting a Trezor Connect deeplink (the deeplink
+        URL is HTTPS, so without a check it would silently fall back to the
+        browser instead of telling the user to install the app).
+    -->
+    <queries>
+        <package android:name="io.trezor.suite" />
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

@@ -3,6 +3,7 @@ package com.example.bitcoinwallet.core.trezor
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.util.Log
 import com.example.bitcoinwallet.core.api.TrezorConnectMultisigDto
@@ -26,6 +27,22 @@ class TrezorDeeplinkLauncher(
 ) {
 
     /*
+     * Trezor Connect deeplinks use HTTPS URLs (https://connect.trezor.io/...),
+     * so a missing Trezor Suite Mobile would silently fall back to the browser
+     * instead of throwing ActivityNotFoundException. We therefore check the
+     * package explicitly before launching. Requires <queries> declaration in
+     * AndroidManifest for Android 11+ visibility rules.
+     */
+    private fun isTrezorSuiteInstalled(context: Context): Boolean {
+        return try {
+            context.packageManager.getPackageInfo("io.trezor.suite", 0)
+            true
+        } catch (e: PackageManager.NameNotFoundException) {
+            false
+        }
+    }
+
+    /*
      * Cryptographically random id, stored in SessionStore so the matching
      * callback can be authenticated. SecureRandom rather than UUID.random
      * to make sure the id can't be guessed by another app on the device.
@@ -46,6 +63,10 @@ class TrezorDeeplinkLauncher(
         derivationPath: String = "m/84'/1'/0'",
         network: String = "testnet"
     ): Boolean {
+        if (!isTrezorSuiteInstalled(context)) {
+            SessionStore.setTrezorSuiteMissing(true)
+            return false
+        }
         val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val paramsJson = JSONObject().apply {
             put("coin", coin)
@@ -70,6 +91,7 @@ class TrezorDeeplinkLauncher(
             true
         } catch (e: ActivityNotFoundException) {
             Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            SessionStore.setTrezorSuiteMissing(true)
             false
         }
     }
@@ -80,6 +102,10 @@ class TrezorDeeplinkLauncher(
      * the backend hands us a serialized PSBT to forward unchanged.
      */
     fun openSignTransaction(context: Context, psbtBase64: String, network: String = "testnet"): Boolean {
+        if (!isTrezorSuiteInstalled(context)) {
+            SessionStore.setTrezorSuiteMissing(true)
+            return false
+        }
         val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val paramsJson = JSONObject().apply {
             put("coin", coin)
@@ -107,6 +133,7 @@ class TrezorDeeplinkLauncher(
             true
         } catch (e: ActivityNotFoundException) {
             Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            SessionStore.setTrezorSuiteMissing(true)
             false
         }
     }
@@ -122,6 +149,10 @@ class TrezorDeeplinkLauncher(
         context: Context,
         params: TrezorConnectParamsDto
     ): Boolean {
+        if (!isTrezorSuiteInstalled(context)) {
+            SessionStore.setTrezorSuiteMissing(true)
+            return false
+        }
         val paramsJson = JSONObject().apply {
             put("coin", params.coin)
             put("version", params.version)
@@ -220,6 +251,7 @@ class TrezorDeeplinkLauncher(
             true
         } catch (e: ActivityNotFoundException) {
             Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            SessionStore.setTrezorSuiteMissing(true)
             false
         }
     }
@@ -237,6 +269,10 @@ class TrezorDeeplinkLauncher(
         scriptType: String,
         multisig: com.example.bitcoinwallet.core.api.TrezorConnectMultisigDto? = null
     ): Boolean {
+        if (!isTrezorSuiteInstalled(context)) {
+            SessionStore.setTrezorSuiteMissing(true)
+            return false
+        }
         val paramsJson = JSONObject().apply {
             put("coin", coin)
             put("path", JSONArray(path))
@@ -266,6 +302,7 @@ class TrezorDeeplinkLauncher(
             true
         } catch (e: ActivityNotFoundException) {
             Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            SessionStore.setTrezorSuiteMissing(true)
             false
         }
     }
@@ -313,6 +350,10 @@ class TrezorDeeplinkLauncher(
         network: String = "mainnet"
     ): String? {
         if (derivationPaths.isEmpty()) return null
+        if (!isTrezorSuiteInstalled(context)) {
+            SessionStore.setTrezorSuiteMissing(true)
+            return null
+        }
 
         val coin = if (network == "testnet") "Testnet" else "Bitcoin"
         val bundle = JSONArray()
@@ -346,6 +387,7 @@ class TrezorDeeplinkLauncher(
             requestId
         } catch (e: ActivityNotFoundException) {
             Log.e("TrezorDeeplink", "No app can handle Trezor deeplink (install Trezor Suite Mobile)", e)
+            SessionStore.setTrezorSuiteMissing(true)
             null
         }
     }
