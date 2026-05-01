@@ -346,13 +346,13 @@ class WalletExplorer(
         myAddresses: Set<String>,
         currentBlockHeight: Int = 0
     ): WalletTransaction {
-        // Input adresy
+        // Input addresses
         val myInputSum = tx.vin.sumOf { input ->
             val addr = input.prevout?.scriptpubkey_address ?: ""
             if (addr in myAddresses) input.prevout?.value ?: 0L else 0L
         }
 
-        // Output adresy
+        // Output addresses
         val myOutputSum = tx.vout.sumOf { output ->
             if (output.scriptpubkey_address in myAddresses) output.value else 0L
         }

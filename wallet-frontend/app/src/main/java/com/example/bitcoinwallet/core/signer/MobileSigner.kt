@@ -15,11 +15,9 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
 /*
- * Backend client used during the Trezor-login flow. Three responsibilities:
- *   1. Trade an xpub set for a JWT session (loginWithTrezor).
- *   2. Refresh that session via the rotating refresh token.
- *   3. Account discovery - ask the backend which derivation paths actually
- *      have on-chain activity so the user only sees real accounts.
+ * Backend client used during the Trezor-login flow. Trades an xpub set for a
+ * JWT session (loginWithTrezor) and lists the wallets the resulting JWT
+ * grants access to.
  *
  * Distinct from WalletApiClient: that one is the post-login HTTP surface,
  * this one only deals with the auth bootstrap.
@@ -66,19 +64,6 @@ class MobileSigner(
         return LoginResult(session = session, refreshToken = loginResp.refreshToken)
     }
 
-    /* Exchanges a refresh token for a new access token. Returns null on failure. */
-    suspend fun refreshTokens(refreshToken: String): RefreshResult? {
-        return try {
-            val resp: TokenRefreshResponse = client.post("$backendBaseUrl/auth/token/refresh") {
-                contentType(ContentType.Application.Json)
-                setBody(TokenRefreshRequest(refreshToken = refreshToken))
-            }.body()
-            RefreshResult(accessToken = resp.accessToken, refreshToken = resp.refreshToken)
-        } catch (_: Exception) {
-            null
-        }
-    }
-
     /*
      * GET /wallets - list every wallet visible to the JWT. Maps the registry
      * DTO into the UI-shaped WalletSummary so the rest of the app doesn't
@@ -108,26 +93,6 @@ class MobileSigner(
     }
 
 
-    /*
-     * POST /accounts/scan - backend probes each derivation path for activity.
-     * Drives the post-Trezor-connect screen that lets the user pick an active
-     * account instead of starting from m/84'/0'/0' every time.
-     */
-    suspend fun scanAccounts(
-        fingerprint: String,
-        accounts: List<AccountToScan>
-    ): ScanAccountsResponse {
-        return client.post("$backendBaseUrl/accounts/scan") {
-            contentType(ContentType.Application.Json)
-            setBody(
-                ScanAccountsRequest(
-                    fingerprint = fingerprint,
-                    accounts = accounts
-                )
-            )
-        }.body()
-    }
-
     companion object {
         private fun defaultClient(): HttpClient =
             HttpClient(Android) {
@@ -151,21 +116,6 @@ class MobileSigner(
 data class LoginResult(
     val session: UserSession,
     val refreshToken: String?
-)
-
-/* refreshTokens result - new access token + (optional) rotated refresh token. */
-data class RefreshResult(
-    val accessToken: String,
-    val refreshToken: String?
-)
-
-@kotlinx.serialization.Serializable
-data class TokenRefreshRequest(val refreshToken: String)
-
-@kotlinx.serialization.Serializable
-data class TokenRefreshResponse(
-    val accessToken: String,
-    val refreshToken: String? = null
 )
 
 data class TrezorDeviceIdentity(
@@ -251,33 +201,8 @@ data class WalletLoginSerializable(
     val balanceSats: Long? = null
 )
 
-/* ACCOUNT DISCOVERY */
-
 @Serializable
 data class AccountToScan(
     val xpub: String,
     val derivationPath: String
-)
-
-@Serializable
-data class ScanAccountsRequest(
-    val fingerprint: String,
-    val accounts: List<AccountToScan>
-)
-
-@Serializable
-data class ScanAccountsResponse(
-    val fingerprint: String,
-    val accounts: List<ScannedAccount>
-)
-
-@Serializable
-data class ScannedAccount(
-    val derivationPath: String,
-    val xpub: String,
-    val hasActivity: Boolean,
-    val utxoCount: Int,
-    val totalSats: Long,
-    val scriptType: String,
-    val network: String
 )

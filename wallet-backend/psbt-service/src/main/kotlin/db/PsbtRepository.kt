@@ -81,33 +81,6 @@ class PsbtRepository {
             }
     }
 
-    /* Updates PSBT data after a signature is added (new sig count, status, updated params). */
-    fun updatePsbt(
-        id: UUID,
-        psbtBase64: String,
-        currentSigs: Int,
-        status: String? = null,
-        trezorConnectParams: TrezorConnectParams? = null,
-        serializedTx: String? = null
-    ) = transaction {
-        PsbtsTable.update({ PsbtsTable.id eq id }) {
-            it[PsbtsTable.psbtBase64] = psbtBase64
-            it[PsbtsTable.currentSigs] = currentSigs
-            it[updatedAt] = OffsetDateTime.now()
-            if (status != null) {
-                it[PsbtsTable.status] = status
-            }
-            if (trezorConnectParams != null) {
-                it[PsbtsTable.trezorConnectParams] = json.encodeToString(
-                    TrezorConnectParams.serializer(), trezorConnectParams.copy(refTxs = null)
-                )
-            }
-            if (serializedTx != null) {
-                it[PsbtsTable.serializedTx] = serializedTx
-            }
-        }
-    }
-
     /*
      * Records a cosigner's signature and bumps the PSBT counters in the same
      * transaction. INSERT into psbt_signatures runs first so the
