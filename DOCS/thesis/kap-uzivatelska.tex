@@ -122,16 +122,17 @@ Bitcoinovým mainnetem (produkční síť s~reálnými prostředky) a~testnetem
 (testovací síť bez finanční hodnoty). Pro účely testování ponecháme výchozí
 volbu testnet.
 
-Uživatel připojí Trezor přes USB k~mobilnímu zařízení a~stiskne tlačítko
-\emph{Connect Trezor}. Aplikace přes deeplink přepne na Trezor
+Uživatel připojí Trezor k~mobilnímu zařízení (USB-C kabelem u~modelů
+Safe~3 a~Safe~5, případně bezdrátově přes Bluetooth u~modelu Safe~7)
+a~stiskne tlačítko \emph{Connect Trezor}. Aplikace přes deeplink přepne na Trezor
 Suite Mobile, kde uživatel jedním potvrzením na zařízení exportuje deset
 rozšířených veřejných klíčů (xpub) pro singlesig účty podle
 BIP-84~\cite{BIP84}.
 
 Po návratu do aplikace backend pro každý xpub provede tzv.~account discovery
-podle BIP-44~\cite{BIP44} -- prohledá prvních pět adres a~zjistí, zda na
-nich proběhly nějaké transakce. Pro účty, na kterých discovery najde
-historii, vytvoří záznam peněženky a~vrátí seznam aplikaci. Uživatel ze
+podle BIP-44~\cite{BIP44} -- ověří, zda byly na účtu provedeny nějaké
+transakce. Pro účty, na kterých discovery najde historii, vytvoří záznam
+peněženky a~vrátí seznam aplikaci. Uživatel ze
 seznamu vybere konkrétní singlesig účet
 (obrázek~\ref{fig:screen-onboarding}, uprostřed), čímž se přesune na hlavní
 obrazovku zvolené peněženky (obrázek~\ref{fig:screen-onboarding}, vpravo).

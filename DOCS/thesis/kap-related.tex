@@ -556,7 +556,7 @@ Uživatel nemůže v~aplikaci vytvořit multisig konfiguraci, importovat
 deskriptor ani koordinovat podepisování s~více cosignery. Pro multisig
 transakce je nutné použít aplikaci třetí strany (např.\ Electrum nebo Sparrow),
 která komunikuje se zařízením Trezor prostřednictvím Trezor Connect. Mobilní
-verze Trezor Suite Lite navíc nabízí pouze omezenou podmnožinu funkcí
+verze Trezor Suite Mobile navíc nabízí pouze omezenou podmnožinu funkcí
 desktopové verze.
 
 \subsection{Sparrow Wallet}
@@ -828,13 +828,15 @@ Implementace tohoto přístupu by vyžadovala:
 \end{itemize}
 
 \noindent
-Hrubý odhad pracnosti je přibližně 20 pracovních dní. Zdrojový kód
-aplikace Trezor Suite je sice veřejně dostupný, ale je publikován pod
-licencí T-RSL (Trezor Restricted Source License)~\citep{TRSL}, která
-explicitně zakazuje kopírování kódu do jiných projektů -- umožňuje
-pouze čtení za účelem studia. Implementace by proto musela vzniknout
-zcela od základu na základě veřejné dokumentace
-protokolu~\citep{TrezorFirmwareDocs}.
+Rozsah uvedených komponent (transportní vrstva, sada protobuf zpráv
+odpovídající aktuálnímu firmware, stavový automat podepisování
+a~multisig rozšíření) představuje samostatný implementační projekt
+přesahující rámec bakalářské práce. Zdrojový kód aplikace Trezor Suite
+je sice veřejně dostupný, ale je publikován pod licencí T-RSL (Trezor
+Reference Source License)~\citep{TRSL}, která explicitně zakazuje
+kopírování kódu do jiných projektů -- umožňuje pouze čtení za~účelem
+studia. Implementace by proto musela vzniknout zcela od základu
+na~základě veřejné dokumentace protokolu~\citep{TrezorFirmwareDocs}.
 
 \subsubsection{Deeplink protokol přes Trezor Suite Mobile}
 
@@ -856,11 +858,11 @@ uživatele mimo peněženku.
 
 Přímá USB komunikace by přinesla lepší uživatelský zážitek -- celý
 proces podepisování by probíhal uvnitř jedné aplikace bez přepínání
-kontextu. Představuje však přibližně 20~dní dodatečného vývoje
-a~nutnost implementace složitého protokolu zcela od základu (kvůli
-licenčním omezením). JavaScript SDK je pro Android nepoužitelné.
-V~kontextu rozsahu bakalářské práce je delegování na Trezor Suite
-Mobile prostřednictvím deeplinků pragmatickou volbou.
+kontextu. Představuje však samostatný implementační projekt -- nutnost
+implementace složitého protokolu zcela od základu (kvůli licenčním
+omezením) -- který přesahuje rámec bakalářské práce. JavaScript SDK
+je pro Android nepoužitelné. Delegování na Trezor Suite Mobile
+prostřednictvím deeplinků je proto pragmatickou volbou.
 
 Architektura aplikace je navržena s~čistým interním rozhraním pro
 podepisování (\emph{signing interface}), za kterým se v~aktuální verzi
@@ -946,17 +948,21 @@ Connect~\citep{TrezorConnect}), desktopovými peněženkami
 Sparrow~\citep{SparrowWallet} a~Electrum~\citep{Electrum} i~dalšími
 nástroji Bitcoinového ekosystému.
 
-Volba PSBT zajišťuje, že aplikace zapadá do existujícího ekosystému.
-Uživatel může například zahájit transakci v~mobilní aplikaci, exportovat
-částečně podepsanou PSBT a~dokončit podepisování ve Sparrow na desktopu
--- nebo naopak. Tato interoperabilita je pro multisig workflow obzvláště
-důležitá, neboť jednotliví cosigneři mohou používat různé peněženky.
+PSBT je v~aplikaci využita jako standardní container pro koordinaci
+podpisů mezi cosignery. I~v~rámci jednoho multisig workflow mezi
+podpisy jednotlivých cosignerů typicky uplyne čas v~řádu hodin
+až dní -- stav rozpracované transakce proto musí být kompletně
+reprezentován jediným formátem se~všemi metadaty potřebnými
+pro další podpis (utracený výstup, witness skript, derivační cesty
+cosignerů, dosavadní dílčí podpisy). PSBT je pro tento účel přímo
+navržen a~díky volbě standardu nezavádí aplikace proprietární
+formát.
 
 Z~těchto důvodů volíme PSBT jako formát pro koordinaci podepisování.
 Backendová služba vystupuje jako koordinátor: vytvoří PSBT s~kompletními
-metadaty (role Creator a~Updater), distribuuje ji cosignerům k~podpisu,
-sbírá dílčí podpisy a~po dosažení prahu~M provede finalizaci
-a~broadcast do sítě.
+metadaty (role Creator a~Updater), distribuuje ji cosignerům k~podpisu
+a~sbírá dílčí podpisy. Po dosažení prahu~M iniciuje uživatel broadcast
+v~klientské aplikaci a~backend transakci finalizuje a~odešle do sítě.
 
 
 \subsection{Shrnutí: rozsah vlastní implementace}

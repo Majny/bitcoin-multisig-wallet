@@ -114,21 +114,15 @@ výstupní podmínky a~alternativní scénáře.
   \item[Hlavní scénář:] \hfill
     \begin{enumerate}
       \item Uživatel spustí aplikaci a~zvolí přihlášení.
-      \item Aplikace vygeneruje deeplink (speciální URL otevírající cílovou
-            aplikaci s~předanými parametry) pro Trezor Connect s~požadavkem na
-            export rozšířených veřejných klíčů (xpub) pro deset účtů dle
-            BIP-84~\cite{BIP84}. Počet deseti účtů vychází z~praxe
-            existujících peněženek (Sparrow Wallet~\cite{SparrowWallet}
-            používá stejný limit) a~představuje kompromis mezi pokrytím
-            běžných scénářů a~počtem exportovaných klíčů.
-      \item Uživatel je přesměrován do aplikace Trezor Suite Mobile, kde na
-            Trezoru jedním potvrzením exportuje všech deset klíčů.
+      \item Aplikace zahájí export rozšířených veřejných klíčů (xpub)
+            z~Trezoru přes Trezor Suite Mobile.
+      \item Uživatel je přesměrován do aplikace Trezor Suite Mobile a~na
+            Trezoru potvrdí export.
       \item Trezor Suite Mobile vrátí sadu xpub zpět do aplikace.
-      \item Aplikace odešle xpub na backend, který pro každý xpub odvodí prvních
-            pět adres a~ověří na blockchainu, zda mají transakční historii
-            (account discovery dle BIP-44 gap limitu~\cite{BIP44}).
-      \item Backend vytvoří peněženky pro účty s~nalezenou aktivitou, vydá JWT
-            token a~vrátí seznam nalezených účtů.
+      \item Aplikace odešle xpub na backend, který provede account discovery
+            (ověří, které účty mají transakční historii).
+      \item Backend vytvoří peněženky pro účty s~nalezenou aktivitou, vydá
+            přihlašovací token a~vrátí seznam nalezených účtů.
       \item Uživatel vybere účet ze seznamu a~aplikace zobrazí dashboard.
     \end{enumerate}
   \item[Výstupní podmínky:] Uživatel je přihlášen, aplikace zobrazuje jeho účty
@@ -138,8 +132,6 @@ výstupní podmínky a~alternativní scénáře.
     \begin{itemize}
       \item \emph{Trezor Suite Mobile není nainstalována:} Aplikace zobrazí chybovou
             hlášku s~instrukcí k~instalaci.
-      \item \emph{Uživatel odmítne export na Trezoru:} Přihlášení je zrušeno,
-            aplikace zůstává na přihlašovací obrazovce.
       \item \emph{Žádný účet nemá aktivitu:} Backend nevytvoří žádnou peněženku;
             aplikace informuje uživatele, že nebyly nalezeny účty s~historií.
       \item \emph{Backend není dostupný:} Aplikace zobrazí chybovou hlášku o~nedostupnosti
@@ -162,13 +154,8 @@ výstupní podmínky a~alternativní scénáře.
     \begin{enumerate}
       \item Uživatel přejde na obrazovku odeslání a~zadá cílovou adresu (ručně nebo
             naskenováním QR kódu).
-      \item Uživatel zadá částku buď v~BTC, nebo ve zvolené fiat měně
+      \item Uživatel zadá částku v~BTC nebo ve zvolené fiat měně
             (CZK, USD nebo EUR; konkrétní měna se volí v~nastavení).
-            Přepínač jednotky vedle pole umožňuje mezi BTC a~fiat přepínat;
-            aplikace pod polem vždy zobrazuje ekvivalent ve~druhé jednotce.
-            Sats (tedy skutečná částka utracená v~transakci) se počítají
-            z~BTC ekvivalentu: je-li vstup ve~fiat, aplikace jej nejprve
-            převede přes aktuální kurz získaný ze~služby \texttt{price-service}.
       \item Aplikace zobrazí odhadovaný poplatek na základě aktuálního stavu mempoolu.
       \item Uživatel volitelně aktivuje coin control a~vybere konkrétní UTXO
             (viz UC5, sekce~\ref{uc:coin-control}).
@@ -209,17 +196,16 @@ výstupní podmínky a~alternativní scénáře.
     \end{itemize}
   \item[Hlavní scénář:] \hfill
     \begin{enumerate}
-      \item Uživatel přejde do nastavení a~zvolí import peněženky.
-      \item Uživatel vloží deskriptor zkopírováním textu ze schránky.
-            Deskriptory jsou příliš dlouhé (typicky stovky znaků) pro
-            spolehlivé naskenování QR kódem.
+      \item Uživatel otevře seznam multisig peněženek a~zvolí import nové peněženky.
+      \item Uživatel vloží deskriptor (textovým vložením ze schránky nebo
+            naskenováním QR kódu).
       \item Backend parsuje deskriptor dle BIP-380~\cite{BIP380} a~BIP-383~\cite{BIP383},
             extrahuje práh M, veřejné klíče cosignerů a~jejich derivační cesty
             dle BIP-48~\cite{BIP48}.
       \item Backend odvodí adresy P2WSH~\cite{BIP141} pro multisig peněženku
             a~provede discovery (prohledání adres dle gap limitu).
       \item Backend uloží konfiguraci peněženky a~vrátí informace o~peněžence
-            (práh, počet cosignerů, nalezený zůstatek).
+            (práh, počet cosignerů, derivované adresy).
       \item Aplikace zobrazí nově importovanou multisig peněženku v~seznamu účtů.
     \end{enumerate}
   \item[Výstupní podmínky:] Multisig peněženka je importována a~zobrazena v~seznamu
@@ -228,8 +214,9 @@ výstupní podmínky a~alternativní scénáře.
     \begin{itemize}
       \item \emph{Neplatný deskriptor:} Backend vrátí chybu s~popisem problému;
             aplikace zobrazí hlášku s~detailem.
-      \item \emph{Deskriptor neobsahuje xpub uživatele:} Peněženka je importována,
-            ale uživatel nebude moci podepisovat transakce svým Trezorem.
+      \item \emph{Deskriptor neobsahuje xpub aktuálního účtu uživatele:}
+            Backend import odmítne s~hláškou, že daný účet není cosignerem
+            této multisig peněženky; aplikace chybu zobrazí.
     \end{itemize}
 \end{description}
 
@@ -249,24 +236,19 @@ výstupní podmínky a~alternativní scénáře.
     \begin{enumerate}
       \item Uživatel přejde na obrazovku odeslání a~zadá cílovou adresu a~částku.
       \item Backend sestaví PSBT~\cite{BIP174} pro multisig transakci (typ P2WSH).
-            Výpočet poplatku zohledňuje velikost multisig witnessů
-            (viz sekce~\ref{sec:p2wsh-multisig}).
       \item Aplikace zobrazí detail PSBT s~informacemi o~transakci.
-      \item Uživatel zvolí podepsání prvním cosignerem.
+      \item Uživatel zvolí podepsání transakce (\emph{Sign with Trezor}).
       \item Aplikace přesměruje uživatele do Trezor Suite Mobile s~parametry pro
             podepisování multisig transakce (včetně derivační cesty dle
             BIP-48~\cite{BIP48}).
       \item Uživatel potvrdí podpis na Trezoru.
       \item Částečně podepsané PSBT je uloženo na backendu.
       \item Aplikace zobrazí stav PSBT -- 1~z~2 podpisů shromážděn.
-      \item Uživatel přepne účet na druhého cosignera (viz UC6,
-            sekce~\ref{uc:psbt-status}). V~testovacím scénáři jeden
-            uživatel simuluje více cosignerů přepínáním mezi BIP-48
-            účty na stejném Trezoru; v~produkčním nasazení by druhý
-            cosigner použil vlastní zařízení.
-      \item Uživatel otevře rozpracované PSBT a~doplní svůj podpis.
-      \item Po dosažení prahu (2~ze~3) backend finalizuje transakci
-            a~provede broadcast do Bitcoin sítě.
+      \item Druhý cosigner otevře rozpracované PSBT a~doplní svůj podpis
+            (viz UC6, sekce~\ref{uc:psbt-status}).
+      \item Po dosažení prahu (2~ze~3) je PSBT připraveno k~odeslání;
+            uživatel zvolí broadcast a~backend transakci finalizuje
+            a~odešle do Bitcoin sítě.
     \end{enumerate}
   \item[Výstupní podmínky:] Plně podepsaná transakce je odeslána do Bitcoin sítě.
   \item[Alternativní scénáře:] \hfill
@@ -291,14 +273,18 @@ výstupní podmínky a~alternativní scénáře.
     \end{itemize}
   \item[Hlavní scénář:] \hfill
     \begin{enumerate}
-      \item Uživatel aktivuje režim coin control.
-      \item Aplikace zobrazí seznam dostupných UTXO s~informacemi: částka, adresa,
-            počet konfirmací.
-      \item Uživatel vybere jedno nebo více UTXO, která chce použít jako vstupy
-            transakce.
-      \item Aplikace přepočítá odhadovaný poplatek na základě počtu vybraných vstupů.
-      \item Uživatel pokračuje v~sestavení a~odeslání transakce standardním postupem
-            (viz UC2 nebo UC4).
+      \item Uživatel na obrazovce odeslání přepne výběr UTXO z~automatického
+            na ruční (přepínač \emph{Automatic} / \emph{Manual}) a~zvolí úpravu
+            výběru.
+      \item Aplikace zobrazí seznam dostupných UTXO s~informacemi: částka,
+            adresa, stav (potvrzeno, nepotvrzeno, rezervováno jiným
+            rozpracovaným PSBT) a~datum bloku.
+      \item Uživatel zaškrtnutím vybere jedno nebo více UTXO, která chce
+            použít jako vstupy transakce.
+      \item Uživatel výběr potvrdí a~vrátí se na obrazovku odeslání.
+      \item Pokračuje v~sestavení a~odeslání transakce standardním postupem
+            (viz UC2 nebo UC4); poplatek je přepočten při sestavení PSBT
+            podle počtu vybraných vstupů.
     \end{enumerate}
   \item[Výstupní podmínky:] Transakce je sestavena výhradně z~uživatelem vybraných
     UTXO.
@@ -325,21 +311,22 @@ výstupní podmínky a~alternativní scénáře.
     \begin{enumerate}
       \item Uživatel přepne účet v~nastavení na odpovídajícího cosignera.
       \item Uživatel přejde na seznam rozpracovaných PSBT.
-      \item Aplikace zobrazí detail PSBT: částka, cílová adresa, poplatek, počet
-            shromážděných podpisů, chybějící cosigneři.
+      \item Aplikace zobrazí detail PSBT: částka, poplatek, počet shromážděných
+            podpisů a~seznam cosignerů s~vyznačením, kdo již podepsal.
       \item Uživatel zvolí doplnění podpisu.
       \item Aplikace přesměruje uživatele do Trezor Suite Mobile s~derivační cestou
             aktuálního cosignera.
       \item Uživatel potvrdí podpis na Trezoru.
       \item Backend aktualizuje PSBT o~nový podpis.
-      \item Pokud je dosažen práh podpisů, backend finalizuje a~odešle transakci.
+      \item Pokud je dosažen práh podpisů, PSBT je připraveno k~odeslání;
+            uživatel zvolí broadcast a~backend transakci finalizuje a~odešle
+            do sítě. V~opačném případě PSBT zůstává rozpracované pro dalšího
+            cosignera.
     \end{enumerate}
-  \item[Výstupní podmínky:] PSBT je aktualizováno o~nový podpis. Pokud je dosažen
-    práh, transakce je odeslána do sítě.
+  \item[Výstupní podmínky:] PSBT je aktualizováno o~nový podpis. Pokud byl dosažen
+    práh a~uživatel zvolil broadcast, transakce je odeslána do sítě.
   \item[Alternativní scénáře:] \hfill
     \begin{itemize}
-      \item \emph{Uživatel již podepsal:} Aplikace zobrazí informaci, že podpis
-            tohoto cosignera je již přítomen.
       \item \emph{Práh stále není dosažen:} PSBT zůstává ve stavu ,,rozpracováno``
             pro další cosignery.
     \end{itemize}
@@ -373,14 +360,15 @@ příslušné US/UC.
     s~využitím deeplink mechanismu (přesměrování do~jiné aplikace
     prostřednictvím speciální URL) Trezor Connect~\cite{TrezorConnect}.
     Při přihlášení aplikace vyžádá z~Trezoru deset rozšířených veřejných
-    klíčů (xpub) pro derivační cesty \texttt{m/84'/1'/0'} až
-    \texttt{m/84'/1'/9'} dle BIP-84~\cite{BIP84}.
+    klíčů (xpub) pro derivační cesty tvaru \texttt{m/84'/c'/N'} dle
+    BIP-84~\cite{BIP84}, kde \texttt{N} je v~rozsahu 0 až 9 a~\texttt{c}
+    nabývá hodnoty 0 pro mainnet a~1 pro testnet.
 
   \item[F2 -- Discovery účtů \textnormal{(US1, UC1)}:]
-    Backend pro každý přijatý xpub odvodí prvních pět adres a~ověří na
-    blockchainu, zda mají transakční historii (dle BIP-44 gap
-    limitu~\cite{BIP44}). Pro účty s~nalezenou aktivitou automaticky
-    vytvoří peněženky.
+    Backend pro každý přijatý xpub odvodí dávku adres podle BIP-44 gap
+    limitu~\cite{BIP44} a~ověří na blockchainu, zda mají transakční
+    historii. Pro účty s~nalezenou aktivitou automaticky vytvoří
+    peněženky.
 
   \item[F3 -- Přepínání účtů \textnormal{(US10)}:]
     Systém umožní přepínání mezi singlesig a~multisig peněženkami
@@ -406,11 +394,12 @@ příslušné US/UC.
 
   \item[F7 -- Historie transakcí \textnormal{(US11)}:]
     Systém zobrazí historii transakcí včetně detailů (částka, adresa,
-    poplatek, počet konfirmací).
+    poplatek, stav potvrzení).
 
   \item[F8 -- Coin control \textnormal{(US5, UC5)}:]
     Systém poskytne funkci manuálního výběru konkrétních UTXO jako vstupů
-    transakce s~dynamickým přepočtem odhadovaného poplatku.
+    transakce; poplatek je přepočítán při sestavení PSBT podle počtu
+    vybraných vstupů.
 \end{description}
 
 \subsection{Multisignature transakce}
@@ -419,8 +408,10 @@ příslušné US/UC.
   \item[F9 -- Import multisig peněženky \textnormal{(US6, UC3)}:]
     Systém umožní import multisig peněženky zadáním deskriptoru ve formátu
     \texttt{wsh(sortedmulti(\ldots))} dle BIP-380~\cite{BIP380}
-    a~BIP-383~\cite{BIP383}. Z~deskriptoru systém extrahuje práh M,
-    veřejné klíče cosignerů a~derivační cesty dle BIP-48~\cite{BIP48}.
+    a~BIP-383~\cite{BIP383}. Deskriptor lze do aplikace dostat textovým
+    vložením ze schránky nebo naskenováním QR kódu. Z~deskriptoru systém
+    extrahuje práh M, veřejné klíče cosignerů a~derivační cesty dle
+    BIP-48~\cite{BIP48}.
 
   \item[F10 -- Vytvoření PSBT \textnormal{(US7, UC4)}:]
     Systém umožní vytvoření částečně podepsané transakce ve formátu
@@ -466,14 +457,16 @@ Nefunkční požadavky specifikují kvalitativní vlastnosti systému.
   \item[NF2 -- Autentizace:]
     Komunikace mezi mobilní aplikací a~backendem je autentizována pomocí
     JWT tokenů (JSON Web Token -- digitálně podepsaný přístupový token
-    nesoucí identitu zařízení). Token je vydán při přihlášení na základě
-    ověření veřejného klíče z~Trezoru.
+    nesoucí identitu zařízení). Token je vydán při přihlášení a~vázán
+    na~deterministicky odvozený \texttt{deviceId} z~kořenového otisku
+    Trezoru, takže opakovaná přihlášení ze~stejného zařízení vedou
+    na~stejnou identitu.
 
   \item[NF3 -- Důvěryhodný síťový kanál:]
     Komunikace mezi aplikací a~backendem probíhá přes HTTP v~izolované
-    LAN nebo ve~VPN (ve~vývojovém nasazení autor používá Tailscale,
-    které zajišťuje šifrování na~síťové vrstvě mezi zařízeními).
-    TLS na~aplikační vrstvě není v~rámci této práce řešeno.
+    LAN nebo ve~VPN (ve~vývojovém nasazení používáme Tailscale, které
+    zajišťuje šifrování na~síťové vrstvě mezi zařízeními). TLS
+    na~aplikační vrstvě není v~rámci této práce řešeno.
 \end{description}
 
 \subsection{Platforma a kompatibilita}
@@ -489,7 +482,8 @@ Nefunkční požadavky specifikují kvalitativní vlastnosti systému.
     aplikaci Trezor Suite Mobile, která slouží jako prostředník pro
     podepisování transakcí (podrobnou analýzu tohoto rozhodnutí
     a~zvažovaných alternativ uvádíme v~sekci~\ref{sec:analyza-trezor}).
-    Peněženka se k~mobilnímu zařízení připojuje prostřednictvím USB.
+    Peněženka se k~mobilnímu zařízení připojuje USB-C kabelem
+    (Safe~3, Safe~5) nebo bezdrátově přes Bluetooth (pouze Safe~7).
 \end{description}
 
 \subsection{Použitelnost}

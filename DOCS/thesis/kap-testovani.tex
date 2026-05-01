@@ -59,9 +59,11 @@ testování.
 
 Backend byl spuštěn lokálně pomocí Docker Compose~\cite{Docker} -- jednou
 spuštěný stack obsahoval všech šest mikroslužeb popsaných
-v~sekci~\ref{sec:architektura},
-API Gateway, tři instance PostgreSQL~\cite{PostgreSQL} a~síťové připojení na
-veřejné API Mempool.space~\cite{MempoolAPI} pro testnet4. Mobilní aplikace
+v~sekci~\ref{sec:architektura}, API Gateway, jednu instanci
+PostgreSQL~\cite{PostgreSQL} hostující tři logické databáze
+(\texttt{wallet\_\allowbreak auth}, \texttt{wallet\_\allowbreak psbt},
+\texttt{wallet\_\allowbreak registry}) a~síťové připojení na veřejné
+API Mempool.space~\cite{MempoolAPI} pro testnet4. Mobilní aplikace
 běžela na fyzickém Android zařízení se soubežně nainstalovanou aplikací
 Trezor Suite Mobile, která zprostředkovává komunikaci s~hardwarovou peněženkou
 podle deeplink protokolu popsaného v~sekci~\ref{subsec:trezor-connect}.

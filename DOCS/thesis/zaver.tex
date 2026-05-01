@@ -53,8 +53,9 @@ strany. Vlastní implementace by znamenala napsat USB transportní vrstvu
 nad 64bajtovým paketovým protokolem Trezoru, kompletní sadu protobuf zpráv
 podle aktuálního firmware a~stavový automat pro vícekolovou komunikaci typu
 \texttt{SignTx -- TxRequest -- TxAck}, který Trezor používá kvůli omezené
-paměti zařízení. Hrubý odhad pracnosti je zhruba 20~vývojářských dní. Tento
-směr jsme v~rámci bakalářské práce vědomě nepřevzali, ale architektura aplikace
+paměti zařízení. Tento rozsah implementace odpovídá samostatnému projektu
+přesahujícímu rámec bakalářské práce, proto jsme tento směr vědomě nepřevzali,
+ale architektura aplikace
 je na něj připravena -- veškerá komunikace s~Trezorem prochází přes interní
 abstrakci \texttt{TrezorDeeplinkLauncher} popsanou v~sekci~\ref{sec:impl-detaily},
 za~kterou se aktuální deeplink implementace dá nahradit přímou USB

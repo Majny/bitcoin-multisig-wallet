@@ -75,13 +75,15 @@ API Gateway běží na portu~8080 a~plní několik klíčových rolí:
   s~kódem~401, aniž by se dostaly k~cílové službě.
 \item \textbf{Směrování požadavků} -- na základě prefixu URL cesty gateway
   přeposílá požadavek na odpovídající mikroslužbu. Například prefix
-  \texttt{/api/\allowbreak wallet} je směrován na \texttt{wallet-\allowbreak registry}
-  (port~8082), prefix \texttt{/api/\allowbreak psbt} na \texttt{psbt-\allowbreak service}
+  \texttt{/api/\allowbreak v1/\allowbreak wallets} je směrován převážně na
+  \texttt{wallet-\allowbreak registry} (port~8082), prefix
+  \texttt{/api/\allowbreak v1/\allowbreak psbt} na \texttt{psbt-\allowbreak service}
   (port~8085) a~podobně.
 \item \textbf{Propagace identity} -- po úspěšné validaci tokenu gateway
   extrahuje identifikátor zařízení (\texttt{device\_id}) a~předává jej
-  cílové službě v~HTTP hlavičce. Jednotlivé služby tak nemusí opakovaně
-  validovat token a~mohou důvěřovat identitě předané gateway.
+  cílové službě jako query parametr nebo položku v~těle požadavku. Jednotlivé
+  služby tak nemusí opakovaně validovat token a~mohou důvěřovat identitě
+  předané gateway.
 \end{itemize}
 
 Alternativou k~vlastní implementaci gateway by bylo použití existujícího
@@ -263,24 +265,23 @@ jsme rovněž SQLite (vestavěnou přímo v~mobilní aplikaci) a~MySQL/MariaDB.
 PostgreSQL jsme upřednostnili z~následujících důvodů:
 
 \begin{itemize}
-\item \textbf{JSONB datový typ} -- \texttt{psbt-service} potřebuje ukládat
-  parametry pro Trezor Connect, které mají proměnlivou strukturu (závisí na
-  typu peněženky, počtu vstupů a~výstupů). Datový typ JSONB umožňuje ukládat
-  tyto parametry jako strukturovaný JSON přímo v~relační tabulce, s~možností
-  indexace a~dotazování.
 \item \textbf{Silná konzistence a~ACID} -- Pro systém pracující s~finančními
   transakcemi je zásadní, aby databázové operace byly atomické a~konzistentní.
   Například při ukládání podpisu k~PSBT je nutné atomicky inkrementovat
   počítadlo podpisů a~ověřit dosažení prahu.
+\item \textbf{Souběžné zápisy z~více služeb} -- v~mikroservisní architektuře
+  do téže databáze paralelně píše více služeb i~několik instancí téže
+  služby. Postgres MVCC zajišťuje korektní izolaci souběžných transakcí
+  bez nutnosti aplikačního zamykání.
 \item \textbf{Zralost a~rozšířenost} -- PostgreSQL je jeden z~nejrozšířenějších
   open-source databázových systémů s~rozsáhlou dokumentací a~komunitou.
 \end{itemize}
 
 SQLite by bylo vhodné řešení pro čistě mobilní aplikaci bez backendu, ale
 v~zvolené architektuře databáze běží na serveru a~je sdílena mezi požadavky
-od různých zařízení. MySQL by bylo funkčně rovnocenné pro většinu operací,
-ale nabízí slabší podporu JSONB a~méně pokročilé možnosti indexace
-strukturovaných dat.
+od různých zařízení. MySQL by bylo funkčně rovnocenné pro většinu operací;
+PostgreSQL jsme upřednostnili pro robustnější MVCC izolaci souběžných
+transakcí a~širší ekosystém nástrojů (Flyway migrace, Exposed ORM).
 
 \subsection{Kontejnerizace: Docker Compose}
 
@@ -729,8 +730,9 @@ v~tom, že po podpisu prvním cosignerem transakce ještě není kompletní:
   uloží je a~inkrementuje \texttt{current\_sigs}.
 \item \textbf{Opakování} -- Kroky se opakují pro další cosignery, dokud
   není dosažen práh \texttt{current\_sigs == required\_sigs} ($M$).
-\item \textbf{Broadcast} -- Po dosažení prahu poslední podepisující Trezor
-  vrátí kompletní \texttt{serializedTx} a~backend ji propaguje do sítě.
+\item \textbf{Broadcast} -- Po dosažení prahu je PSBT připraveno k~odeslání.
+  Uživatel z~detailu PSBT zvolí broadcast a~backend transakci finalizuje
+  a~propaguje do Bitcoin sítě.
 \end{enumerate}
 
 Celý multisig podepisovací flow zachycují sekvenční diagramy na
@@ -750,7 +752,8 @@ mobilní aplikace deleguje podpis na Trezor Suite Mobile a~přidá první podpis
 \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{img/multisig-signing-2.pdf}
 \caption{Sekvenční diagram 2-of-3 multisig podepisování -- druhá část:
 podpis druhým cosignerem a~broadcast finální transakce. Po dosažení
-prahu podpisů backend finalizuje PSBT a~odešle transakci do Bitcoinové sítě.}
+prahu podpisů uživatel zvolí broadcast a~backend transakci finalizuje
+a~odešle do Bitcoinové sítě.}
 \label{fig:multisig-signing-2}
 \end{figure}
 
@@ -931,14 +934,16 @@ značí navigaci přes drawer menu.}
   navíc zobrazuje počet čekajících PSBT vyžadujících podpis.
 
 \item[Detail transakce] -- Rozklikem libovolné položky ze seznamu
-  transakcí na dashboardu. Zobrazuje \texttt{txid}, status, poplatek
-  a~seznam vstupů a~výstupů s~částkami. Adresy patřící aktuální peněžence
-  jsou označeny štítkem \emph{YOURS}. Kliknutím na vstup lze otevřít
-  předchozí transakci, která daný UTXO vytvořila, a~procházet tak historii
-  až do hloubky~pěti úrovní; na každé úrovni je štítkem \emph{FROM HERE}
-  označen výstup, který navazuje na proklikaný vstup z~úrovně předchozí.
-  Tato funkce slouží uživateli k~forenznímu ověření původu prostředků
-  bez nutnosti přepínat do externího prohlížeče blockchainu.
+  transakcí na dashboardu. Zobrazuje \texttt{txid}, stav potvrzení, výšku
+  bloku, časové razítko, poplatek včetně sazby v~sat/vB a~seznam vstupů
+  a~výstupů s~částkami. Adresy patřící aktuální peněžence jsou označeny
+  štítkem \emph{YOURS}. Kliknutím na vstup lze otevřít předchozí transakci,
+  která daný UTXO vytvořila, a~procházet tak historii až do hloubky pěti
+  úrovní; na každé úrovni je štítkem \emph{FROM HERE} označen výstup, který
+  navazuje na proklikaný vstup z~úrovně předchozí. Hloubka je omezená,
+  aby nedošlo k~nadměrnému zatížení blockchainového API. Tato funkce slouží
+  uživateli k~forenznímu ověření původu prostředků bez nutnosti přepínat
+  do externího prohlížeče blockchainu.
 
 \item[Send (odeslání)] -- Formulář pro zadání cílové adresy (manuálně
   nebo skenováním QR kódu), částky, volby úrovně poplatku a~volitelně
@@ -950,14 +955,6 @@ značí navigaci přes drawer menu.}
   ve formě QR kódu a~textového řetězce s~možností kopírování do schránky.
   Tlačítko \emph{Zobrazit na Trezoru} umožňuje ověřit adresu na displeji
   hardwarové peněženky (viz popis v~sekci~\ref{subsec:trezor-connect}).
-
-\item[Detail transakce] -- Zobrazuje kompletní informace o~transakci:
-  identifikátor, stav potvrzení, výšku bloku, časové razítko, poplatek
-  a~sazbu poplatku v~sat/vB. Pro každý vstup a~výstup zobrazuje adresu,
-  hodnotu a~příznak, zda adresa patří aktuální peněžence. Prokliknutím
-  na vstup se otevře detail předchozí transakce -- tento rekurzivní průchod
-  řetězcem transakcí je omezen na pět úrovní, aby nedošlo k~nadměrnému
-  zatížení blockchainového API.
 
 \item[PSBT seznam] -- Přístupný pouze pro multisig peněženky. Zobrazuje
   seznam vytvořených PSBT transakcí s~jejich stavem (čekající na podpisy /
