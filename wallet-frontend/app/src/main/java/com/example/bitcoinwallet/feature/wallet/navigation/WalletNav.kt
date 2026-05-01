@@ -624,7 +624,22 @@ fun NavGraphBuilder.walletGraph(navController: NavController) {
             ) {
                 MultisigDetailScreen(
                     state = state,
-                    onClose = { navController.popBackStack() },
+                    onClose = {
+                        // After broadcast (TransactionSent → MultisigDetail) the
+                        // MultisigWallets list isn't in the back stack, so a plain
+                        // popBackStack lands on the graph entry with no UI and the
+                        // X appears unresponsive. Pop back to MultisigWallets if
+                        // present, otherwise navigate to it freshly.
+                        val popped = navController.popBackStack(
+                            route = WalletRoutes.MultisigWallets,
+                            inclusive = false
+                        )
+                        if (!popped) {
+                            navController.navigate(WalletRoutes.MultisigWallets) {
+                                popUpTo(WalletRoutes.Dashboard) { inclusive = false }
+                            }
+                        }
+                    },
                     onPsbtsClick = {
                         navController.navigate(WalletRoutes.psbtList(walletId))
                     },
