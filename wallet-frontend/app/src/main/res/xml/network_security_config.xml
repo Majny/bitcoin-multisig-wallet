@@ -3,11 +3,11 @@
     Cleartext HTTP whitelist for the API gateway. Android blocks plain
     HTTP, so the gateway host is listed here as an exception.
 
-    The IP below is the author's Tailscale tailnet address used during
-    development. A different setup needs a different host: 10.0.2.2 for
-    the Android emulator against docker compose on the same machine, or
-    the host's LAN IP for a physical device on the same network. The
-    same host belongs in wallet-frontend/local.properties under the key
+    The IP below is my Tailscale tailnet address used during development.
+    A different setup needs a different host: 10.0.2.2 for the Android
+    emulator against docker compose on the same machine, or the host's
+    LAN IP for a physical device on the same network. The same host
+    belongs in wallet-frontend/local.properties under the key
     api.gateway.base.url.
 -->
 <network-security-config>
