@@ -45,10 +45,23 @@ dependencies {
 
     // BitcoinJ - low-level Bitcoin primitives used when assembling PSBTs
     implementation("org.bitcoinj:bitcoinj-core:0.17")
+
+    // Test deps - JUnit 5 platform + kotlin.test assertions + parameterized tests
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+
+    // In-memory H2 database (PostgreSQL compatibility mode) for PsbtRepository tests
+    testImplementation("com.h2database:h2:2.2.224")
 }
 
 kotlin {
     jvmToolchain(21)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 application {
