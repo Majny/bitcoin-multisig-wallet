@@ -36,6 +36,9 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+
+    // In-memory H2 database (PostgreSQL compatibility mode) for RefreshStore tests
+    testImplementation("com.h2database:h2:2.2.224")
 }
 
 

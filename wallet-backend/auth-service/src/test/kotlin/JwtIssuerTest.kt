@@ -50,7 +50,7 @@ class JwtIssuerTest {
         assertEquals(kid, decoded.keyId)
         assertEquals("dev-123", decoded.subject)
         assertEquals("dev-123", decoded.getClaim("device_id").asString())
-        assertEquals("f00dbabe", decoded.getClaim("fp").asString())
+        assertEquals("f00dbabe", decoded.getClaim("fingerprint").asString())
 
         assertNotNull(decoded.issuedAt)
         assertNotNull(decoded.expiresAt)
@@ -82,12 +82,12 @@ class JwtIssuerTest {
 
         val decoded = verifier.verify(token)
 
-        val fp = decoded.getClaim("fp")
+        val fp = decoded.getClaim("fingerprint")
         assertTrue(fp.isMissing, "fp claim should be missing when fingerprint is null")
         assertNull(fp.asString(), "fp.asString() should be null when claim is missing")
 
-        // Extra strict check - guard against fp claim leaking back in.
-        assertFalse(decoded.claims.containsKey("fp"))
+        // Extra strict check - guard against fingerprint claim leaking back in.
+        assertFalse(decoded.claims.containsKey("fingerprint"))
     }
 
 
