@@ -341,7 +341,7 @@ class WalletExplorer(
      *              actually left + fee
      *   RECEIVED - sum(outputs paying us)
      */
-    private fun classifyTransaction(
+    internal fun classifyTransaction(
         tx: RawTransaction,
         myAddresses: Set<String>,
         currentBlockHeight: Int = 0
