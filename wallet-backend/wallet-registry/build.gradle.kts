@@ -40,10 +40,20 @@ dependencies {
 
     // Bitcoin address derivation (BIP-32/84/86)
     implementation("org.bitcoinj:bitcoinj-core:0.17")
+
+    // Test deps - JUnit 5 + kotlin.test + parameterized cases
+    testImplementation(kotlin("test"))
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testImplementation("org.junit.jupiter:junit-jupiter-params:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
 }
 
 kotlin {
     jvmToolchain(21)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 application {
