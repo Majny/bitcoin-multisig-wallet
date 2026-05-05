@@ -32,6 +32,10 @@ dependencies {
     // Tests
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host-jvm:3.0.0")
+    testImplementation("io.ktor:ktor-client-mock:3.0.0")  // canned HTTP responses, no real network
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.10.2")
+    testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.10.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
 }
 
 tasks.test {
