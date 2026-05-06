@@ -144,10 +144,11 @@ a~přikládá ke každému dalšímu požadavku.
 \includegraphics[height=0.3\textheight]{img/screen-login.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-select-account.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-dashboard.png}
-\caption{Průběh přihlášení. Vlevo: přihlašovací obrazovka s~přepínačem
-sítě. Uprostřed: výběr singlesig účtu -- backend nalezl čtyři účty
-s~historií. Vpravo: hlavní obrazovka (dashboard) se zůstatkem v~BTC
-a~CZK, seznamem transakcí a~tlačítky pro odeslání a~příjem.}
+\caption[Průběh přihlášení]{Průběh přihlášení. Vlevo: přihlašovací
+obrazovka s~přepínačem sítě. Uprostřed: výběr singlesig účtu --
+backend nalezl čtyři účty s~historií. Vpravo: hlavní obrazovka
+(dashboard) se zůstatkem v~BTC a~CZK, seznamem transakcí a~tlačítky
+pro odeslání a~příjem.}
 \label{fig:screen-onboarding}
 \end{figure}
 
@@ -192,8 +193,9 @@ multisig peněženky.
 \begin{figure}[htbp]
 \centering
 \includegraphics[height=0.3\textheight]{img/screen-receive.jpeg}
-\caption{Příjem prostředků -- QR kód ve formátu BIP-21, adresa s~možností
-kopírování a~tlačítko pro ověření adresy na displeji Trezoru.}
+\caption[Příjem prostředků]{Příjem prostředků -- QR kód ve formátu
+BIP-21, adresa s~možností kopírování a~tlačítko pro ověření adresy
+na displeji Trezoru.}
 \label{fig:screen-receive}
 \end{figure}
 
@@ -239,10 +241,11 @@ zůstatek.
 \includegraphics[height=0.3\textheight]{img/screen-send.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-send-manual.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-tx-sent.jpeg}
-\caption{Odeslání transakce. Vlevo: formulář s~automatickým výběrem UTXO
-a~třemi úrovněmi poplatku. Uprostřed: manuální režim s~počtem vybraných
-UTXO a~polem pro vlastní sazbu v~sat/vB. Vpravo: potvrzení úspěšného
-odeslání se souhrnem částky a~poplatku.}
+\caption[Odeslání transakce]{Odeslání transakce. Vlevo: formulář
+s~automatickým výběrem UTXO a~třemi úrovněmi poplatku. Uprostřed:
+manuální režim s~počtem vybraných UTXO a~polem pro vlastní sazbu
+v~sat/vB. Vpravo: potvrzení úspěšného odeslání se souhrnem částky
+a~poplatku.}
 \label{fig:screen-send}
 \end{figure}
 
@@ -318,10 +321,11 @@ bez ohledu na aktuální hloubku průchodu.
 \includegraphics[height=0.3\textheight]{img/screen-coin-control.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-tx-detail.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-settings.jpeg}
-\caption{Vlevo: coin control -- seznam UTXO s~hodnotou, adresou, datem
-a~stavem potvrzení. Uprostřed: detail transakce v~hloubce 2\,/\,5
-s~příznaky \emph{YOURS} a~\emph{FROM HERE}. Vpravo: nastavení --
-přepnutí účtu, výběr fiat měny a~informace o~aplikaci.}
+\caption[Coin control, detail transakce a nastavení]{Vlevo: coin
+control -- seznam UTXO s~hodnotou, adresou, datem a~stavem potvrzení.
+Uprostřed: detail transakce v~hloubce 2\,/\,5 s~příznaky \emph{YOURS}
+a~\emph{FROM HERE}. Vpravo: nastavení -- přepnutí účtu, výběr fiat
+měny a~informace o~aplikaci.}
 \label{fig:screen-tools}
 \end{figure}
 
@@ -409,9 +413,10 @@ importovaná peněženka zobrazí v~seznamu multisig peněženek
 \includegraphics[height=0.3\textheight]{img/screen-import.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-multisig-list.jpeg}\hfill
 \includegraphics[height=0.3\textheight]{img/screen-multisig-detail.jpeg}
-\caption{Multisig peněženky. Vlevo: import deskriptoru s~ikonou QR skeneru
-a~pojmenováním. Uprostřed: seznam importovaných multisig peněženek. Vpravo:
-detail peněženky 2-of-3 se zůstatkem, historií transakcí a~přístupem
+\caption[Multisig peněženky -- import a detail]{Multisig peněženky.
+Vlevo: import deskriptoru s~ikonou QR skeneru a~pojmenováním.
+Uprostřed: seznam importovaných multisig peněženek. Vpravo: detail
+peněženky 2-of-3 se zůstatkem, historií transakcí a~přístupem
 k~seznamu PSBT.}
 \label{fig:screen-multisig-setup}
 \end{figure}
@@ -455,11 +460,11 @@ podle BIP-67~\cite{BIP67}, a~uloží stav PSBT jako \uv{1 z~$M$ podpisů}.
 \includegraphics[height=0.22\textheight]{img/screen-psbt-detail.jpeg}\hfill
 \includegraphics[height=0.22\textheight]{img/screen-psbt-signers.jpeg}\hfill
 \includegraphics[height=0.22\textheight]{img/screen-psbt-broadcast.jpeg}
-\caption{PSBT workflow. Zleva: seznam PSBT transakcí; detail PSBT
-bezprostředně po vytvoření (0 ze~2 podpisů) s~tlačítkem \emph{Cancel
-PSBT} pro stažení návrhu před podpisem; dialog signerů se stavy
-Signed~/~Pending a~příznakem \emph{YOU}; PSBT s~dosaženým prahem
-(2 ze~2) připravené k~broadcastu.}
+\caption[PSBT workflow]{PSBT workflow. Zleva: seznam PSBT transakcí;
+detail PSBT bezprostředně po vytvoření (0 ze~2 podpisů) s~tlačítkem
+\emph{Cancel PSBT} pro stažení návrhu před podpisem; dialog signerů
+se stavy Signed~/~Pending a~příznakem \emph{YOU}; PSBT s~dosaženým
+prahem (2 ze~2) připravené k~broadcastu.}
 \label{fig:screen-psbt-flow}
 \end{figure}
 

@@ -1,0 +1,50 @@
+@startuml er-psbt
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam nodesep 30
+skinparam ranksep 60
+
+skinparam entity {
+  BackgroundColor #FAFAFA
+  BorderColor #424242
+}
+
+hide circle
+
+entity "psbts" as psbts {
+  * **id** : UUID <<PK>>
+  --
+  wallet_id : VARCHAR(255)
+  psbt_base64 : TEXT
+  status : VARCHAR(50)
+  tx_type : VARCHAR(50)
+  required_sigs : INT
+  current_sigs : INT
+  total_output_sats : BIGINT
+  estimated_fee_sats : BIGINT
+  label : VARCHAR(255)
+  txid : VARCHAR(64)
+  trezor_connect_params : TEXT
+  serialized_tx : TEXT
+  created_at : TIMESTAMPTZ
+  updated_at : TIMESTAMPTZ
+  broadcast_at : TIMESTAMPTZ
+}
+
+entity "psbt_signatures" as signatures {
+  * **id** : UUID <<PK>>
+  --
+  psbt_id : UUID <<FK>>
+  device_id : VARCHAR(255)
+  fingerprint : VARCHAR(16)
+  cosigner_index : INT
+  signed_at : TIMESTAMPTZ
+  ..
+  UNIQUE(psbt_id, cosigner_index)
+}
+
+psbts ||--o{ signatures
+
+@enduml

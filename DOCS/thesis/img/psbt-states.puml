@@ -1,0 +1,35 @@
+@startuml psbt-states
+skinparam backgroundColor white
+skinparam defaultFontSize 22
+skinparam shadowing false
+skinparam StateBackgroundColor #E3F2FD
+skinparam StateBorderColor #1565C0
+skinparam ArrowColor #333333
+skinparam NoteBackgroundColor #FFF8E1
+skinparam NoteBorderColor #F57C00
+
+title <size:28><b>Stavový automat PSBT</b></size>
+
+[*] --> pending : POST /psbt/create
+
+state "**pending**\ncurrent_sigs < required_sigs\nUTXO rezervovány" as pending
+state "**signed**\ncurrent_sigs = required_sigs\n(jen multisig)" as signed
+state "**broadcast**\ntxid uložen,\nUTXO uvolněny" as broadcast
+
+pending --> pending : POST /psbt/{id}/sign-trezor\n[multisig, podpis < M]
+pending --> signed : POST /psbt/{id}/sign-trezor\n[multisig, dosažen práh M]
+
+pending --> broadcast : POST /psbt/{id}/broadcast-raw\n[singlesig: Trezor vrací\nkompletní serializedTx]
+signed --> broadcast : POST /psbt/{id}/broadcast-raw\n[multisig: explicitní\nuživatelská akce]
+
+pending -[#B71C1C]-> [*] : DELETE /psbt/{id}\nnebo 7-denní TTL cleanup
+signed -[#B71C1C]-> [*] : DELETE /psbt/{id}\nnebo 7-denní TTL cleanup
+
+broadcast --> [*] : ponecháno\njako audit log
+
+note bottom of broadcast
+  Z **broadcast** stavu už není návrat -
+  záznam slouží jako audit trail.
+end note
+
+@enduml

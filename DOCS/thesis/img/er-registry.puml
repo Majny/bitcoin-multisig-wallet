@@ -1,0 +1,80 @@
+@startuml er-registry
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam nodesep 30
+skinparam ranksep 35
+
+skinparam entity {
+  BackgroundColor #FAFAFA
+  BorderColor #424242
+}
+
+hide circle
+
+entity "wallets" as wallets {
+  * **wallet_id** : TEXT <<PK>>
+  --
+  network : TEXT
+  type : TEXT
+  script_type : TEXT
+  m : INT
+  n : INT
+  account_index : INT
+  birth_height : INT
+  label : TEXT
+  receive_descriptor : TEXT
+  change_descriptor : TEXT
+  created_at : TIMESTAMPTZ
+}
+
+entity "cosigners" as cosigners {
+  * **cosigner_id** : TEXT <<PK>>
+  --
+  fingerprint : TEXT
+  origin_path : TEXT
+  xpub_root : TEXT
+  created_at : TIMESTAMPTZ
+}
+
+entity "wallet_cosigners" as wcosigners {
+  * **wallet_id** : TEXT <<FK>>
+  * **idx** : INT
+  --
+  cosigner_id : TEXT <<FK>>
+}
+
+entity "wallet_members" as members {
+  * **wallet_id** : TEXT <<FK>>
+  * **device_id** : TEXT
+  * **account_index** : INT
+  --
+  label : TEXT
+  created_at : TIMESTAMPTZ
+}
+
+entity "wallet_addresses" as addresses {
+  * **wallet_id** : TEXT <<FK>>
+  * **address_type** : TEXT
+  * **address_index** : INT
+  --
+  address : TEXT
+  created_at : TIMESTAMPTZ
+}
+
+entity "cosigner_labels" as clabels {
+  * **device_id** : TEXT
+  * **wallet_id** : TEXT <<FK>>
+  * **idx** : INT
+  --
+  label : TEXT
+  updated_at : TIMESTAMPTZ
+}
+
+wallets   ||--|{ wcosigners
+cosigners ||--o{ wcosigners
+wallets   ||--|{ members
+wallets   ||--|{ addresses
+wallets   ||--o{ clabels
+
+@enduml

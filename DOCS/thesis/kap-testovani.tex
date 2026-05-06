@@ -7,9 +7,12 @@ Cílem testování bylo ověřit, že navržená aplikace splňuje funkční po�
 formulované v~kapitole~\ref{chap:specifikace} -- zejména že dokáže přihlásit
 uživatele přes Trezor, správně sestavit a~odeslat singlesig transakci a~že celý
 multisig workflow od importu deskriptoru přes postupné podepisování až po
-broadcast funguje proti reálnému Bitcoinovému uzlu. V~této kapitole popisujeme
-zvolený přístup k~testování, jeho odůvodnění, použité prostředí, provedené
-scénáře a~nakonec chyby, které jsme díky testování odhalili.
+broadcast funguje proti reálnému Bitcoinovému uzlu. V~této kapitole nejprve
+zdůvodňujeme zvolený přístup k~testování, poté popisujeme automatizovanou
+sadu jednotkových testů pro deterministické části backendu (140~testů napříč
+pěti moduly, sekce~\ref{sec:test-unit}), použité prostředí, provedené
+manuální scénáře, chyby odhalené při testování a~konečně známá omezení
+této strategie.
 
 %%% -----------------------------------------------------------------------
 \section{Zvolený přístup}
@@ -17,18 +20,7 @@ scénáře a~nakonec chyby, které jsme díky testování odhalili.
 
 Při návrhu testovací strategie jsme zvažovali tři varianty.
 
-První možností byla \textbf{automatizovaná sada unit testů} pokrývající
-jednotlivé komponenty backendu (parsing deskriptorů, derivaci adres,
-sestavování PSBT). Tento přístup poskytuje rychlou zpětnou vazbu při
-změnách kódu a~je standardem pro produkční software. V~kontextu naší
-aplikace by však unit testy izolovaly právě ty části, kde jsme reálně
-nehledali chyby -- kryptografická logika je delegována na knihovnu
-bitcoinj~\cite{BitcoinJ}, derivace probíhá podle dobře definovaných BIP
-standardů a~lze ji ověřit proti existujícím peněženkám. Naopak by neodhalily
-problémy v~integraci s~Trezorem, protože ten je v~unit testech nahrazen
-mockem, který se na rozdíl od skutečného firmware chová tolerantně.
-
-Druhou možností byly \textbf{end-to-end testy s~emulátorem Trezoru}, který
+První možností byly \textbf{end-to-end testy s~emulátorem Trezoru}, který
 SatoshiLabs poskytuje pro vývojové účely. Tento přístup by umožnil
 automatizovat i~podepisovací krok. Komunikace s~emulátorem však vyžaduje
 implementaci části protokolu Trezor Connect, což je přesně to, čemu se
@@ -38,15 +30,375 @@ vyvinout paralelní komunikační vrstvu, která by se v~samotné aplikaci
 vůbec nepoužila. To jsme v~rámci bakalářské práce vyhodnotili jako úsilí
 neúměrné přínosu.
 
-Zvolili jsme proto třetí variantu: \textbf{manuální integrační testování
-proti Bitcoin testnetu} s~reálnou hardwarovou peněženkou Trezor.
-Tento přístup ověřuje právě ty integrační body, kde reálně vznikají chyby --
+Druhou možností byla výhradně \textbf{automatizovaná sada unit testů}
+pokrývající jednotlivé komponenty backendu. Tento přístup poskytuje
+rychlou zpětnou vazbu při změnách kódu, ale~v~kontextu naší aplikace
+by sám o~sobě nestačil -- neodhalil by problémy v~integraci s~Trezor
+firmware, který se chová striktněji než jakýkoli mock. Reálné chyby,
+které jsme v~průběhu vývoje opravili (nesprávné řazení podpisů
+ve~witness, chybějící \texttt{PSBT\_IN\_NON\_WITNESS\_UTXO}; viz
+sekci~\ref{sec:test-chyby}), by se ve~výhradně mockované sadě
+nikdy neprojevily.
+
+Třetí variantou je \textbf{primárně manuální integrační testování
+proti Bitcoin testnetu} s~reálnou hardwarovou peněženkou Trezor,
+doplněné o~\textbf{cílenou automatizovanou sadu jednotkových testů}
+pro deterministické části backendu. Manuální
+testování pokrývá právě ty integrační body, kde reálně vznikají chyby --
 komunikaci mezi mobilní aplikací, Trezor Suite Mobile a~hardwarovým
 zařízením, korektnost sestavených PSBT z~pohledu firmware Trezoru
-a~validitu výsledných transakcí z~pohledu Bitcoinové sítě. Cenou je nutnost
-manuálně procházet všechny scénáře při každé větší změně, což akceptujeme
-vzhledem k~omezenému rozsahu funkcionality. Doplnění automatizované testovací
-sady považujeme za vhodný směr dalšího vývoje.
+a~validitu výsledných transakcí z~pohledu Bitcoinové sítě.
+Jednotkové testy doplňují manuální sadu ve dvou rolích: jednak jako
+regresní pojistka chránící před opětovným zavedením již jednou
+opravených chyb v~deterministických komponentách (sestavování PSBT,
+derivace adres, rotace tokenů a~další), jednak jako strojově
+ověřitelná evidence implementačních invariantů popsaných
+v~kapitole~\ref{chap:navrh} -- kde je to možné, ověřujeme proti
+oficiálním testovacím vektorům příslušných BIP standardů. Tuto
+třetí variantu jsme zvolili; detailní popis automatizované sady
+následuje v~sekci~\ref{sec:test-unit}, manuální scénáře jsou
+v~sekci~\ref{sec:test-scenare}.
+
+Cenou tohoto přístupu je nutnost manuálně procházet všechny integrační
+scénáře při každé větší změně, což akceptujeme vzhledem k~omezenému
+rozsahu funkcionality. Rozšíření automatizované sady o~end-to-end
+testy s~Trezor emulátorem považujeme za~vhodný směr dalšího vývoje.
+
+%%% -----------------------------------------------------------------------
+\section{Jednotkové testy}
+\label{sec:test-unit}
+
+Sada jednotkových testů pokrývá pět modulů backendu a~je strukturována
+do~podsekcí podle modulu, jehož kritickou logiku ověřuje. Drtivá
+většina testů běží plně offline, bez sítě i~Trezor emulátoru,
+a~jejich kompletní průběh se vejde do jedné sekundy. Výjimkou jsou
+tři databázově orientované třídy -- \texttt{Refresh\-StoreTest},
+\texttt{Device\-RepositoryTest} a~\texttt{PsbtRepositoryTest} --,
+které využívají in-memory databázi H2 v~PostgreSQL kompatibilním režimu,
+aby ověřily atomicitu zápisů a~chování unikátních omezení proti reálnému
+SQL stroji. \texttt{Refresh\-StoreTest} a~\texttt{Device\-RepositoryTest}
+běží v~modulu \texttt{auth-service} (race-safe rotace refresh tokenu
+podle sekce~\ref{subsec:refresh-token} a~upsert identit zařízení),
+\texttt{PsbtRepositoryTest} v~modulu \texttt{psbt-service} (atomický
+audit trail podpisů popsaný v~sekci~\ref{subsec:test-psbt}).
+
+Sada slouží jednak jako regresní pojistka proti opětovnému zavedení
+dříve opravených chyb popsaných v~sekci~\ref{sec:test-chyby}, jednak
+jako strojově ověřitelná evidence, že implementační invarianty
+ze~sekce~\ref{sec:impl-detaily} v~kódu skutečně platí.
+
+Celkem zahrnuje 116~testovacích metod, z~nichž čtyři jsou parametrizované
+nad 28~případy, takže reportér JUnit~5 vypisuje 140~testů. V~aktuální
+verzi sada prochází kompletně bez chyb. Spouští se napříč moduly příkazem
+\texttt{./gradlew \textit{:modul:}test} (případně bez prefixu
+\texttt{\textit{:modul:}} pro spuštění všech modulů najednou).
+
+\subsection[Konstrukce PSBT a~audit trail podpisů]{Konstrukce PSBT
+a~audit trail podpisů (modul \texttt{psbt-service})}
+\label{subsec:test-psbt}
+
+Modul \texttt{psbt-service} obsahuje hlavní část kritické logiky:
+binární kódování PSBT, sestavování Trezor Connect parametrů, výpočet
+poplatku a~atomické zápisy do~audit trailu podpisů. Této koncentraci
+odpovídá rozsah testů, které pokrývají jak deterministickou
+konstrukční pipeline, tak databázovou vrstvu.
+
+\paragraph{Bitcoinový a~PSBT wire formát
+(\texttt{PsbtEncodingTest}).}
+PSBT je binární formát, kde každý bajt má svůj přesný význam --
+síť i~firmware Trezoru transakci odmítnou pro jediný špatný offset.
+Tato třída proto kryje stavební kameny, ze~kterých se PSBT skládá.
+
+Nejdůležitější jsou kódování proměnných celočíselných délek
+(\texttt{CompactSize}), little-endian zápis 4-bajtových a~8-bajtových
+hodnot a~hexadecimální konverze podle BIP-174~\cite{BIP174}. Zvlášť
+poslední z~nich nás v~dřívější verzi popálila: Kotlin používá
+podepsané bajty, takže naivní převod bajtu s~nastaveným nejvyšším
+bitem dává záporné číslo a~celý nadřazený parser se rozpadne. Tento
+bod má proto explicitní regresní past s~ručně vybranými vektory.
+
+Nad těmito primitivy testujeme strukturální vrstvu. Sestavení
+multisig witness skriptu ve~tvaru
+\texttt{OP\_M~\ldots~OP\_CHECKMULTISIG} (skript, který Bitcoin
+síť spustí při ověření podpisu) musí dát stejné bajty pro stejný
+vstup. Parsing bech32 adres podle BIP-173~\cite{BIP173} ověřujeme
+proti oficiálním testovacím vektorům, abychom měli jistotu, že naše
+implementace check\-sumového kódování přesně odpovídá referenčnímu
+Bitcoin Core kódu. Kódování BIP-32~\cite{BIP32} derivačních cest pro
+pole \texttt{PSBT\_\allowbreak IN\_\allowbreak BIP32\_\allowbreak DERIVATION}
+říká firmware Trezoru, kterou cestou se má dostat ke~klíči pro daný
+vstup. Parsování raw transakce do~pomocné struktury \texttt{refTxs}
+(referenční transakce, které předáváme firmware spolu s~PSBT, aby si
+ověřil utrácené částky) je třetí klíčová operace. A~konečně
+strukturální validace pětibajtové PSBT magic hlavičky
+(\texttt{0x70\allowbreak 73\allowbreak 62\allowbreak 74\allowbreak ff})
+chrání dekodér před náhodnými daty -- pokud cokoliv jiného než PSBT
+předhodíme parseru, musí selhat hned na~první kontrole, ne uprostřed
+nesmyslného obsahu.
+
+Pokud projde tato vrstva, můžeme stavět složitější struktury
+(kompletní PSBT roundtrip a~Trezor Connect parametry, popsané dále)
+na~pevných základech.
+
+\paragraph{Odhad virtuální velikosti transakce
+(\texttt{PsbtBuilderTest}).}
+Ověřuje vzorec pro výpočet vBytes z~BIP-141~\cite{BIP141} pro singlesig
+P2WPKH (typická transakce 1~vstup + 2~výstupy = 140~vB) a~pro multisig
+P2WSH s~různými parametry $M, N$ (2-of-3 = 176~vB, 3-of-5 strictly větší).
+Jeden z~testů explicitně slouží jako regresní pojistka proti opětovnému
+zavedení chyby, kdy implementace používala konstantu 68~vB pro vstup
+multisig peněženky (viz~poslední odstavec sekce~\ref{sec:test-chyby}).
+Bez této kontroly by uživatelé multisig peněženek dostávali poplatek
+odhadnutý zhruba na polovinu skutečné hodnoty a~jejich transakce
+by uvízly v~mempoolu.
+
+\paragraph{Parsování derivačních cest a~konverze xpub
+(\texttt{TrezorParamsBuilderTest}).}
+Testuje převod textových derivačních cest na pole \texttt{uint32} hodnot
+s~hardened bitem \texttt{0x80000000}, jak je popsáno
+v~sekci~\ref{sec:impl-detaily}. Pokrývá BIP-84~\cite{BIP84} cestu pro
+singlesig (\texttt{84'/1'/0'}), BIP-48~\cite{BIP48} cestu pro multisig
+(\texttt{48'/1'/0'/2'}), zápis s~apostrofem i~se~znakem~\texttt{h}
+a~extrakci derivační cesty z~výstupního deskriptoru. Případná regrese
+v~této oblasti by tiše směrovala podpisy na~chybnou derivační pozici.
+Doplňující test ověřuje konverzi rozšířeného veřejného klíče
+do~struktury \texttt{HDNodeType} proti BIP-32~\cite{BIP32} testovacímu
+vektoru -- master xpub vede na~očekávaný 32-bajtový chain code
+a~33-bajtový komprimovaný veřejný klíč.
+
+\paragraph{Roundtrip celé PSBT
+(\texttt{PsbtBuilderRoundtripTest}).}
+Tento test je hlavní integrační kontrolou konstrukční pipeline.
+Postavíme PSBT pro syntetickou peněženku, hned ho dekódujeme zpátky
+a~ověříme, že vrstvy mezi tím -- sestavování polí, jejich kódování
+a~znovu dekódování -- pasují bez ztráty informace. Pokud cokoliv
+mezi vstupem a~výstupem nesedí, parser to ohlásí chybou a~test padne.
+
+Pro singlesig kontrolujeme tři klíčové položky vstupu:
+\texttt{PSBT\_\allowbreak IN\_\allowbreak WITNESS\_\allowbreak UTXO}
+(utrácená částka a~scriptPubKey),
+\texttt{PSBT\_\allowbreak IN\_\allowbreak BIP32\_\allowbreak DERIVATION}
+(derivační cesta, podle které Trezor pozná svůj klíč) a~od~firmware
+Trezoru 2.3.1 i~\texttt{PSBT\_\allowbreak IN\_\allowbreak NON\_\allowbreak WITNESS\_\allowbreak UTXO}
+jako mitigaci útoku popsaného v~sekci~\ref{sec:test-chyby}. Pro multisig
+přibývá \texttt{PSBT\_\allowbreak IN\_\allowbreak WITNESS\_\allowbreak SCRIPT},
+jehož délka musí být přesně $34N+3$~bajtů (odpovídá kanonickému
+layoutu \texttt{OP\_M~\ldots~OP\_CHECKMULTISIG}) a~klíče v~něm musí
+být seřazené lexikograficky podle BIP-67~\cite{BIP67}.
+
+Třetí kontrola se týká change výstupu:
+\texttt{PSBT\_\allowbreak OUT\_\allowbreak BIP32\_\allowbreak DERIVATION}
+musí obsahovat derivační cestu pro každého cosignera. Bez něj by Trezor
+zobrazil change adresu jako platbu třetí straně -- uživatel by si pak
+myslel, že posílá peníze cizímu příjemci, místo aby je dostával jako
+vrácenou změnu. Tento jediný test v~průchodu pokrývá tři chyby, které
+jsme v~průběhu vývoje řešili izolovaně.
+
+\paragraph{Pokrytí kombinací $M$-of-$N$.}
+Vzorce a~strukturní invarianty pro multisig (velikost vstupu, layout
+witness skriptu, kompletní PSBT roundtrip) jsme dále ověřili
+parametrizovanými testy přes spektrum kombinací $M$-of-$N$ obsahující
+hraniční případy ($M=N$ -- typicky 2-of-2 nebo 15-of-15), nejčastější
+provozní schémata (2-of-3, 2-of-4 pro obnovu, 3-of-5 pro firemní
+treasury) i~větší konfigurace (5-of-9, 7-of-10). Horní hranicí
+testovaného rozsahu je 15-of-15; opcody \texttt{OP\_M} a~\texttt{OP\_N}
+v~witness skriptu mají kódování \texttt{0x50 + M} (resp.~\texttt{N}),
+takže přímý formát skriptu funguje pro $M, N \leq 16$, pro vyšší
+hodnoty by se musely jednotlivé hodnoty zapsat jako jednobajtový
+push, což aktuální implementace nepodporuje.
+
+\paragraph{Hraniční případy a~kompletní Trezor Connect parametry.}
+Vedle hlavního workflow ověřujeme i~dvě nepříjemné hraniční situace,
+které mají v~kódu vlastní větve. První je \emph{change pod dust
+limitem} (546~satoshi): když by vrácená změna měla být menší než tato
+hranice, výstup do~transakce vůbec nezapíšeme a~drobnou částku přičteme
+k~poplatku, jinak by Bitcoin uzly transakci odmítly jako nestandardní
+a~vůbec ji do~mempoolu nepustily. Druhá je \emph{nedostatek prostředků},
+kdy \texttt{PsbtBuilder} musí selhat výjimkou
+\texttt{IllegalArgumentException}; bez tohoto guardu by se vrátila
+transakce s~negativním change, což by ve~výsledku znamenalo platbu
+poplatku z~ničeho.
+
+Druhá polovina testů kontroluje JSON, který se posílá do~Trezor
+Connect. Pole \texttt{address\_n} (Trezor Connect notace pro derivační
+cestu) má pro singlesig pět prvků BIP-84 cesty
+\texttt{m/84'} / \texttt{coin'} / \texttt{account'} / \texttt{chain}
+/ \texttt{index}, pro multisig šest (BIP-48 přidává úroveň
+\texttt{script\_type'} pro typ skriptu). První tři, resp.~čtyři prvky
+musí být \emph{hardened} (s~nastaveným bitem \texttt{0x80000000}) --
+to je pro Trezor signál, že jde o~derivační uzel, ke~kterému musí
+mít privátní klíč; poslední dvě zůstávají nehardened, protože je
+odvozujeme bez znalosti tajné části.
+Pro multisig navíc kontrolujeme, že
+\texttt{multisig.\allowbreak pubkeys} obsahuje cosigner klíče v~BIP-67
+pořadí a~že \texttt{signatures} startuje jako $N$~prázdných slotů, do~kterých
+Trezor následně vyplní svůj jeden podpis na~pozici odpovídající
+aktivnímu cosignerovi.
+
+\paragraph{Audit trail PSBT podpisů (\texttt{PsbtRepositoryTest}).}
+Třída pokrývá funkci \texttt{signWithAudit}, která musí v~jediné
+databázové transakci zapsat řádek do~tabulky
+\texttt{psbt\allowbreak \_\allowbreak signatures} a~inkrementovat
+\texttt{current\allowbreak \_\allowbreak sigs} v~tabulce \texttt{psbts}.
+Pořadí operací je load-bearing: dřívější verze prováděla nejprve
+UPDATE, takže duplicitní požadavek od~téhož cosignera (například
+při rychlém dvojkliku v~UI) inkrementoval
+\texttt{current\allowbreak \_\allowbreak sigs} o~jedna ještě předtím,
+než UNIQUE constraint nad dvojicí
+\texttt{(psbt\_id, cosigner\allowbreak \_\allowbreak index)}
+zachytil druhý INSERT, čímž PSBT zdánlivě dosáhla prahu~$M$
+s~chybějícím podpisem. Současná implementace začíná INSERTem;
+rollback při unikátní kolizi vrátí
+\texttt{current\allowbreak \_\allowbreak sigs} na~původní hodnotu.
+Testy ověřují právě tuto invariantu spolu se~standardním přechodem
+stavu \emph{pending}~$\to$~\emph{signed} po~dosažení prahu, paralelní
+podpis téhož zařízení v~roli více cosignerů (jednočipový multisig
+setup ze~sekce~\ref{sec:test-prostredi}), filtrování PSBT podle stavu
+a~přechod na~\emph{broadcast}.
+
+\subsection[Derivace adres a~parsing deskriptorů]{Derivace adres
+a~parsing deskriptorů (modul \texttt{wallet-registry})}
+\label{subsec:test-registry}
+
+Modul \texttt{wallet-registry} obsahuje vstupní bod každého importu
+peněženky a~derivace adres. Chyba zde se projeví buď odmítnutím
+validního deskriptoru, nebo -- hůř -- akceptací vadného a~vytvořením
+peněženky se~špatnými metadaty.
+
+\paragraph{Derivace adres (\texttt{AddressDerivationTest}).}
+Derivace adres je vstupní bod každé transakce: pokud peněženka
+vygeneruje jinou adresu, než kterou držitel klíčů skutečně kontroluje,
+příchozí platby zmizí někam, odkud je prakticky nelze získat zpět.
+Testy se proto dělí do tří úrovní podle závažnosti.
+
+Nejprve strukturální sanity: testnetové adresy musí začínat \texttt{tb1q},
+mainnetové \texttt{bc1q}; P2WPKH má 42~znaků, P2WSH 62. Pak invariantní
+vlastnosti -- derivace musí být idempotentní (opakované volání dává
+totéž), žádná adresa se nesmí opakovat napříč indexy ani mezi řetězci
+\emph{receive} a~\emph{change}, a~výsledek pro multisig nesmí záviset
+na~pořadí cosignerů v~deskriptoru \texttt{sortedmulti(\ldots)}, protože
+ti se v~rámci derivace vždy seřadí lexikograficky stejně (analogie
+BIP-67~\cite{BIP67} invariantu z~PSBT pipeline). Sem patří i~explicitní
+past na dříve opravený bug, kdy P2TR (Taproot) deskriptor tiše propadl
+na P2WPKH derivaci místo aby selhal -- nyní zde musí být vyhozena
+výjimka
+\texttt{Unsupported\allowbreak Operation\allowbreak Exception}.
+
+Třetí úroveň je porovnání s~oficiálním testovacím vektorem
+BIP-84~\cite{BIP84}: ze zveřejněné mnemoniky
+\enquote{abandon \ldots about} (prázdné passphrase) musí derivace cesty
+\texttt{m/84'/0'/0'/0/0} dát přesně adresu
+\texttt{bc1qcr8te4kr609\allowbreak gcawutmrza0\allowbreak j4xv80jy8z306fyu}.
+Pokud tento test prochází, máme prakticky jistotu, že naše BIP-32
+i~bech32 implementace odpovídají referenčnímu Bitcoin Core kódu --
+shoda na~42znakové adrese náhodou je krajně nepravděpodobná.
+
+\paragraph{Parser výstupních deskriptorů
+(\texttt{DescriptorParserTest}).}
+Parser deskriptorů je vstupní brána každého importu peněženky.
+Chyba v~něm má dva nepříjemné scénáře: buď odmítne validní deskriptor
+exportovaný ze~Sparrow Wallet (uživatel uvízne na~importní obrazovce
+bez možnosti pokračovat), nebo -- hůř -- tiše akceptuje vadný
+deskriptor a~vytvoří peněženku se~špatnými metadaty. Druhý scénář
+je horší, protože chybu odhalíme až ve~chvíli, kdy se transakce
+nezdaří podepsat.
+
+Testy postupně procházejí scénáře, které dnešní peněženky reálně
+produkují. Pokrývají oba podporované formáty deskriptoru:
+\texttt{wpkh(\ldots)} pro singlesig (\emph{witness public key hash})
+a~\texttt{wsh(sortedmulti(\allowbreak\ldots))} pro multisig
+(\emph{witness script hash} obalující seřazený multisig skript).
+Z~obou musí parser spolehlivě vytáhnout prah~$M$ a~počet cosignerů~$N$.
+U~multisig deskriptoru navíc cosignery seřadíme lexikograficky podle
+jejich xpub klíčů -- jde o~čistě interní normalizaci, díky které
+dva deskriptory s~prohozenými cosignery dají v~úložišti tutéž peněženku
+namísto dvou duplicit. Také kontrolujeme, že fingerprinty (čtyřbajtové
+otisky nadřazených klíčů, kterými deskriptor identifikuje konkrétní
+HD strom) přepneme na~malá písmena, protože různé peněženky exportují
+různý case a~bez normalizace bychom v~úložišti měli téhož cosignera
+dvakrát.
+
+Dále testujeme robustnost vůči formátovým variantám: odstraňování
+kontrolního součtu \texttt{\#xxxxxxxx} podle BIP-380~\cite{BIP380}
+(osmiznakový hash zařazený za~deskriptor, sloužící k~detekci překlepu
+při kopírování) a~expanzi BIP-389~\cite{BIP389} multipath placeholderu
+\texttt{<0;1>}, který moderní peněženky používají, aby jediný řádek
+pokrýval receive i~change větev. Konečně explicitně odmítáme nevalidní
+prahy ($M=0$ nebo $M>N$), aby se z~chybného uživatelského vstupu
+nestala peněženka, která by neuměla sestavit platnou transakci.
+
+Doplňující test pokrývá generování \texttt{walletId}: musí být
+deterministický (stejný deskriptor vede na~stejné ID), ale zároveň
+rozlišný mezi sítěmi. Import téhož deskriptoru jako mainnetové
+i~testnetové peněženky musí dát dvě různá ID, jinak by se v~úložišti
+mohly nedopatřením pomíchat reálné prostředky s~testovacími.
+
+\subsection[Identita zařízení a~JWT autentizace]{Identita zařízení
+a~JWT autentizace (modul \texttt{auth-service})}
+\label{subsec:test-auth}
+
+Modul \texttt{auth-service} pokrývají tři testovací třídy.
+\texttt{JwtIssuerTest} ověřuje, že JWT tokeny podepsané algoritmem
+RS256 obsahují všechny
+požadované claimy (\texttt{sub}, \texttt{device\_id}, volitelný
+\texttt{fingerprint}), že verifikace selže pro nesprávný issuer
+i~audience a~že expirovaný token je odmítnut. Zbývající dvě třídy
+(\texttt{Refresh\-StoreTest} a~\texttt{Device\-RepositoryTest}) běží
+proti in-memory H2 databázi v~PostgreSQL kompatibilním režimu.
+\texttt{Refresh\-StoreTest} pokrývá dvě load-bearing vlastnosti
+bezpečnostního modelu (sekce~\ref{subsec:refresh-token}). Za~prvé,
+plaintext refresh tokenu se v~databázi nikdy neobjeví -- ukládá se
+výhradně jeho SHA-256 hash, takže únik obsahu tabulky nedá útočníkovi
+použitelnou bearer credential. Za~druhé, jednorázová race-safe rotace
+přes klauzuli \texttt{UPDATE \ldots WHERE revoked\_at IS NULL}, ověřená
+souběžnou exekucí osmi vláken, ze~kterých přesně jedno smí token
+vyměnit za~novou dvojici a~ostatní musí dostat \texttt{null}.
+\texttt{Device\-RepositoryTest} ověřuje semantiku upsertu: opakované
+přihlášení téhož Trezoru musí jen aktualizovat metadata zařízení
+(\texttt{model}, \texttt{label}), nikoliv vytvořit duplikátní řádek.
+
+\subsection[Klasifikace transakcí]{Klasifikace transakcí
+(modul \texttt{explorer-service})}
+\label{subsec:test-explorer}
+
+Třída \texttt{WalletExplorerTest} pokrývá funkci, která z~raw transakce
+vrácené API Mempool.space sestaví
+strukturu z~pohledu peněženky (typ \emph{SENT} nebo \emph{RECEIVED},
+čistá částka, počet potvrzení). Testy ověřují klasifikaci na základě
+přítomnosti vlastních vstupů a~výstupů, korektní výpočet částky pro
+SENT transakci s~change výstupem (odečtení vrácené změny od~součtu
+vlastních vstupů), agregaci RECEIVED napříč více našimi adresami
+v~jednom příchozím platebním transakci a~několik scénářů potvrzení.
+Test \emph{confirmed transaction with currentBlockHeight 0 falls back
+to 1 confirmation} je explicitní regresní past pro dříve opravenou
+chybu, kdy funkce vracela vždy hodnotu 1 nezávisle na skutečné
+hloubce potvrzení v~blockchainu, protože si neopatřovala výšku tipu
+ze~služby \texttt{blockchain-service}.
+
+\subsection[Retry logika v~blockchain-service]{Retry logika
+v~\texttt{blockchain-service}}
+\label{subsec:test-blockchain}
+
+Třída \texttt{Mempool\allowbreak Client\allowbreak Test} pokrývá
+klienta pro Esplora-kompatibilní API (Mempool\allowbreak .space
+na~testnetu, Blockstream na~mainnetu), který má~přesně jeden retry
+pro tranzientní selhání: HTTP~429, request/connect/socket timeout
+a~prosté \texttt{IO\allowbreak Exception} typu reset spojení. Vícenásobné opakování záměrně
+nepoužíváme -- po~zařazení IP do~penalty boxu by jen prodlužovalo
+frontu. Testy běží proti \texttt{MockEngine} z~knihovny ktor-client,
+takže neuskutečňují žádné reálné HTTP volání ani neplýtvají rate
+limity upstream API. Pokrývají úspěch na~první pokus (žádný retry),
+úspěch po~jednom retry pro 429 i~\texttt{IOException}, trvalé selhání
+(RuntimeException po~druhém pokusu), okamžité selhání pro non-429 4xx
+odpovědi (404 nemá smysl opakovat) a~speciální cestu
+\texttt{broadcast\allowbreak Transaction}, která retry úmyslně
+neprovádí, aby se~nezdvojila již podaná transakce. Test úspěchu
+po~retry pro \texttt{IOException} slouží zároveň jako regresní past
+pro dříve opravenou chybu, kdy klient v~\texttt{catch} bloku odchytával
+pouze \texttt{Http\allowbreak Request\allowbreak Timeout\allowbreak Exception},
+takže reset spojení nebo connect timeout (oba reportované jako
+\texttt{IOException}) propadly na trvalé selhání místo jednoho
+opakování.
 
 %%% -----------------------------------------------------------------------
 \section{Testovací prostředí}
@@ -64,7 +416,7 @@ PostgreSQL~\cite{PostgreSQL} hostující tři logické databáze
 (\texttt{wallet\_\allowbreak auth}, \texttt{wallet\_\allowbreak psbt},
 \texttt{wallet\_\allowbreak registry}) a~síťové připojení na veřejné
 API Mempool.space~\cite{MempoolAPI} pro testnet4. Mobilní aplikace
-běžela na fyzickém Android zařízení se soubežně nainstalovanou aplikací
+běžela na fyzickém Android zařízení se souběžně nainstalovanou aplikací
 Trezor Suite Mobile, která zprostředkovává komunikaci s~hardwarovou peněženkou
 podle deeplink protokolu popsaného v~sekci~\ref{subsec:trezor-connect}.
 K~testování jsme využili jednu hardwarovou peněženku Trezor s~inicializovaným
@@ -101,7 +453,10 @@ v~sekci~\ref{sec:use-cases}. Pro každý use case existuje odpovídající
 manuální scénář; níže je popisujeme stručně, pouze z~hlediska toho, co
 ověřují a~co je u~nich kritické.
 
-\textbf{Singlesig workflow.} Začínáme přihlášením uživatele přes Trezor
+\subsection{Singlesig workflow}
+\label{subsec:scenare-singlesig}
+
+Začínáme přihlášením uživatele přes Trezor
 (UC1). Aplikace vyžádá z~hardwarové peněženky deset xpub klíčů pro účty
 \texttt{m/84'/1'/0'} až \texttt{m/84'/1'/9'}, backend pro každý xpub provede
 account discovery dle BIP-44~\cite{BIP44} a~vrátí seznam aktivních
@@ -121,35 +476,43 @@ ověřujeme, že výsledná transakce na blockchainu obsahuje právě jeden vstu
 odpovídající zvolenému UTXO a~že odhad poplatku se přepočítal podle nového
 počtu vstupů.
 
-Příjem prostředků (UC z~user story~US4) testujeme tak, že v~aplikaci
-zobrazíme přijímací adresu, z~externího faucetu na ni odešleme malou částku
-tBTC a~ověřujeme, že po potvrzení transakce se zůstatek v~aplikaci aktualizuje
-a~v~historii se objeví příchozí transakce se správnou klasifikací směru
-(\textit{received}, nikoli \textit{sent}).
+Příjem prostředků (user story~US4 v~sekci~\ref{sec:user-stories} --
+nemá samostatný use case, protože nevyžaduje žádnou interakci
+s~Trezorem) testujeme tak, že v~aplikaci zobrazíme přijímací adresu,
+z~externího faucetu na ni odešleme malou částku tBTC a~ověřujeme,
+že po potvrzení transakce se zůstatek v~aplikaci aktualizuje
+a~v~historii se objeví příchozí transakce se správnou klasifikací
+směru (\emph{RECEIVED}, nikoli \emph{SENT}).
 
-\textbf{Multisig workflow.} Po importu deskriptoru (UC3) ověřujeme, že
+\subsection{Multisig workflow}
+\label{subsec:scenare-multisig}
+
+Po importu deskriptoru (UC3) ověřujeme, že
 aplikace zobrazí novou peněženku s~informací ,,2-of-3``, že odvozené adresy
 začínají prefixem \texttt{tb1q} a~jsou shodné s~adresami, které pro tentýž
 deskriptor zobrazí Sparrow Wallet, a~že zobrazený zůstatek odpovídá
 prostředkům, které jsme na multisig adresy předem odeslali z~faucetu.
 
 Hlavním scénářem multisig části je vytvoření, podepsání a~broadcast 2-of-3
-transakce (UC4 + UC6). Postup probíhá ve čtyřech krocích: nejprve jako
-cosigner~1 (\texttt{m/48'/1'/0'/2'}) zadáme cílovou adresu a~částku, backend
-sestaví PSBT pro multisig vstupy a~aplikace nás přes deeplink odešle k~podpisu
-na Trezor. Trezor v~multisig režimu vrací pouze pole podpisů, nikoli celou
-serializovanou transakci -- tyto podpisy backend přidá do PSBT na pozici
-odpovídající aktuálnímu cosignerovi. Stav PSBT přejde z~\texttt{pending}
-(0~podpisů) na 1~ze~2 a~aplikace zobrazí informaci, že transakce čeká na
-dalšího cosignera. Ve druhém kroku v~nastavení přepneme aktivní účet na
-cosignera~2 (\texttt{m/48'/1'/1'/2'}), v~seznamu rozpracovaných PSBT vybereme
-připravovanou transakci a~znovu projdeme deeplink podpisem. Backend po
-přijetí druhého podpisu uloží podpisy na~pozice odpovídající
+transakce (UC4 + UC6). Postup probíhá ve třech uživatelských krocích.
+\textbf{V~prvním kroku} jako cosigner~1 (\texttt{m/48'/1'/0'/2'})
+zadáme cílovou adresu a~částku, backend sestaví PSBT pro multisig
+vstupy a~aplikace nás přes deeplink odešle k~podpisu na Trezor.
+Trezor v~multisig režimu vrací pouze pole podpisů, nikoli celou
+serializovanou transakci -- tyto podpisy backend přidá do PSBT na~pozici
+odpovídající aktuálnímu cosignerovi. Stav PSBT přejde z~\emph{pending}
+(0~podpisů) na~1~ze~2~potřebných a~aplikace zobrazí informaci, že
+transakce čeká na~dalšího cosignera. \textbf{Ve~druhém kroku}
+v~nastavení přepneme aktivní účet na cosignera~2
+(\texttt{m/48'/1'/1'/2'}), v~seznamu rozpracovaných PSBT vybereme
+připravovanou transakci a~znovu projdeme deeplink podpisem. Backend
+po přijetí druhého podpisu uloží podpisy na~pozice odpovídající
 BIP-67~\cite{BIP67} řazení a~vrátí aktualizovaný stav PSBT; aplikace
 detail obnoví a~místo tlačítka \emph{Sign with Trezor} zobrazí
-\emph{Broadcast Transaction}. Po~jeho stisknutí aplikace zavolá
-broadcast endpoint, který transakci propaguje přes
-\texttt{blockchain-service} do~sítě. Úspěch ověřujeme v~Mempool.space,
+\emph{Broadcast Transaction}. \textbf{Ve~třetím kroku} stiskneme
+tlačítko \emph{Broadcast Transaction}, aplikace zavolá broadcast
+endpoint a~transakce se propaguje přes \texttt{blockchain-service}
+do~sítě. Úspěch ověřujeme v~Mempool.space,
 kde u~vstupů vidíme očekávaný witness
 obsahující dva podpisy a~kompletní redeem skript ve tvaru
 \texttt{OP\_2~<pk1>~<pk2>~<pk3>~OP\_3 OP\_CHECKMULTISIG}.
@@ -189,13 +552,20 @@ opravy procházejí všechny multisig scénáře včetně transakcí s~více vst
 \textbf{Chybějící \texttt{PSBT\_IN\_NON\_WITNESS\_UTXO}.}
 Po upgradu firmware Trezoru začaly i~singlesig transakce, které dosud
 fungovaly bez problémů, končit chybou ,,Transaction has changed during
-signing``. Dohledali jsme, že firmware Trezoru od verze 2.3.1 vyžaduje, aby
-PSBT pro každý vstup obsahoval kompletní předchozí transakci v~poli
-\texttt{PSBT\_IN\_NON\_WITNESS\_UTXO} -- a~to i~u~nativních SegWit vstupů
-typu P2WPKH, kde to BIP-174 striktně nevyžaduje. Důvodem je, že firmware
-chce nezávisle ověřit částky vstupů a~předejít útoku, při kterém by se mu
-podsunula falešná hodnota poplatku~\cite{TrezorFirmwareDocs}. Naše původní
-implementace toto pole vynechávala, protože pro P2WPKH stačilo
+signing``. Dohledali jsme, že firmware Trezor počínaje verzemi~2.3.1
+(Model T) a~1.9.1 (Trezor One), obě vydané v~červnu 2020, vyžaduje,
+aby PSBT pro každý vstup obsahoval kompletní předchozí transakci
+v~poli \texttt{PSBT\_IN\_NON\_WITNESS\_UTXO} -- a~to i~u~nativních
+SegWit vstupů typu P2WPKH, kde BIP-174~\cite{BIP174} toto pole
+označuje pouze za volitelné. Současný firmware modelů Safe 3, 5
+a~7 toto pravidlo přebírá. Důvodem je mitigace BIP-143 SegWit fee
+útoku zveřejněného 3.~března~2020 Saleemem
+Rashidem~\cite{TrezorSegwitFix2020}, při kterém útočník mohl
+hardwarové peněžence podsunout falešnou hodnotu poplatku, protože
+zařízení dříve důvěřovalo částce uvedené v~poli
+\texttt{PSBT\_IN\_WITNESS\_UTXO} bez nezávislého ověření přes celou
+předchozí transakci~\cite{TrezorFirmwareDocs}. Naše původní implementace
+toto pole vynechávala, protože pro P2WPKH stačilo
 \texttt{PSBT\_IN\_WITNESS\_UTXO} obsahující pouze utrácené UTXO.
 Oprava vyžadovala dvě změny: ve službě \texttt{blockchain-service} jsme
 přidali endpoint \texttt{/tx/\{txid\}/hex} vracející serializovanou
@@ -245,6 +615,16 @@ mezi různými verzemi firmware). Druhým omezením je zaměření testování v
 aplikace podporuje přepínání mezi testnetem a~mainnetem přímo
 z~přihlašovací obrazovky, veškeré testovací scénáře jsme prováděli pouze
 na testnetu. Provoz na mainnetu jsme neověřovali.
+Třetím omezením je rozsah jednotkových testů -- popsaná sada
+(sekce~\ref{sec:test-unit}) cíleně pokrývá deterministické funkce
+backendu (sestavování PSBT, derivace adres, parser deskriptorů,
+vystavování JWT tokenů, klasifikaci transakcí, retry logiku) a~tři
+databázové operace, jejichž atomicita je load-bearing pro
+bezpečnostní model (rotace refresh tokenu, upsert identit zařízení,
+audit trail PSBT podpisů). Záměrně nepokrývá integrační vrstvu s~Trezorem -- tu
+testujeme manuálními scénáři ze~sekce~\ref{sec:test-scenare}.
+Komplexní pokrytí end-to-end pomocí emulátoru zařízení jsme z~důvodů
+uvedených v~sekci~\ref{sec:test-pristup} odložili na další vývoj.
 Konečně, neměřili jsme chování aplikace pod zátěží
 ani její odolnost vůči síťovým výpadkům -- pro mobilní peněženku s~jednotkami
 uživatelů jsou tyto charakteristiky druhořadé, ale v~širším nasazení by

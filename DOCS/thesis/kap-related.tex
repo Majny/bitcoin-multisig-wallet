@@ -261,10 +261,11 @@ Strukturu PSBT a~obsah jednotlivých map zachycuje obrázek~\ref{fig:psbt-struct
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{img/psbt-structure.pdf}
-\caption{Struktura PSBT pro multisig transakci se dvěma vstupy a~dvěma výstupy.
-Globální mapa obsahuje nepodepsanou transakci, mapy vstupů nesou data pro
-podepisování a~mapa change výstupu obsahuje derivační cesty pro identifikaci
-vlastního výstupu.}
+\caption[Struktura PSBT pro multisig transakci]{Struktura PSBT pro
+multisig transakci se dvěma vstupy a~dvěma výstupy. Globální mapa
+obsahuje nepodepsanou transakci, mapy vstupů nesou data pro
+podepisování a~mapa change výstupu obsahuje derivační cesty pro
+identifikaci vlastního výstupu.}
 \label{fig:psbt-structure}
 \end{figure}
 
@@ -295,9 +296,10 @@ typický průběh zpracování PSBT pro multisig transakci.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.85\textwidth]{img/psbt-lifecycle.pdf}
-\caption{Životní cyklus PSBT pro multisig transakci. Serverová služba
-zastává role Creator a~Updater, shromažďuje podpisy a~aktualizuje parametry
-pro další cosignery. Trezor Connect interně provádí finalizaci (Combiner,
+\caption[Životní cyklus PSBT pro multisig transakci]{Životní cyklus
+PSBT pro multisig transakci. Serverová služba zastává role Creator
+a~Updater, shromažďuje podpisy a~aktualizuje parametry pro další
+cosignery. Trezor Connect interně provádí finalizaci (Combiner,
 Finalizer) a~vrací kompletní serializovanou transakci (Extractor).
 Hardwarové peněženky cosignerů vystupují jako Signeři.}
 \label{fig:psbt-lifecycle}
@@ -422,15 +424,17 @@ BIP-141~\citep{BIP141} vypočítá jako:
 kde \emph{base\_size} je velikost newitness části vstupu (41~bajtů: outpoint
 36~B, sequence 4~B a~délka skriptu 1~B) a~\emph{witness\_size} je velikost
 witness dat. Pro M-of-N multisig vstup witness data obsahují: úvodní
-\texttt{OP\_0} a~délky polí (přibližně 6~B), M~podpisů (každý maximálně
+\texttt{OP\_0} a~délky polí (přibližně 5~B), M~podpisů (každý maximálně
 73~B: DER-kódovaný podpis 71--72~B plus push opcode) a~kompletní witness
 skript s~N~veřejnými klíči (každý 34~B: 33~B komprimovaný klíč plus push
-opcode). Celkově tedy:
+opcode). Implementace pro odhad poplatku zaokrouhluje dolů
+(strictní BIP-141 vyžaduje stropní funkci, rozdíl je nejvýše 1~vB
+na vstup, což je pro odhad poplatku zanedbatelné):
 \[
-  \text{vSize}_{\text{input}} \approx 41 + \frac{6 + 73 \cdot M + 34 \cdot N}{4} \text{~vB}
+  \text{vSize}_{\text{input}} \approx 41 + \left\lfloor \frac{5 + 73 \cdot M + 34 \cdot N}{4} \right\rfloor \text{~vB}
 \]
-Například pro schéma 2-of-3 je odhadovaná velikost jednoho vstupu přibližně
-$41 + (6 + 146 + 102)/4 \approx 105$~vB.
+Například pro schéma 2-of-3 vychází odhadovaná velikost jednoho vstupu
+$41 + \lfloor (5 + 146 + 102)/4 \rfloor = 41 + 63 = 104$~vB.
 
 
 %%% -----------------------------------------------------------------

@@ -1,0 +1,37 @@
+@startuml er-auth
+left to right direction
+skinparam backgroundColor white
+skinparam defaultFontSize 14
+skinparam shadowing false
+skinparam nodesep 30
+skinparam ranksep 60
+
+skinparam entity {
+  BackgroundColor #FAFAFA
+  BorderColor #424242
+}
+
+hide circle
+
+entity "devices" as devices {
+  * **device_id** : TEXT <<PK>>
+  --
+  fingerprint : TEXT <<UNIQUE>>
+  model : TEXT
+  label : TEXT
+  created_at : TIMESTAMPTZ
+}
+
+entity "refresh_tokens" as rtokens {
+  * **token_hash** : TEXT <<PK>>
+  --
+  device_id : TEXT
+  fingerprint : TEXT
+  expires_at : TIMESTAMPTZ
+  created_at : TIMESTAMPTZ
+  revoked_at : TIMESTAMPTZ
+}
+
+devices ||..o{ rtokens
+
+@enduml

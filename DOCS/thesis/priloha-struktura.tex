@@ -34,6 +34,16 @@ pro její sestavení a~spuštění. Struktura kořenového adresáře je násled
     při prvním spuštění.
   \end{description}
 
+  Každá z~uvedených mikroslužeb obsahuje vedle hlavního zdrojového kódu
+  v~\texttt{src/main/kotlin/} také adresář \texttt{src/test/kotlin/}
+  s~automatizovanou sadou jednotkových testů popsanou
+  v~sekci~\ref{sec:test-unit}. Sada se spouští příkazem
+  \texttt{./gradlew test} v~kořenovém adresáři \texttt{wallet-backend}
+  (případně cíleně pro jeden modul, např.\
+  \texttt{./gradlew :psbt-service:test}); HTML~report najde čtenář
+  po~doběhu v~\texttt{<modul>} / \texttt{build} / \texttt{reports} /
+  \texttt{tests} / \texttt{test} / \texttt{index.html}.
+
 \item[\texttt{wallet-frontend/}] Mobilní aplikace pro Android
   implementovaná v~jazyce Kotlin s~frameworkem Jetpack Compose. Klíčové
   balíčky:
@@ -58,6 +68,8 @@ pro její sestavení a~spuštění. Struktura kořenového adresáře je násled
 \bigskip
 \noindent\textbf{Požadavky pro sestavení.}
 Pro spuštění backendu je potřeba Docker Engine a~Docker
-Compose~\cite{Docker}. Pro sestavení mobilní aplikace je potřeba Android
-Studio s~Gradle a~Android SDK (minimální API~24). Podrobný postup
-spuštění popisuje kapitola~\ref{chap:uzivatelska}.
+Compose~\cite{Docker}; testovací sada vyžaduje navíc JDK~21 (Gradle
+toolchain ho stáhne automaticky, je-li dostupný resolver, jinak
+musí být nainstalován ručně). Pro sestavení mobilní aplikace je
+potřeba Android Studio s~Gradle a~Android SDK (minimální API~24).
+Podrobný postup spuštění popisuje kapitola~\ref{chap:uzivatelska}.

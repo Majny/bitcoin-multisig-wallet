@@ -40,6 +40,69 @@ externí aplikaci Trezor Suite Mobile, kterou jsme zvolili jako pragmatický
 kompromis mezi rozsahem bakalářské práce a~kvalitou uživatelského prožitku;
 důvody i~zvažované alternativy popisujeme v~sekci~\ref{sec:analyza-trezor}.
 
+\section*{Hlavní přínosy práce}
+
+Konkrétní přínosy práce shrnujeme do následujících bodů:
+
+\begin{itemize}
+\item \textbf{Mobilní peněženka kombinující multisig, coin control
+  a~přímou integraci s~Trezorem bez privátních klíčů na~serveru.}
+  Srovnání sedmi existujících řešení v~sekci~\ref{sec:comparison}
+  ukázalo, že žádné z~analyzovaných mobilních řešení tuto kombinaci
+  nenabízí; nejbližší konkurent BlueWallet~\cite{BlueWallet} podporuje
+  multisig na~mobilu, ale komunikace s~hardwarovou peněženkou probíhá
+  pouze přes manuální přenos PSBT souborů, bez přímé integrace přes
+  deeplink protokol Trezor Connect~\cite{TrezorConnect}. Bezpečnostní
+  model jsme ověřili kompletní 2-of-3 multisig transakcí na Bitcoin
+  testnetu (viz~kapitolu~\ref{chap:testovani}).
+
+\item \textbf{Engineering deeplink workflow s~Trezor Suite Mobile.}
+  Asynchronní podepisování přes Android intenty vyžaduje řešení
+  několika netriviálních problémů, jejichž postup není v~dokumentaci
+  Trezor Connect~\cite{TrezorConnect} popsán: korelace odpovědí
+  s~pending PSBT přes \texttt{requestId}, detekce odpovědi z~jiného
+  Trezoru než toho přihlášeného (sentinel \texttt{WRONG\_DEVICE}
+  s~auto-logoutem), rozlišení passphrase identity stejného fyzického
+  zařízení podle fingerprintu xpub a~obnova stavu po~návratu uživatele
+  z~aplikace třetí strany. Konkrétní implementace je popsána
+  v~sekci~\ref{subsec:deeplink-workflow}.
+
+\item \textbf{Identifikace implementačních úskalí PSBT a~Trezor
+  workflow.} Při ladění jsme narazili na chyby, jejichž diagnostika
+  vyžadovala detailní studium specifikací i~bezpečnostních patchů
+  firmware Trezoru. Pole
+  \texttt{PSBT\allowbreak \_\allowbreak IN\allowbreak \_\allowbreak NON\allowbreak \_\allowbreak WITNESS\allowbreak \_\allowbreak UTXO}
+  je vyžadováno i~pro nativní SegWit vstupy počínaje firmware Trezor
+  Model T 2.3.1 (resp. Trezor One 1.9.1) z~června 2020 jako mitigace
+  BIP-143 SegWit fee útoku zveřejněného Saleemem Rashidem v~březnu
+  2020~\cite{TrezorSegwitFix2020}; současný firmware modelů Safe 3, 5
+  a~7 toto pravidlo přebírá. Standard BIP-174~\cite{BIP174} přitom
+  toto pole pro SegWit vstupy označuje pouze za~volitelné
+  (\enquote{\emph{can be present}}). U~deskriptoru
+  \texttt{sortedmulti(\ldots)} je třeba podpisy ve~witness stacku
+  řadit podle pořadí \emph{odvozených} klíčů, jak explicitně předepisuje
+  BIP-383~\cite{BIP383} (\enquote{\emph{after all extended keys are
+  derived}}); naivní seřazení xpubs jednou při parsování deskriptoru
+  vede k~nevalidní transakci. Konečně předcházení reuse change adres
+  vyžádalo vlastní mechanismus sledování stavu napříč rozpracovanými
+  PSBT, který není pokryt ani Trezor Connect, ani PSBT formátem.
+  Detaily nálezů a~jejich oprav jsou popsány v~sekci~\ref{sec:test-chyby}
+  a~mohou posloužit dalším implementátorům.
+
+\item \textbf{Interoperabilita s~peněženkami podporujícími výstupní
+  deskriptory bez~importu klíčového materiálu.} Parser deskriptorů
+  ve~formátu \texttt{wsh(sortedmulti(\ldots))} podle BIP-380~\cite{BIP380}
+  a~BIP-383~\cite{BIP383} přijímá vstup od~jakékoli peněženky, která
+  tento otevřený standard respektuje (například Sparrow Wallet, Bitcoin
+  Core nebo Specter Desktop). Postup je univerzální: na~desktopu se
+  vytvoří multisig konfigurace, exportuje deskriptor a~v~mobilní
+  aplikaci se~importuje, čímž obě peněženky pracují nad~totožnou
+  množinou adres bez~potřeby přenášet privátní klíče ani seedy mezi
+  platformami. Funkčnost jsme ověřili proti Sparrow
+  Walletu~\cite{SparrowWallet} jako referenční desktop implementaci
+  (viz~sekci~\ref{sec:test-prostredi}).
+\end{itemize}
+
 \section*{Možnosti dalšího vývoje}
 
 Aplikace je navržena s~ohledem na další rozšiřování a~několik konkrétních
@@ -74,10 +137,13 @@ obrazovky a~backend automaticky komunikuje s~odpovídajícím blockchainovým
 API (Mempool.space pro testnet, Blockstream
 Esplora~\cite{BlockstreamEsplora} pro mainnet). Před reálným nasazením
 s~finančními prostředky by však bylo vhodné provést bezpečnostní audit
-a~doplnit \textbf{automatizovanou testovací sadu} (jednotkové i~integrační
-testy nad PSBT logikou a~derivací adres), která dosud chybí a~kterou jsme
-v~kapitole~\ref{chap:testovani} označili za vědomé omezení zvoleného
-přístupu k~testování.
+a~rozšířit \textbf{automatizovanou testovací sadu}. Jednotkové testy nad
+deterministickými částmi (PSBT a~Trezor Connect parametry, audit trail
+podpisů, derivace adres, parser deskriptorů, vystavování a~rotace JWT
+tokenů, klasifikace transakcí a~retry logika blockchain klienta) jsme
+do~práce zahrnuli a~popsali v~sekci~\ref{sec:test-unit}; chybí
+end-to-end pokrytí pomocí Trezor emulátoru, které jsme z~důvodů
+diskutovaných v~sekci~\ref{sec:test-pristup} odložili na další vývoj.
 
 Mezi další užitečná rozšíření patří podpora náhradních strategií výběru
 UTXO (například algoritmus Branch and Bound), možnost připojit aplikaci

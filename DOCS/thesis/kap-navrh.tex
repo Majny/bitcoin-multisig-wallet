@@ -24,11 +24,12 @@ architekturu zachycuje obrázek~\ref{fig:architektura}.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{img/architektura.pdf}
-\caption{Schéma architektury systému. Android aplikace komunikuje s~API
-Gateway přes HTTP v~izolované LAN či VPN a~s~hardwarovou peněženkou
-Trezor přes deeplink protokol zprostředkovaný aplikací Trezor Suite
-Mobile. Backendové mikroslužby komunikují mezi sebou interně
-a~přistupují k~externím službám (Mempool.space, CoinGecko).}
+\caption[Schéma architektury systému]{Schéma architektury systému.
+Android aplikace komunikuje s~API Gateway přes HTTP v~izolované LAN
+či VPN a~s~hardwarovou peněženkou Trezor přes deeplink protokol
+zprostředkovaný aplikací Trezor Suite Mobile. Backendové mikroslužby
+komunikují mezi sebou interně a~přistupují k~externím službám
+(Mempool.space, CoinGecko).}
 \label{fig:architektura}
 \end{figure}
 
@@ -122,7 +123,8 @@ Systém se skládá z~následujících mikroslužeb:
 \item[\texttt{wallet-registry} (port~8082)] \hfill \\
   Spravuje peněženky, cosignery a~adresy. Pro singlesig peněženky provádí
   derivaci adres podle standardu BIP-32~\cite{BIP32} s~cestou
-  \texttt{m/84'/\allowbreak 1'/\allowbreak 0'} (BIP-84~\cite{BIP84}).
+  \texttt{m/84'/\allowbreak c'/\allowbreak N'} dle BIP-84~\cite{BIP84}
+  (kde \texttt{c} je 0 pro mainnet, 1 pro testnet, a~\texttt{N} index účtu).
   Pro multisig peněženky parsuje output deskriptory ve~formátu
   \texttt{wsh(\allowbreak sorted\-multi(...))} dle BIP-380~\cite{BIP380}
   a~BIP-383~\cite{BIP383} a~provádí derivaci P2WSH adres podle
@@ -366,7 +368,10 @@ následovně:
 \item Aplikace prostřednictvím Trezor Connect získá veřejné informace
   o~zařízení -- především \emph{fingerprint} kořenového veřejného klíče.
 \item Z~fingerprintu je deterministicky odvozen \texttt{device\_id}
-  (UUID verze~3 s~prefixem \texttt{trezor:}).
+  (UUID verze~3 s~namespace stringem \texttt{trezor:<fingerprint>});
+  výsledné UUID se ukládá bez prefixu, namespace slouží pouze jako
+  vstup do hashovací funkce, čímž stejný Trezor vždy dostane stejné
+  \texttt{device\_id}.
 \item \texttt{auth-service} uloží identitu zařízení a~vydá JWT token
   podepsaný svým privátním RSA klíčem. Token obsahuje \texttt{device\_id}
   jako \emph{subject} a~má omezenou dobu platnosti.
@@ -379,9 +384,10 @@ Celý průběh autentizace zachycuje obrázek~\ref{fig:auth-flow}.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{img/auth-flow.pdf}
-\caption{Sekvenční diagram autentizace. Uživatel exportuje veřejné klíče
-z~Trezoru přes Trezor Suite Mobile, \texttt{auth-service} uloží zařízení
-a~vydá JWT token, API Gateway následně validuje token při každém požadavku.}
+\caption[Sekvenční diagram autentizace]{Sekvenční diagram autentizace.
+Uživatel exportuje veřejné klíče z~Trezoru přes Trezor Suite Mobile,
+\texttt{auth-service} uloží zařízení a~vydá JWT token, API Gateway
+následně validuje token při každém požadavku.}
 \label{fig:auth-flow}
 \end{figure}
 
@@ -496,9 +502,10 @@ a~\ref{fig:trezor-signing-2}.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{img/trezor-signing-1.pdf}
-\caption{Sekvenční diagram podepisování -- první část: vytvoření PSBT na
-backendu. Aplikace zadá požadavek API Gateway, \texttt{psbt-service}
-vybere UTXO, sestaví PSBT a~připraví parametry pro Trezor Connect.}
+\caption[Sekvenční diagram podepisování -- první část]{Sekvenční
+diagram podepisování -- první část: vytvoření PSBT na backendu.
+Aplikace zadá požadavek API Gateway, \texttt{psbt-service} vybere
+UTXO, sestaví PSBT a~připraví parametry pro Trezor Connect.}
 \label{fig:trezor-signing-1}
 \end{figure}
 
@@ -520,8 +527,9 @@ odpovídající aktuálnímu cosignerovi.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{img/trezor-signing-2.pdf}
-\caption{Sekvenční diagram podepisování -- druhá část: podpis na hardwarovém
-zařízení a~následný broadcast (singlesig) nebo přidání dílčího podpisu
+\caption[Sekvenční diagram podepisování -- druhá část]{Sekvenční
+diagram podepisování -- druhá část: podpis na hardwarovém zařízení
+a~následný broadcast (singlesig) nebo přidání dílčího podpisu
 (multisig). Detaily transakce uživatel vždy ověřuje přímo na displeji
 Trezoru.}
 \label{fig:trezor-signing-2}
@@ -558,6 +566,22 @@ Databáze \texttt{auth-service} obsahuje dvě tabulky:
   popsanou v~sekci~\ref{subsec:refresh-token}.
 \end{description}
 
+Schéma databáze \texttt{auth-service} zachycuje
+obrázek~\ref{fig:er-auth}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{img/er-auth.pdf}
+\caption[ER diagram databáze auth-service]{ER diagram databáze
+\texttt{auth-service}. Jedno zařízení vystaví za~svou životnost 0~až~N
+refresh tokenů; přerušovaná čára značí logickou vazbu, která není
+vynucena cizím klíčem v~SQL. Plaintext refresh tokenu se v~databázi
+nikdy neukládá -- tabulka obsahuje jen jeho SHA-256 otisk v~poli
+\texttt{token\_hash}, podle kterého se token při ověřování dohledá
+(příchozí plaintext server zahashuje a~výsledek hledá v~tabulce).}
+\label{fig:er-auth}
+\end{figure}
+
 \subsection{Databáze wallet-registry}
 
 Databáze \texttt{wallet-registry} obsahuje entity pro správu peněženek,
@@ -566,17 +590,21 @@ cosignerů a~adres:
 \begin{description}
 \item[\texttt{wallets}] {\sloppy -- Reprezentuje peněženku
   (singlesig nebo multisig). Identifikátor
-  \texttt{wallet\_\allowbreak id} je deterministicky generován:
-  u~multisig peněženek jako zkrácený SHA-256 hash output deskriptoru
-  (s~prefixem sítě), u~singlesig jako kompozitní klíč
-  \texttt{wallet-\{fingerprint\}-\{network\}-\{scriptType\}-\{accountIndex\}}.
-  Oba přístupy zajišťují, že totožná peněženka vždy vede ke~stejnému
-  identifikátoru. Tabulka dále obsahuje
+  \texttt{wallet\_\allowbreak id} je deterministicky generován pro
+  oba typy peněženky stejným algoritmem -- prvních osm hexadecimálních
+  znaků SHA-256 hashe ze~stringu \texttt{<network>:<receive\_descriptor>}
+  s~prefixem \texttt{w-} (například \texttt{w-3f8a2b1c}). Tím je import
+  deterministický (stejný deskriptor a~síť dají stejné
+  \texttt{wallet\_\allowbreak id}) a~zároveň jednoznačně rozlišný
+  napříč sítěmi (totéž schéma na~mainnetu a~testnetu vede na~odlišné
+  identifikátory). Tabulka dále obsahuje
   \texttt{network} (mainnet/\allowbreak testnet),
   \texttt{type} (SINGLE\_\allowbreak SIG~/~MULTI\_\allowbreak SIG),
-  \texttt{script\_\allowbreak type} (P2WPKH~/~P2WSH), požadovaný
-  počet podpisů~$M$, celkový počet cosignerů~$N$ a~dva kompletní
-  deskriptory (\texttt{receive\_\allowbreak descriptor} pro přijímací
+  \texttt{script\_\allowbreak type} (\texttt{WPKH}~/~\texttt{WSH}
+  bez~legacy prefixu \texttt{P2}; v~budoucnu lze rozšířit
+  o~\texttt{SH\_WSH} a~\texttt{TR}), požadovaný počet podpisů~$M$,
+  celkový počet cosignerů~$N$ a~dva kompletní deskriptory
+  (\texttt{receive\_\allowbreak descriptor} pro přijímací
   adresy a~\texttt{change\_\allowbreak descriptor} pro change
   adresy).\par}
 
@@ -586,10 +614,13 @@ cosignerů a~adres:
   a~samotný rozšířený veřejný klíč \texttt{xpub}.
 
 \item[\texttt{wallet\_cosigners}] -- Vazební tabulka propojující peněženky
-  s~cosignery. Obsahuje \texttt{cosigner\_index}, který určuje pozici
-  cosignera v~rámci peněženky. Tento index je důležitý pro správné řazení
-  veřejných klíčů podle standardu BIP-67~\cite{BIP67} při sestavování
-  multisig skriptů.
+  s~cosignery. Sloupec \texttt{idx} určuje pozici cosignera v~rámci
+  peněženky a~spolu s~\texttt{wallet\_id} tvoří složený primární klíč.
+  Tento index je důležitý pro správné řazení veřejných klíčů podle
+  standardu BIP-67~\cite{BIP67} při sestavování multisig skriptů.
+  Doplňující omezení \texttt{UNIQUE(wallet\_id, cosigner\_id)}
+  zabraňuje, aby tentýž cosigner figuroval v~jedné peněžence
+  pod více pozicemi.
 
 \item[\texttt{wallet\_members}] -- Propojuje zařízení s~peněženkami.
   Umožňuje jednomu zařízení být členem více peněženek a~jedné peněžence
@@ -607,23 +638,31 @@ cosignerů a~adres:
 \item[\texttt{cosigner\_labels}] -- Ukládá uživatelská pojmenování
   cosignerů v~rámci konkrétní multisig peněženky (například
   \uv{Alicin klíč}, \uv{Pepa}). Záznam je vázán na trojici
-  (\texttt{wallet\_\allowbreak id}, \texttt{cosigner\_\allowbreak index},
-  \texttt{device\_\allowbreak id}), takže název je privátní pro dané
-  zařízení a~ostatním cosignerům se nezobrazuje. Důvodem je ochrana
+  (\texttt{device\_\allowbreak id}, \texttt{wallet\_\allowbreak id},
+  \texttt{idx}), která tvoří složený primární klíč; \texttt{idx}
+  zde má stejný význam jako v~tabulce \texttt{wallet\_cosigners}.
+  Název je privátní pro dané zařízení a~ostatním cosignerům
+  se nezobrazuje. Důvodem je ochrana
   soukromí: osobní poznámky o~spolupodepisovatelích by neměly prosakovat
   mezi členy sdílené peněženky.
 \end{description}
 
-Schéma vztahů mezi entitami zachycuje obrázek~\ref{fig:er-diagram}.
+Schéma vztahů mezi entitami v~databázi \texttt{wallet-registry}
+zachycuje obrázek~\ref{fig:er-registry}.
 
 \begin{figure}[htbp]
 \centering
-\includegraphics[width=\textwidth]{img/er-diagram.pdf}
-\caption{ER diagram datového modelu. Databáze auth-service obsahuje tabulky
-zařízení a~refresh tokenů, wallet-registry spravuje peněženky, cosignery,
-adresy a~per-device labely, psbt-service uchovává PSBT transakce a~záznamy
-podpisů.}
-\label{fig:er-diagram}
+\includegraphics[width=0.95\textwidth]{img/er-registry.pdf}
+\caption[ER diagram databáze wallet-registry]{ER diagram databáze
+\texttt{wallet-registry}. Symbol \texttt{||--|\{} označuje povinný
+1:N~vztah (každá peněženka má~vždy alespoň jednoho cosignera, jednoho
+člena a~předderivované adresy), zatímco \texttt{||--o\{} značí
+volitelný 1:N (labely cosignerů a~zařazení cosignera do~peněženky
+jsou volitelné). Tabulka \texttt{cosigners} je nezávislá -- vztah
+s~peněženkami probíhá přes vazební tabulku \texttt{wallet\_cosigners}
+(M:N), což umožňuje stejnému cosignerovi vystupovat ve~více peněženkách
+bez duplikace xpub klíče.}
+\label{fig:er-registry}
 \end{figure}
 
 \subsection{Databáze PSBT služby}
@@ -655,6 +694,22 @@ jejich životního cyklu:
   cosignerem.\par}
 \end{description}
 
+Schéma databáze \texttt{psbt-service} zachycuje
+obrázek~\ref{fig:er-psbt}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.6\textwidth]{img/er-psbt.pdf}
+\caption[ER diagram databáze psbt-service]{ER diagram databáze
+\texttt{psbt-service}. Jedna PSBT shromažďuje 0~až~$M$ podpisů, kde
+$M$ je hodnota uložená v~poli \texttt{required\_sigs}. UNIQUE constraint
+nad dvojicí \texttt{(psbt\_id, cosigner\_index)} zabraňuje duplicitnímu
+podpisu téhož cosignera; jeho vynucení v~SQL je load-bearing pro
+race-safe rotaci \texttt{current\_sigs} popsanou
+v~sekci~\ref{sec:impl-detaily}.}
+\label{fig:er-psbt}
+\end{figure}
+
 Parametry pro Trezor Connect ukládáme jako serializovaný JSON
 v~textovém sloupci. Jejich struktura závisí na~konkrétní transakci --
 počet vstupů a~výstupů se liší, každý vstup má jinou derivační cestu
@@ -677,14 +732,51 @@ podpis, opuštěný draft drží své vstupy zablokované navždy. Pro řešení
 běží v~rámci \texttt{psbt-service} periodická úklidová úloha
 (coroutine), která jednou za hodinu odstraní záznamy ve~stavech
 \texttt{pending} a~\texttt{signed} starší než sedm dní; broadcastované
-transakce zůstávají v~tabulce zachovány jako auditní stopa. Hodnoty
-TTL i~intervalu jsou konfigurovatelné přes proměnné prostředí
-(\texttt{PSBT\_TTL\_DAYS}, \texttt{PSBT\_CLEANUP\_INTERVAL\_MINUTES}),
-celý mechanismus lze pro účely testování vypnout proměnnou
-\texttt{PSBT\_CLEANUP\_ENABLED=false}. Uživatel může rozpracovaný draft
-také kdykoliv ručně zrušit z~detailu PSBT v~mobilní aplikaci, což má
-stejný efekt jako úklidová úloha (smazání řádku, uvolnění
+transakce zůstávají v~tabulce zachovány jako auditní stopa.
+Hodnoty TTL i~intervalu jsou konfigurovatelné a~mechanismus lze
+v~testovacím prostředí zcela vypnout. Uživatel může rozpracovaný
+draft také kdykoliv ručně zrušit z~detailu PSBT v~mobilní aplikaci,
+což má stejný efekt jako úklidová úloha (smazání řádku, uvolnění
 rezervace).
+
+\subsection{Logické vazby napříč databázemi}
+\label{subsec:cross-db-references}
+
+Tři výše popsané databáze jsou navzájem provázány hodnotami
+\texttt{device\_id} a~\texttt{wallet\_id}, ale na úrovni SQL mezi nimi
+neexistují žádné cizí klíče -- princip \emph{database per service}
+(sekce~\ref{sec:architektura}) to záměrně neumožňuje. Tabulka~\ref{tab:cross-db-refs}
+shrnuje konkrétní logické vazby napříč službami.
+
+\begin{table}[htbp]
+\centering
+\caption[Logické reference napříč databázemi]{Logické reference napříč
+databázemi. Žádný z~uvedených sloupců není deklarován jako
+\texttt{FOREIGN KEY} v~SQL; konzistenci zajišťuje aplikační vrstva.}
+\label{tab:cross-db-refs}
+\footnotesize
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Sloupec (zdrojová tabulka)} & \textbf{Cílová tabulka (DB)} \\
+\hline
+\texttt{wallet\_members.device\_id}      & \texttt{devices.device\_id} (\texttt{auth-service}) \\
+\texttt{cosigner\_labels.device\_id}     & \texttt{devices.device\_id} (\texttt{auth-service}) \\
+\texttt{psbt\_signatures.device\_id}     & \texttt{devices.device\_id} (\texttt{auth-service}) \\
+\texttt{psbts.wallet\_id}                & \texttt{wallets.wallet\_id} (\texttt{wallet-registry}) \\
+\hline
+\end{tabular}
+\normalsize
+\end{table}
+
+Konzistenci těchto referencí zajišťuje aplikační vrstva v~API Gateway:
+po validaci JWT tokenu předává \texttt{device\_id} z~claimu příslušným
+službám jako autoritativní hodnotu, takže neautentizované nebo cizí
+identifikátory se do databází nedostanou. Hodnota \texttt{wallet\_id}
+prochází validací v~\texttt{wallet-registry} před tím, než
+\texttt{psbt-service} dostane povolení vytvořit PSBT pro danou peněženku.
+Tento přístup ponechává službám možnost nezávislého škálování a~migrací
+schématu, za~cenu toho, že kontrolu referenční integrity musí provádět
+aplikace, ne databáze.
 
 %% -----------------------------------------------------------------------
 \section{Návrh PSBT workflow}
@@ -741,19 +833,21 @@ obrázcích~\ref{fig:multisig-signing-1} a~\ref{fig:multisig-signing-2}.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{img/multisig-signing-1.pdf}
-\caption{Sekvenční diagram 2-of-3 multisig podepisování -- první část:
-vytvoření PSBT a~podpis prvním cosignerem. Backend sestaví PSBT,
-mobilní aplikace deleguje podpis na Trezor Suite Mobile a~přidá první podpis.}
+\caption[Sekvenční diagram 2-of-3 multisig podepisování -- první část]{Sekvenční
+diagram 2-of-3 multisig podepisování -- první část: vytvoření PSBT
+a~podpis prvním cosignerem. Backend sestaví PSBT, mobilní aplikace
+deleguje podpis na Trezor Suite Mobile a~přidá první podpis.}
 \label{fig:multisig-signing-1}
 \end{figure}
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth,height=0.85\textheight,keepaspectratio]{img/multisig-signing-2.pdf}
-\caption{Sekvenční diagram 2-of-3 multisig podepisování -- druhá část:
-podpis druhým cosignerem a~broadcast finální transakce. Po dosažení
-prahu podpisů uživatel zvolí broadcast a~backend transakci finalizuje
-a~odešle do Bitcoinové sítě.}
+\caption[Sekvenční diagram 2-of-3 multisig podepisování -- druhá část]{Sekvenční
+diagram 2-of-3 multisig podepisování -- druhá část: podpis druhým
+cosignerem a~broadcast finální transakce. Po dosažení prahu podpisů
+uživatel zvolí broadcast a~backend transakci finalizuje a~odešle do
+Bitcoinové sítě.}
 \label{fig:multisig-signing-2}
 \end{figure}
 
@@ -766,33 +860,37 @@ uživatel by musel manuálně exportovat a~importovat PSBT soubory. Zvolený
 serverový přístup umožňuje, aby cosigneři jednoduše otevřeli seznam
 čekajících transakcí v~aplikaci a~podepsali jedním kliknutím.
 
-\subsection{Výběr UTXO a coin control}
-\label{subsec:coin-control}
+\subsubsection{Stavový automat PSBT}
 
-Při tvorbě transakce je nutné vybrat, které nepoužité výstupy (UTXO) budou
-použity jako vstupy. Aplikace nabízí dva režimy:
+Oba popsané scénáře -- singlesig i~multisig -- sdílí jednotný stavový
+automat PSBT záznamu v~databázi \texttt{psbt-service}, znázorněný
+na~obrázku~\ref{fig:psbt-states}. Po~vytvoření prochází PSBT stavem
+\texttt{pending}, kde \texttt{psbt-service} eviduje rezervaci utracených
+UTXO (viz~sekci~\ref{sec:datovy-model}). Singlesig PSBT z~tohoto stavu
+přechází přímo do~\texttt{broadcast}, protože Trezor po~jediném podpisu
+vrací kompletní serializovanou transakci. Multisig PSBT po~přidání
+podpisu cosignerem zůstává v~\texttt{pending} (počet podpisů~$<M$) nebo
+přechází do~\texttt{signed} (dosažen práh~$M$); broadcast je v~obou
+případech explicitní akcí uživatele přes endpoint \texttt{/broadcast-raw}
+a~vede k~uvolnění rezervovaných UTXO. Stavy \texttt{pending}
+a~\texttt{signed} lze opustit i~mazací cestou -- buď ručně přes
+\texttt{DELETE /psbt/\{id\}}, nebo automaticky po~7 dnech bez aktivity
+(viz~sekci~\ref{sec:datovy-model}).
 
-\begin{description}
-\item[Automatický výběr] -- Systém vybírá UTXO strategií \emph{largest-first}:
-  řadí dostupné UTXO sestupně podle hodnoty a~přidává je, dokud součet
-  nepřekročí požadovanou částku včetně poplatku. Tato strategie minimalizuje
-  počet vstupů (a~tedy velikost a~poplatek transakce), ale může vést
-  k~suboptimálnímu výběru z~hlediska soukromí, protože spojuje velké UTXO.
-
-\item[Manuální výběr (coin control)] -- Uživatel sám vybírá konkrétní UTXO,
-  které chce utratit. Tato pokročilá funkce umožňuje uživateli řídit, které
-  adresy a~částky vstupují do transakce, což je důležité pro zachování
-  soukromí (zamezení spojování UTXO z~různých zdrojů) a~pro řízení
-  konsolidace prostředků.
-\end{description}
-
-Zvažovali jsme i~pokročilejší algoritmy výběru UTXO, jako je
-\emph{Branch and Bound} (používaný v~Bitcoin Core), který hledá přesný součet
-bez nutnosti change výstupu. Pro první verzi aplikace jsme zvolili jednodušší
-strategii \emph{largest-first}, která je dostatečná pro většinu případů
-použití a~je snadno předvídatelná pro uživatele.
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{img/psbt-states.pdf}
+\caption[Stavový automat PSBT záznamu]{Stavový automat PSBT záznamu.
+Singlesig PSBT prochází přímo
+\texttt{pending}~$\to$~\texttt{broadcast}, multisig prochází
+\texttt{pending}~$\to$~\texttt{signed}~$\to$~\texttt{broadcast}.
+Červené hrany označují mazací cesty (manuální cancel nebo TTL cleanup);
+broadcastované záznamy se neuklízejí, slouží jako auditní stopa.}
+\label{fig:psbt-states}
+\end{figure}
 
 \subsection{Výpočet poplatku}
+\label{subsec:fee-calculation}
 
 Poplatek za transakci se v~Bitcoin síti odvíjí od velikosti transakce
 ve virtuálních bytech (vBytes), nikoliv od převáděné částky. Virtuální
@@ -820,30 +918,89 @@ Odhad velikosti závisí na typu peněženky:
 \item \textbf{P2WSH (multisig)} -- vstup je výrazně větší, protože
   witness musí obsahovat $M$~podpisů a~kompletní redeem skript s~$N$
   veřejnými klíči. Non-witness část zůstává 41~B, ale witness data
-  rostou: úvodní \texttt{OP\_0} (${\approx}6$~B s~délkami), $M$~podpisů
+  rostou: úvodní \texttt{OP\_0} (${\approx}5$~B s~délkami), $M$~podpisů
   (každý maximálně 73~B: DER-kódovaný ECDSA podpis plus push opcode)
   a~redeem skript ($N \times 34$~B pro komprimované veřejné klíče plus
   opcodes \texttt{OP\_M}, \texttt{OP\_N}, \texttt{OP\_CHECKMULTISIG}).
   Velikost vstupu odhadujeme dle výpočtu popsaného
-  v~sekci~\ref{sec:p2wsh-multisig} jako $41 + (6 + 73M + 34N)/4$~vB.
-  Například pro schéma 2-of-3: $41 + (6 + 146 + 102)/4 \approx 105$~vB
-  na vstup.
+  v~sekci~\ref{sec:p2wsh-multisig} jako
+  $v_{\text{in}} = 41 + \lfloor (5 + 73M + 34N)/4 \rfloor$~vB.
+  Například pro schéma 2-of-3: $41 + \lfloor (5 + 146 + 102)/4 \rfloor
+  = 41 + 63 = 104$~vB na vstup.
 \end{itemize}
 
 Celková odhadovaná velikost transakce je tedy:
 
 \[
-\mathit{vSize}_{\text{odhad}} = \text{režie} + n_{\text{vstupů}} \times \mathit{vSize}_{\text{vstup}} + n_{\text{výstupů}} \times 31 \;\text{vB}
+\mathit{vSize}_{\text{odhad}} = \mathit{režie} + n_{\text{vstupů}} \cdot v_{\text{in}} + n_{\text{výstupů}} \cdot 31 \;\text{vB}
 \]
 
-\noindent Tato hodnota se vynásobí aktuální sazbou poplatku (v~sat/vB),
-kterou uživatel volí z~nabídky tří úrovní: nízký poplatek (odhad pro
-potvrzení do jedné hodiny), střední (do třiceti minut) a~vysoký (nejbližší
-blok). Sazby pro jednotlivé úrovně aplikace získává z~blockchainového API,
-které je odvozuje z~aktuálního stavu mempoolu -- fronty nepotvrzených
-transakcí čekajících na zařazení do bloku~\cite{MempoolAPI}. V~režimu
-manuálního výběru UTXO může uživatel alternativně zadat libovolnou sazbu
-v~sat/vB ručně.
+\noindent kde režie činí 10~vB (verze, počty, locktime), $v_{\text{in}}$
+je 68~vB pro singlesig a~$41 + \lfloor (5 + 73M + 34N)/4 \rfloor$~vB
+pro multisig. Tato hodnota se vynásobí aktuální sazbou poplatku
+(v~sat/vB), kterou uživatel volí z~nabídky tří úrovní: nízký poplatek
+(odhad pro potvrzení do jedné hodiny), střední (do třiceti minut) a~vysoký
+(nejbližší blok). Sazby pro jednotlivé úrovně aplikace získává
+z~blockchainového API, které je odvozuje z~aktuálního stavu mempoolu --
+fronty nepotvrzených transakcí čekajících na zařazení do
+bloku~\cite{MempoolAPI}. V~režimu manuálního výběru UTXO může uživatel
+alternativně zadat libovolnou sazbu v~sat/vB ručně.
+
+\subsection{Výběr UTXO a coin control}
+\label{subsec:coin-control}
+
+Při tvorbě transakce je nutné vybrat, které nepoužité výstupy (UTXO) budou
+použity jako vstupy. Aplikace nabízí dva režimy:
+
+\begin{description}
+\item[Automatický výběr] -- Systém vybírá UTXO strategií \emph{largest-first}:
+  řadí dostupné UTXO sestupně podle hodnoty a~přidává je, dokud součet
+  nepřekročí požadovanou částku včetně poplatku. Tato strategie minimalizuje
+  počet vstupů (a~tedy velikost a~poplatek transakce), ale může vést
+  k~suboptimálnímu výběru z~hlediska soukromí, protože spojuje velké UTXO.
+
+\item[Manuální výběr (coin control)] -- Uživatel sám vybírá konkrétní UTXO,
+  které chce utratit. Tato pokročilá funkce umožňuje uživateli řídit, které
+  adresy a~částky vstupují do transakce, což je důležité pro zachování
+  soukromí (zamezení spojování UTXO z~různých zdrojů) a~pro řízení
+  konsolidace prostředků.
+\end{description}
+
+Algoritmus~\ref{alg:utxo-selection} popisuje automatický výběr.
+Klíčovým detailem je iterativní přepočet odhadovaného poplatku po~každém
+přidání vstupu -- velikost transakce roste lineárně s~počtem vstupů,
+takže přidání dalšího UTXO může zvýšit cílovou částku natolik, že je
+potřeba přidat ještě další. Konstanty $v_{\text{in}}$ pro singlesig
+a~multisig vstupy přebíráme z~předchozí
+sekce~\ref{subsec:fee-calculation}.
+
+\begin{algorithm}[htbp]
+\caption{Automatický výběr UTXO strategií \emph{largest-first}}
+\label{alg:utxo-selection}
+\begin{algorithmic}[1]
+\Require Cílová částka $T$, sazba poplatku $r$, dostupná
+        UTXO~$U$, rezervovaná UTXO~$R$, počet recipient výstupů~$k$,
+        velikost vstupu $v_{\text{in}}$ dle sekce~\ref{subsec:fee-calculation}
+\Ensure Vybraná podmnožina $S \subseteq U \setminus R$
+\State $V \gets$ seřaď $U \setminus R$ sestupně dle hodnoty
+\State $S \gets \emptyset$
+\ForAll{$u \in V$}
+  \State $S \gets S \cup \{u\}$
+  \State $\mathit{fee} \gets r \cdot \bigl(v_{\text{in}} \cdot |S| + 31(k{+}1) + 10\bigr)$
+        \Comment{$+1$ pro change}
+  \If{$\sum_{x \in S} \text{value}(x) \geq T + \mathit{fee}$}
+    \State \Return $S$
+  \EndIf
+\EndFor
+\State \Return $S$
+\end{algorithmic}
+\end{algorithm}
+
+Zvažovali jsme i~pokročilejší algoritmy výběru UTXO, jako je
+\emph{Branch and Bound} (používaný v~Bitcoin Core), který hledá přesný součet
+bez nutnosti change výstupu. Pro první verzi aplikace jsme zvolili jednodušší
+strategii \emph{largest-first}, která je dostatečná pro většinu případů
+použití a~je snadno předvídatelná pro uživatele.
 
 \subsection{Zpracování change výstupu}
 
@@ -865,8 +1022,11 @@ používáme konzervativní hodnotu 546~satoshi bez ohledu na typ výstupu,
 \subsection{Architektonický vzor MVVM}
 
 Pro organizaci kódu mobilní aplikace jsme zvolili architektonický vzor
-MVVM (\emph{Model--View--ViewModel}), který je doporučeným přístupem
-pro Android aplikace s~Jetpack Compose. Jednotlivé vrstvy mají tyto role:
+MVVM (\emph{Model--View--ViewModel}), který přirozeně odpovídá
+komponentnímu modelu Jetpack Compose: stav drží třída \texttt{ViewModel}
+z~Android Architecture Components, Compose UI ho čte jako reaktivní
+\texttt{State} a~na změny reaguje automatickou rekompozicí dotčených
+komponent. Jednotlivé vrstvy mají tyto role:
 
 \begin{description}
 \item[Model] -- Datové třídy reprezentující doménové entity (peněženka,
@@ -883,10 +1043,13 @@ pro Android aplikace s~Jetpack Compose. Jednotlivé vrstvy mají tyto role:
 \end{description}
 
 Alternativou by byl vzor MVI (\emph{Model--View--Intent}), který je
-přísnější v~tom, že veškeré uživatelské akce modeluje jako unidirektionální
-proud intentů. MVI nabízí lepší predikovatelnost stavu, ale za cenu vyššího
-množství boilerplate kódu. Pro rozsah aplikace je MVVM dostatečný
-a~lépe odpovídá konvencím Android ekosystému.
+přísnější v~tom, že veškeré uživatelské akce modeluje jako unidirekcionální
+proud diskrétních intentů procházejících přes redukující funkci do nového
+stavu. Pro aplikaci tohoto rozsahu by tato přísnost vedla k~výraznému
+nárůstu pomocného kódu (datové třídy intentů, redukce, side-effect
+handlery) bez odpovídajícího přínosu -- naše obrazovky mají typicky
+2--5~uživatelských akcí, takže přímé volání metod ViewModelu je
+přehlednější než průchod přes intent kanál.
 
 \subsection{Navigační struktura}
 
@@ -919,10 +1082,11 @@ obrázek~\ref{fig:navigation}.
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{img/navigation.pdf}
-\caption{Navigační diagram aplikace. Po připojení Trezoru uživatel vybere
-singlesig účet a~vstoupí na dashboard. Multisig peněženky jsou přístupné
-přes postranní menu a~mají vlastní detail se seznamem PSBT. Šedé šipky
-značí navigaci přes drawer menu.}
+\caption[Navigační diagram aplikace]{Navigační diagram aplikace.
+Po připojení Trezoru uživatel vybere singlesig účet a~vstoupí na
+dashboard. Multisig peněženky jsou přístupné přes postranní menu
+a~mají vlastní detail se seznamem PSBT. Šedé šipky značí navigaci
+přes drawer menu.}
 \label{fig:navigation}
 \end{figure}
 
@@ -1004,9 +1168,13 @@ a~per-output sekcemi s~derivačními cestami. Každá sekce je ukončena nulový
 Pro každý vstup zapisujeme čtyři typy záznamů:
 \begin{itemize}
 \item \texttt{PSBT\_IN\_NON\_WITNESS\_UTXO} -- celá předchozí transakce v~raw
-  formátu. Firmware Trezor od verze~2.3.1 vyžaduje tento záznam i~pro nativní
-  SegWit vstupy~\cite{TrezorFirmwareDocs}, aby mohl ověřit částky vstupů
-  a~zobrazit správný poplatek.
+  formátu. Firmware Trezor počínaje verzemi 2.3.1 (Model T) a~1.9.1
+  (Trezor One) z~června 2020 vyžaduje tento záznam i~pro nativní
+  SegWit vstupy jako mitigaci BIP-143 SegWit fee útoku
+  zveřejněného Saleemem Rashidem v~březnu
+  2020~\cite{TrezorSegwitFix2020}; současný firmware modelů Safe 3,
+  5 a~7 toto pravidlo přebírá. Záznam dovoluje podepisujícímu zařízení
+  nezávisle ověřit částky vstupů a~zobrazit správný poplatek.
 \item \texttt{PSBT\_IN\_WITNESS\_UTXO} -- částka a~scriptPubKey utrácené UTXO.
 \item \texttt{PSBT\_IN\_WITNESS\_SCRIPT} -- witness skript multisig transakce
   (pouze pro P2WSH) se~všemi veřejnými klíči v~BIP-67 pořadí.
@@ -1041,6 +1209,132 @@ Trezor Connect dále vyžaduje referenční transakce v~parsované podobě
 transakci z~\texttt{blockchain-\allowbreak service} a~převede ji
 na~strukturovaný formát s~poli \texttt{version}, \texttt{inputs},
 \texttt{bin\_\allowbreak outputs} a~\texttt{lock\_\allowbreak time}.
+
+Tabulka~\ref{tab:psbt-trezor-mapping} shrnuje, jak~jednotlivé záznamy
+PSBT mapujeme na~parametry Trezor Connect. Mapování není 1:1 -- většina
+záznamů vyžaduje rozbalení binárního formátu na strukturovaný JSON,
+multisig vstupy navíc vyžadují dekódování \texttt{xpub} klíčů
+do~\texttt{HDNodeType} struktury, kterou Trezor firmware vyžaduje
+namísto base58 reprezentace.
+
+\begin{table}[htbp]
+\centering
+\caption[Mapování záznamů PSBT na parametry signTransaction]{Mapování
+záznamů PSBT~\cite{BIP174} na~parametry metody \texttt{signTransaction}
+v~Trezor Connect~\cite{TrezorConnect}. Sloupec \uv{Transformace}
+popisuje krok převodu, který backend provádí ve~třídě
+\texttt{TrezorParamsBuilder}.}
+\label{tab:psbt-trezor-mapping}
+\footnotesize
+\begin{tabular}{|p{4.4cm}|p{3.8cm}|p{4.6cm}|}
+\hline
+\textbf{PSBT záznam} & \textbf{Parametr Trezor Connect} & \textbf{Transformace} \\
+\hline
+\texttt{PSBT\_\allowbreak GLOBAL\_\allowbreak UNSIGNED\_\allowbreak TX}
+& \texttt{coin}, \texttt{version}, \texttt{locktime}
+& extrakce metadat z~hlavičky transakce \\
+\hline
+\texttt{PSBT\_\allowbreak IN\_\allowbreak NON\_\allowbreak WITNESS\_\allowbreak UTXO}
+(raw bajty předchozí transakce)
+& \texttt{refTxs[]} se~strukturou \texttt{\{hash, version, lock\_time, inputs, bin\_outputs\}}
+& parsování raw transakce do~strukturovaných polí \\
+\hline
+\texttt{PSBT\_\allowbreak IN\_\allowbreak WITNESS\_\allowbreak UTXO}
+(částka + scriptPubKey)
+& \texttt{inputs[].\allowbreak amount}
+& extrakce částky; scriptPubKey si~Trezor odvodí z~derivační cesty \\
+\hline
+\texttt{PSBT\_\allowbreak IN\_\allowbreak BIP32\_\allowbreak DERIVATION}
+(serializovaná derivační cesta)
+& \texttt{inputs[].\allowbreak address\_n} (\texttt{uint32[]})
+& překódování cesty na~pole uint32, hardened úrovně s~bitem \texttt{0x80000000} \\
+\hline
+\texttt{PSBT\_\allowbreak IN\_\allowbreak WITNESS\_\allowbreak SCRIPT}
+(redeem skript multisig)
+& \texttt{inputs[].\allowbreak multisig.\{m, pubkeys\}}
+& rozparsování \texttt{OP\_M~\ldots~OP\_\allowbreak CHECKMULTISIG} na práh~$M$ a~seznam klíčů \\
+\hline
+\texttt{xpub} kořenového klíče cosignera (z~deskriptoru)
+& \texttt{multisig.\allowbreak pubkeys[].\allowbreak node} (\texttt{HDNodeType})
+& dekódování base58 na~strukturu \texttt{depth}, \texttt{fingerprint}, \texttt{child\_num}, \texttt{chain\_code}, \texttt{public\_key} \\
+\hline
+\texttt{PSBT\_\allowbreak IN\_\allowbreak PARTIAL\_\allowbreak SIG}
+(dílčí podpisy cosignerů)
+& \texttt{multisig.\allowbreak signatures[]}
+& hex podpis na~pozici dle BIP-67~\cite{BIP67} řazení \emph{odvozených} klíčů \\
+\hline
+\texttt{PSBT\_\allowbreak OUT\_\allowbreak BIP32\_\allowbreak DERIVATION}
+(derivační cesta change výstupu)
+& \texttt{outputs[].\allowbreak address\_n} + \texttt{outputs[].\allowbreak multisig}
+& change identifikován derivační cestou (a~witness skriptem pro multisig) místo adresou \\
+\hline
+\end{tabular}
+\normalsize
+\end{table}
+
+Konkrétní podobu výstupu \texttt{TrezorParamsBuilder} pro multisig
+2-of-3 transakci s~jedním vstupem zachycuje
+výpis~\ref{lst:trezor-connect-json}. Pro stručnost jsou hex hodnoty
+zkráceny třemi tečkami a~druhý a~třetí cosigner ve~výpisu reprezentuje
+zástupný symbol -- ve~skutečném výstupu jsou všechny tři uzly plně
+rozepsané.
+
+\begin{listing}[htbp]
+\begin{code}
+{
+  "coin": "Testnet",
+  "version": 2,
+  "locktime": 0,
+  "inputs": [{
+    "address_n": [2147483696, 2147483649, 2147483648,
+                  2147483650, 0, 5],
+    "prev_hash": "a3f1c8...d4e2",
+    "prev_index": 1,
+    "amount": "100000",
+    "script_type": "SPENDWITNESS",
+    "sequence": 4294967293,
+    "multisig": {
+      "m": 2,
+      "pubkeys": [
+        { "node": { "depth": 4,
+                    "fingerprint": 2882400018,
+                    "child_num": 2147483650,
+                    "chain_code": "ab12...ef34",
+                    "public_key": "03a1...c2" },
+          "address_n": [0, 5] },
+        { "node": { ... }, "address_n": [0, 5] },
+        { "node": { ... }, "address_n": [0, 5] }
+      ],
+      "signatures": ["", "", ""]
+    }
+  }],
+  "outputs": [
+    { "address": "tb1q...recipient",
+      "amount": "60000",
+      "script_type": "PAYTOADDRESS" },
+    { "address_n": [2147483696, 2147483649, 2147483648,
+                    2147483650, 1, 7],
+      "amount": "39500",
+      "script_type": "PAYTOWITNESS",
+      "multisig": { "m": 2, "pubkeys": [ ... ],
+                    "signatures": ["", "", ""] } }
+  ],
+  "refTxs": [
+    { "hash": "a3f1c8...d4e2", "version": 2, "lock_time": 0,
+      "inputs": [ ... ], "bin_outputs": [ ... ] }
+  ]
+}
+\end{code}
+\caption[Příklad parametrů signTransaction v Trezor Connect]{Příklad
+parametrů metody \texttt{signTransaction} v~Trezor Connect pro 2-of-3
+multisig transakci s~jedním vstupem (cesta
+\texttt{m/48'/1'/0'/2'/0/5}), platebním výstupem a~change výstupem
+(cesta \texttt{m/48'/1'/0'/2'/1/7}). Pole \texttt{address\_n} obsahují
+derivační cestu kódovanou jako \texttt{uint32}, hardened úrovně mají
+nastaven bit \texttt{0x80000000}; \texttt{sequence} \texttt{0xFFFFFFFD}
+signalizuje opt-in RBF dle BIP-125~\cite{BIP125}.}
+\label{lst:trezor-connect-json}
+\end{listing}
 
 \subsection{BIP-67 řazení podpisů ve witness}
 
@@ -1116,3 +1410,95 @@ ve~zbytku systému. Třída \texttt{TrezorDeeplinkLauncher} na frontendu
 zapouzdřuje veškerou logiku komunikace s~Trezor Connect -- volající kód
 pracuje pouze s~metodami \texttt{openGetPublicKey} a~\texttt{openSignTransaction}
 a~nezná implementační detaily deeplink protokolu.
+
+\subsection{Robustnost deeplink workflow}
+\label{subsec:deeplink-workflow}
+
+Komunikace s~Trezor Suite Mobile přes Android deeplinky je asynchronní:
+naše aplikace pošle URL request, ztrácí focus na~Trezor Suite Mobile,
+uživatel potvrdí transakci na~hardwarovém zařízení a~teprve poté přijde
+callback URL zpět. Mezi odesláním a~návratem může uplynout několik desítek
+sekund, během nichž Android může naši aplikaci ukončit kvůli nedostatku
+paměti, uživatel může otevřít jinou aplikaci nebo přepnout síť. Tento
+protokol nechává otevřené čtyři problémy, jejichž řešení Trezor Connect
+dokumentace~\cite{TrezorConnect} explicitně neuvádí; popisujeme je proto
+níže jako součást vlastní implementační kontribuce.
+
+\paragraph{Korelace a~bezpečné ověření odpovědí přes
+\texttt{requestId}.}
+Mechanismus deeplinku je otevřený: callback URL může v~principu zavolat
+jakákoli aplikace na~zařízení, která zaregistruje stejné URL schéma,
+a~Android nemá způsob, jak odlišit autentický callback z~Trezor Suite
+Mobile od~podvrženého. Navíc po~ukončení procesu naší aplikace může
+Android při restartu doručit \emph{stale} intent z~předchozího běhu.
+Třída \texttt{TrezorDeeplinkLauncher} proto pro každý request generuje
+32-znakový hexadecimální token z~kryptograficky bezpečného
+\texttt{SecureRandom} (16~bajtů náhodných dat) a~paralelně ho ukládá
+do \texttt{Session\allowbreak Store.\allowbreak pendingRequestId}
+i~vkládá do callback URL jako parametr \texttt{?id};
+Trezor Suite Mobile tento parametr beze~změny zachová a~vrátí.
+\texttt{TrezorCallbackActivity} při doručení callbacku porovná
+hodnotu z~URL s~tou v~\texttt{Session\allowbreak Store};
+nesouhlas (nebo absence pending tokenu) znamená rejekci.
+Token je \emph{jednorázový} -- po~úspěšné validaci se z~úložiště smaže,
+takže opakované doručení téhož intentu (replay attack) nebo druhý
+souběžný callback projde jen jednou. Mimo bezpečnost mechanismus
+slouží i~k~rozlišení mezi více potenciálně rozpracovanými operacemi
+(viz též \texttt{Session\allowbreak Store.\allowbreak active\-Sign\-Flow}
+a~\texttt{pendingSign\-PsbtId}, které dále upřesňují, která konkrétní
+obrazovka má~odpověď zpracovat).
+
+\paragraph{Detekce odpovědi z~jiného zařízení (sentinel
+\texttt{WRONG\_DEVICE}).} Uživatel se přihlásí jedním Trezorem, mezitím
+si k~telefonu připojí druhý a~na~něm potvrdí podpis. Bez explicitní
+kontroly bychom takový podpis přijali, předali backendu a~chyba by se
+projevila až selháním broadcastu nebo verifikace -- pozdě
+a~obtížně diagnostikovatelně. Kontrolu provádíme dvěma cestami.
+\textbf{Defenzivně:} z~payloadu odpovědi vytáhneme master fingerprint
+zařízení a~porovnáme s~hodnotou uloženou v~session při přihlášení;
+neshoda znamená rejekci. \textbf{Reaktivně:} když firmware Trezoru sám
+odmítne signing s~chybou \enquote{\emph{forbidden key path}} nebo
+\enquote{\emph{invalid public key}} (cesta z~PSBT na~připojeném
+zařízení neexistuje), klasifikujeme to jako stejný problém. V~obou
+případech namísto podpisu zapisujeme do stavu aplikace sentinelovou
+hodnotu \texttt{WRONG\_DEVICE}, kterou UI zachytí, automaticky odhlásí
+uživatele a~zobrazí na~přihlašovací obrazovce banner s~vysvětlením.
+
+\paragraph{Rozlišení passphrase identity přes xpub fingerprint.}
+Trezor podporuje BIP-39 passphrase: stejné fyzické zařízení produkuje
+oddělené HD stromy pro různé passphrase, čímž lze vytvořit
+\emph{plausibly deniable} \uv{hidden wallet}. Z~pohledu xpub jsou to
+nezávislé peněženky s~odlišnými master klíči a~tedy odlišnými
+fingerprinty. Pokud uživatel po~přihlášení do hidden walletu omylem
+otevře default wallet (nebo naopak) a~podepíše transakci, podpis přijde
+s~jiným fingerprintem, než byl ten v~login session. Stejný kontrolní
+mechanismus jako v~předchozím odstavci tuto situaci chytí jako
+\texttt{WRONG\_DEVICE} -- z~hlediska bezpečnosti je rozdíl
+\uv{jiný Trezor} a~\uv{jiná passphrase identita stejného Trezoru}
+nepodstatný, oba mají vést k~rejekci.
+
+\paragraph{Persistence stavu přes Android Activity lifecycle.}
+Při deeplinkovém přechodu do~Trezor Suite Mobile může Android naši
+aplikaci ukončit kvůli nedostatku paměti -- typicky na~slabších
+zařízeních při delším podpisovém procesu. Robustnost vůči tomuto
+scénáři řešíme dvěma vrstvami. Krátkodobý stav podpisu (výsledek
+callbacku, sentinely \texttt{WRONG\_DEVICE},
+\texttt{CANCELLED}, \texttt{ERROR}, identifikace aktivního flow)
+ukládáme do~aplikačně-globálního singletonu \texttt{Session\allowbreak Store}
+v~podobě Kotlin \texttt{StateFlow}; Compose obrazovky se napojí přes
+\texttt{collectAsState()} a~reagují v~\texttt{LaunchedEffect}.
+Tato vrstva přežívá rekreaci Activity (otočení displeje, krátký
+backgrounding) a~funguje i~napříč procesy: pokud Android proces
+ukončí ještě před návratem z~Trezor Suite Mobile, Android při doručení
+callback URL nastartuje nový proces s~čerstvou \texttt{Session\allowbreak Store}
+a~\texttt{TrezorCallbackActivity} zapíše výsledek tam.
+
+Druhou vrstvu tvoří \texttt{Session\allowbreak Persistence} nad
+\texttt{SharedPreferences}: trvale ukládá přístupový a~refresh token,
+identitu Trezoru, vybranou síť a~zvolenou peněženku, takže nový
+proces po~doručení callbacku zná autentizační kontext a~dokáže
+podpis odeslat na~backend. Tento dvouvrstvý přístup zajišťuje, že
+ani \emph{cold-start} po~zabití procesu během deeplink workflow
+neztratí ani uživatelovo přihlášení, ani výsledek podpisu --
+jediné, co~uživatel může pocítit, je nepatrná prodleva při startu
+nového procesu.
