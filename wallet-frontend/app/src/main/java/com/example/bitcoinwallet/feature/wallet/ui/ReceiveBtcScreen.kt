@@ -20,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -126,8 +127,8 @@ fun ReceiveBtcScreen(
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    /* ── Address row with Copy button ── */
-                    Row(
+                    /* ── Address block with Copy button ── */
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .border(
@@ -136,18 +137,18 @@ fun ReceiveBtcScreen(
                                 shape = RoundedCornerShape(8.dp)
                             )
                             .background(DarkSurface, RoundedCornerShape(8.dp))
-                            .padding(horizontal = 12.dp, vertical = 10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                            .padding(horizontal = 12.dp, vertical = 10.dp)
                     ) {
                         Text(
-                            text = state.displayAddress,
+                            text = state.address.chunked(4).joinToString(" "),
                             color = TextSecondary,
                             fontSize = 13.sp,
-                            modifier = Modifier.weight(1f)
+                            fontFamily = FontFamily.Monospace,
+                            lineHeight = 18.sp,
+                            modifier = Modifier.fillMaxWidth()
                         )
 
-                        Spacer(modifier = Modifier.width(8.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
 
                         Button(
                             onClick = {
@@ -160,7 +161,9 @@ fun ReceiveBtcScreen(
                                 contentColor = TextPrimary
                             ),
                             contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .height(32.dp)
                         ) {
                             Text(
                                 text = if (state.copiedToClipboard) "Copied!" else "Copy",

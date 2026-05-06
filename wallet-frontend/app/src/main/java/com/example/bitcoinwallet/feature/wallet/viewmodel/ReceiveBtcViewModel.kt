@@ -27,11 +27,7 @@ data class ReceiveBtcUiState(
     // Trezor's showAddress callback only closes TrezorCallbackActivity, so we clear this
     // on the next ON_RESUME of this screen (i.e. when the user returns to the app).
     val verifyingAddress: Boolean = false
-) {
-    /* Truncated address for display (first 18 chars + "...") */
-    val displayAddress: String
-        get() = if (address.length > 20) "${address.take(18)}…" else address
-}
+)
 
 class ReceiveBtcViewModel : ViewModel() {
 
