@@ -34,7 +34,7 @@ class BlockchainClient(private val baseUrl: String) {
     }
 
     /* Fetches raw transaction hex - needed for PSBT_IN_NON_WITNESS_UTXO.
-     * Trezor firmware 2.4+ requires the full previous transaction for all inputs. */
+     * Trezor firmware 2.3.1+ requires the full previous transaction for all inputs. */
     suspend fun getRawTransaction(txid: String, network: String = "mainnet"): RawTxResponse {
         return client.get("$baseUrl/api/v1/blockchain/tx/$txid/hex") {
             parameter("network", network)

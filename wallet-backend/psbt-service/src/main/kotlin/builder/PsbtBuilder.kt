@@ -205,7 +205,7 @@ object PsbtBuilder {
         // Per-input sections
         for (utxo in utxos) {
             // PSBT_IN_NON_WITNESS_UTXO (key 0x00) - full previous transaction.
-            // Trezor firmware 2.4+ requires this for ALL inputs (even P2WPKH)
+            // Trezor firmware 2.3.1+ requires this for ALL inputs (even P2WPKH)
             // to verify output amounts and display the correct fee.
             if (utxo.rawTxHex != null) {
                 PsbtEncoding.writeKv(psbt, PSBT_IN_NON_WITNESS_UTXO, ByteArray(0),

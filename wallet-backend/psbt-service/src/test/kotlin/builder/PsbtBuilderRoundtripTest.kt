@@ -24,7 +24,7 @@ import kotlin.test.assertTrue
  *
  * Together with PsbtEncodingTest these cover the three implementation
  * invariants explicitly called out in section sec:test-chyby of the thesis:
- *   - PSBT_IN_NON_WITNESS_UTXO present for every input (firmware 2.4+)
+ *   - PSBT_IN_NON_WITNESS_UTXO present for every input (firmware 2.3.1+)
  *   - PSBT_IN_WITNESS_SCRIPT present for multisig inputs with BIP-67-sorted
  *     pubkeys
  *   - PSBT_OUT_BIP32_DERIVATION present for change so Trezor recognizes it
@@ -108,7 +108,7 @@ class PsbtBuilderRoundtripTest {
 
     @Test
     fun `singlesig PSBT contains NON_WITNESS_UTXO when raw tx hex is provided`() {
-        // Regression guard for the Trezor firmware 2.4+ requirement
+        // Regression guard for the Trezor firmware 2.3.1+ requirement
         // documented in section sec:test-chyby. Without this record,
         // signing fails with "Transaction has changed during signing".
         val cosigner = CosignerDto(
@@ -161,7 +161,7 @@ class PsbtBuilderRoundtripTest {
             it.keyType == PsbtEncoding.PSBT_IN_NON_WITNESS_UTXO
         }
         assertNotNull(nonWit,
-            "PSBT_IN_NON_WITNESS_UTXO must be present (Trezor firmware 2.4+)")
+            "PSBT_IN_NON_WITNESS_UTXO must be present (Trezor firmware 2.3.1+)")
         // Value bytes must be the raw tx bytes verbatim.
         assertEquals(
             rawTxHex,

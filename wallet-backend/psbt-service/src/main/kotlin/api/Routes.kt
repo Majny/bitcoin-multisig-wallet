@@ -127,7 +127,7 @@ fun Route.psbtRoutes(
          * Builds a new PSBT end-to-end:
          *   1. Pull wallet detail (descriptors, cosigners) from registry.
          *   2. Pick UTXOs - manual list from coin-control, or largest-first auto.
-         *   3. Fetch raw hex of every previous tx (Trezor 2.4+ requires it
+         *   3. Fetch raw hex of every previous tx (Trezor 2.3.1+ requires it
          *      as PSBT_IN_NON_WITNESS_UTXO even for native segwit inputs).
          *   4. Reserve a fresh change address from explorer (no reuse).
          *   5. Assemble PSBT binary + Trezor Connect params, persist, return.
@@ -203,7 +203,7 @@ fun Route.psbtRoutes(
                     return@post
                 }
 
-                // Trezor 2.4+ wants the full previous transaction even for
+                // Trezor 2.3.1+ wants the full previous transaction even for
                 // native segwit inputs (it independently re-derives input
                 // amounts to defend against fee spoofing). Fetch them all
                 // in parallel; failures fall back to null and PsbtBuilder
