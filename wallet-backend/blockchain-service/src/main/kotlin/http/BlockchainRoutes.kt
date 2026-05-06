@@ -92,7 +92,7 @@ fun Route.blockchainRoutes(mainnet: MempoolClient, testnet: MempoolClient) {
         }
 
         /* GET /tx/{txid}/hex - raw tx hex. Needed so psbt-service can fill
-         * PSBT_IN_NON_WITNESS_UTXO for every input; Trezor firmware 2.4+
+         * PSBT_IN_NON_WITNESS_UTXO for every input; Trezor firmware 2.3.1+
          * requires the full previous tx even for native segwit. */
         get("/tx/{txid}/hex") {
             val txid = call.parameters["txid"]

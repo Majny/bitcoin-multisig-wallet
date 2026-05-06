@@ -54,7 +54,7 @@ interface MempoolClient {
     suspend fun getTipHeight(): Int
 
     /* Raw hex of the full transaction (witness serialization). Needed for
-     * PSBT_IN_NON_WITNESS_UTXO - Trezor firmware 2.4+ requires the full
+     * PSBT_IN_NON_WITNESS_UTXO - Trezor firmware 2.3.1+ requires the full
      * previous tx for every input, even native segwit. */
     suspend fun getRawTransaction(txid: String): String
 }
