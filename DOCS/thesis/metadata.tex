@@ -50,35 +50,39 @@ za cenné rady a~připomínky při vedení této práce.
 
 % Abstrakt (doporučený rozsah cca 80-200 slov; nejedná se o zadání práce)
 \def\Abstract{%
-Tato práce se zabývá návrhem a~implementací mobilní aplikace pro platformu
-Android, která umožňuje pokročilou správu Bitcoinových prostředků. Aplikace
-podporuje multisignature transakce ve schématu M-of-N s~využitím standardů
-BIP-48 a~BIP-67, manuální výběr nepoužitých výstupů (coin control) a~integraci
-s~hardwarovou peněženkou Trezor prostřednictvím protokolu Trezor Connect.
-Bezpečnostní model zajišťuje, že server nikdy nedisponuje privátními klíči --
-veškeré podepisování probíhá výhradně na~hardwarovém zařízení. Pro distribuci
-částečně podepsaných transakcí mezi cosignery je využit formát PSBT dle
-standardu BIP-174. Backend je realizován jako soustava mikroslužeb v~jazyce
-Kotlin s~frameworkem Ktor, frontend jako nativní Android aplikace s~Jetpack
-Compose. Funkčnost aplikace byla ověřena na~testnetové síti včetně úspěšného
-dokončení 2-of-3 multisig transakce.
+Tato práce se zabývá návrhem a~implementací mobilní aplikace
+pro~platformu Android zaměřené na~pokročilou správu Bitcoinových
+prostředků. Mezi hlavní funkce patří podpora multisignature transakcí
+ve~schématu M-of-N podle standardů BIP-48 a~BIP-67 a~funkce coin control
+pro~manuální výběr transakčních výstupů, která uživateli umožňuje
+optimalizovat poplatky a~chránit soukromí. Důležitým bezpečnostním
+prvkem je integrace hardwarové peněženky Trezor přes rozhraní Trezor
+Connect; privátní klíče nikdy neopustí zařízení. Pro distribuci
+částečně podepsaných transakcí mezi cosignery je využit formát PSBT
+(BIP-174); aplikace podporuje nativní SegWit adresy P2WPKH a~P2WSH.
+Backend je realizován jako soustava mikroslužeb v~Kotlin/Ktor, frontend
+jako nativní Android aplikace v~Jetpack Compose. Funkčnost byla ověřena
+jednotkovými testy klíčových komponent i~end-to-end multisig scénářem
+na~testnetu.
 }
 
 % Anglická verze abstraktu
 \def\AbstractEN{%
-This thesis presents the design and implementation of a~mobile application
-for the Android platform that enables advanced Bitcoin asset management.
-The application supports multisignature transactions in an M-of-N scheme
-using the BIP-48 and BIP-67 standards, manual selection of unspent transaction
-outputs (coin control), and integration with the Trezor hardware wallet via
-the Trezor Connect protocol. The security model ensures that the server never
-holds private keys -- all transaction signing is performed exclusively on the
-hardware device. The PSBT format defined by BIP-174 is used for distributing
-partially signed transactions among cosigners. The backend is implemented as
-a~set of microservices in Kotlin with the Ktor framework, while the frontend
-is a~native Android application built with Jetpack Compose. The application
-was verified on the Bitcoin testnet, including a~successful completion of
-a~2-of-3 multisig transaction.
+This thesis presents the design and implementation of a~mobile
+application for the Android platform aimed at advanced Bitcoin asset
+management. Its main features are support for multisignature
+transactions in an M-of-N scheme according to the BIP-48 and BIP-67
+standards, and a~coin control feature for manual selection of
+transaction outputs, allowing the user to optimize fees and preserve
+privacy. A~key security element is the integration of the Trezor
+hardware wallet via the Trezor Connect protocol; private keys never
+leave the device. The PSBT format (BIP-174) is used to distribute
+partially signed transactions among cosigners; the application
+supports native SegWit addresses P2WPKH and P2WSH. The backend is
+implemented as a~set of microservices in Kotlin/Ktor, the frontend is
+a~native Android application built with Jetpack Compose. Functionality
+was verified by unit tests of key components and by an end-to-end
+multisig scenario on the Bitcoin testnet.
 }
 
 % 3 až 5 klíčových slov (doporučeno) oddělených \sep

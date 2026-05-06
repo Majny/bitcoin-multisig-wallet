@@ -66,7 +66,7 @@ database "PostgreSQL" <<db>> as db
 
 ' Connections
 api_client -down-> gw : HTTP (LAN / VPN)
-trezor_launcher <-right-> trezor : deeplink
+trezor_launcher <-right-> trezor
 
 ' Gateway -> services
 gw -down-> auth
