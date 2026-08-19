@@ -22,14 +22,14 @@ API Gateway listens on port `8080`.
 
 ### 2. Frontend - set the backend host
 
-My dev setup uses the Tailscale IP **`100.91.223.40`** - examples below use
-it. Substitute your own host IP based on:
+The examples below use `<HOST_IP>` as a placeholder for the backend host.
+Substitute your own based on:
 
 | Where Android runs | `<HOST_IP>` |
 |---|---|
 | Emulator on the same machine as Docker | `10.0.2.2` |
 | Real device on the same LAN | LAN IP of the Docker host (e.g. `192.168.0.100`) |
-| Real device over Tailscale / VPN | Tailnet IP of the Docker host (e.g. `100.91.223.40`) |
+| Real device over Tailscale / VPN | Tailnet IP of the Docker host (e.g. `100.64.0.10`) |
 
 Put that IP in **two** places:
 
@@ -37,7 +37,7 @@ Put that IP in **two** places:
 first project open) - add one line at the bottom:
 
 ```properties
-api.gateway.base.url=http://100.91.223.40:8080/api/v1
+api.gateway.base.url=http://<HOST_IP>:8080/api/v1
 ```
 
 **b)** `wallet-frontend/app/src/main/res/xml/network_security_config.xml` -
@@ -45,7 +45,7 @@ replace the `<domain>` with the same IP (Android blocks cleartext HTTP to
 anything not whitelisted here):
 
 ```xml
-<domain includeSubdomains="true">100.91.223.40</domain>
+<domain includeSubdomains="true"><HOST_IP></domain>
 ```
 
 Then in Android Studio: **File → Sync Project with Gradle Files**, then **Run**.
