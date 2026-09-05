@@ -2,7 +2,7 @@
 
 Microservice backend for a Bitcoin wallet with singlesig (P2WPKH) and multisig (P2WSH) support. Uses Trezor hardware wallet for signing.
 
-See [docs/architecture.md](docs/architecture.md) for full architecture documentation.
+See [`DOCS/05-architecture/architecture.md`](../DOCS/05-architecture/architecture.md) for full architecture documentation.
 
 ## Quick Start
 
