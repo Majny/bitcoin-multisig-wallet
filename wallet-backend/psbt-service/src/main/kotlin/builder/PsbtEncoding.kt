@@ -1,6 +1,5 @@
 package cz.majny.wallet.psbt.builder
 
-import org.slf4j.LoggerFactory
 import java.util.*
 
 /*
@@ -9,8 +8,6 @@ import java.util.*
  * script construction, and PSBT structural parsing.
  */
 object PsbtEncoding {
-
-    private val log = LoggerFactory.getLogger(PsbtEncoding::class.java)
 
     // PSBT key type constants (BIP-174)
     const val PSBT_IN_NON_WITNESS_UTXO = 0x00
@@ -79,35 +76,26 @@ object PsbtEncoding {
 
     /*
      * Converts a Bitcoin address to its scriptPubKey byte array.
-     * Supports P2WPKH (bc1q/tb1q, 20-byte program), P2WSH (bc1q/tb1q, 32-byte program),
-     * and P2TR (bc1p/tb1p, 32-byte program).
+     * Segwit (bc1/tb1, any witness version, e.g. P2WPKH, P2WSH, P2TR) and
+     * Base58Check P2PKH / P2SH. Every address is checksum-validated first.
      */
     fun addressToScript(address: String): ByteArray = when {
-        address.startsWith("bc1q") || address.startsWith("tb1q") -> {
-            val decoded = bech32Decode(address)
-            when (decoded.size) {
-                20 -> byteArrayOf(0x00, 0x14) + decoded  // P2WPKH: OP_0 <20 bytes>
-                32 -> byteArrayOf(0x00, 0x20) + decoded  // P2WSH:  OP_0 <32 bytes>
-                else -> {
-                    log.warn("Unexpected witness program length: {} for address {}", decoded.size, address)
-                    byteArrayOf(0x00, decoded.size.toByte()) + decoded
-                }
-            }
-        }
-        address.startsWith("bc1p") || address.startsWith("tb1p") -> {
-            val decoded = bech32Decode(address)
-            byteArrayOf(0x51, 0x20) + decoded  // P2TR: OP_1 <32 bytes>
+        address.lowercase().let { it.startsWith("bc1") || it.startsWith("tb1") } -> {
+            val (version, program) = decodeSegwitAddress(address)
+            // OP_0 or OP_1..OP_16 (0x51..0x60), then a direct push of the program
+            val versionOp = if (version == 0) 0x00 else 0x50 + version
+            byteArrayOf(versionOp.toByte(), program.size.toByte()) + program
         }
         // P2PKH: mainnet (1...) or testnet (m.../n...)
         address.startsWith("1") || address.startsWith("m") || address.startsWith("n") -> {
-            val hash = base58CheckDecode(address)
+            val hash = base58CheckDecode(address, 0x00, 0x6f)
             // OP_DUP OP_HASH160 <20 bytes> OP_EQUALVERIFY OP_CHECKSIG
             byteArrayOf(0x76.toByte(), 0xa9.toByte(), 0x14) + hash +
                     byteArrayOf(0x88.toByte(), 0xac.toByte())
         }
         // P2SH: mainnet (3...) or testnet (2...)
         address.startsWith("3") || address.startsWith("2") -> {
-            val hash = base58CheckDecode(address)
+            val hash = base58CheckDecode(address, 0x05, 0xc4)
             // OP_HASH160 <20 bytes> OP_EQUAL
             byteArrayOf(0xa9.toByte(), 0x14) + hash + byteArrayOf(0x87.toByte())
         }
@@ -179,33 +167,78 @@ object PsbtEncoding {
         return buf.toByteArray()
     }
 
-    // Bech32 Decoding
+    // Segwit Address Decoding (BIP-173 bech32, BIP-350 bech32m)
 
-    /* Decodes a bech32/bech32m address to its witness program bytes. */
-    fun bech32Decode(address: String): ByteArray {
-        val charset = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    private const val BECH32_CHARSET = "qpzry9x8gf2tvdw0s3jn54khce6mua7l"
+    private const val BECH32_CONST = 1            // BIP-173 checksum, witness version 0
+    private const val BECH32M_CONST = 0x2bc830a3  // BIP-350 checksum, witness version 1..16
+    private val SEGWIT_HRPS = setOf("bc", "tb")   // mainnet, testnet
+
+    /*
+     * Decodes a segwit address into (witness version, witness program), enforcing:
+     * US-ASCII 33..126 only, a single case, at most 90 chars, a known HRP, only bech32
+     * characters, version 0..16, a bech32 checksum for v0 and bech32m for v1+, at most
+     * 4 bits of zero padding, a 2..40 byte program, and 20 or 32 bytes for v0 (BIP-141).
+     */
+    fun decodeSegwitAddress(address: String): Pair<Int, ByteArray> {
+        require(address.length <= 90) { "Invalid bech32 address: longer than 90 characters" }
+        // Checked before any case folding: U+212A (Kelvin sign) lowercases to 'k'
+        require(address.all { it.code in 33..126 }) { "Invalid bech32 address: non-ASCII character" }
+        require(address == address.lowercase() || address == address.uppercase()) {
+            "Invalid bech32 address: mixed case in $address"
+        }
         val lower = address.lowercase()
-        val hrpEnd = lower.lastIndexOf('1')
-        require(hrpEnd >= 1) { "Invalid bech32 address: no separator" }
-        val dataPart = lower.substring(hrpEnd + 1)
-        require(dataPart.length >= 7) { "Invalid bech32 address: data part too short" }
-        // Drop witness version (first char) and checksum (last 6 chars)
-        val data = dataPart.drop(1).dropLast(6)
-        val values = data.map { c ->
-            val idx = charset.indexOf(c)
+        val sep = lower.lastIndexOf('1')
+        // Separator after a non-empty HRP, followed by the version and a 6-char checksum
+        require(sep >= 1 && lower.length - sep - 1 >= 7) { "Invalid bech32 address: data part too short" }
+        val hrp = lower.substring(0, sep)
+        require(hrp in SEGWIT_HRPS) { "Invalid bech32 address: unknown prefix '$hrp'" }
+        val values = lower.substring(sep + 1).map { c ->
+            val idx = BECH32_CHARSET.indexOf(c)
             require(idx >= 0) { "Invalid bech32 character: '$c' in address $address" }
             idx
         }
-        return convertBits(values, 5, 8)
+        val version = values[0]
+        require(version <= 16) { "Invalid witness version $version in address $address" }
+        val expected = if (version == 0) BECH32_CONST else BECH32M_CONST
+        require(bech32Polymod(hrpExpand(hrp) + values) == expected) {
+            "Invalid bech32 checksum in address $address"
+        }
+        // Drop witness version (first value) and checksum (last 6 values)
+        val program = convertBits(values.subList(1, values.size - 6), 5, 8)
+        require(program.size in 2..40) { "Invalid witness program length ${program.size} in address $address" }
+        require(version != 0 || program.size == 20 || program.size == 32) {
+            "Invalid v0 witness program length ${program.size} in address $address"
+        }
+        return version to program
+    }
+
+    /* BIP-173 HRP expansion: high bits of each char, a zero, then the low 5 bits. */
+    private fun hrpExpand(hrp: String): List<Int> =
+        hrp.map { it.code shr 5 } + 0 + hrp.map { it.code and 31 }
+
+    /* BIP-173 BCH checksum polymod over 5-bit values. */
+    private fun bech32Polymod(values: List<Int>): Int {
+        val gen = intArrayOf(0x3b6a57b2, 0x26508e6d, 0x1ea119fa, 0x3d4233dd, 0x2a1462b3)
+        var chk = 1
+        for (v in values) {
+            val top = chk ushr 25
+            chk = ((chk and 0x1ffffff) shl 5) xor v
+            for (i in 0 until 5) {
+                if ((top shr i) and 1 == 1) chk = chk xor gen[i]
+            }
+        }
+        return chk
     }
 
     // Base58Check Decoding
 
     private const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 
-    /* Decodes a Base58Check-encoded address and returns the 20-byte payload hash.
-     * Strips the version byte (first) and checksum (last 4 bytes). */
-    fun base58CheckDecode(address: String): ByteArray {
+    /* Decodes a Base58Check address and returns its 20-byte hash. The decoded bytes must be
+     * version (1) + hash (20) + checksum (4), the version must be one of [versions], and the
+     * checksum must equal the first 4 bytes of SHA-256(SHA-256(version + hash)). */
+    fun base58CheckDecode(address: String, vararg versions: Int): ByteArray {
         var num = java.math.BigInteger.ZERO
         val base = java.math.BigInteger.valueOf(58)
         for (c in address) {
@@ -213,17 +246,19 @@ object PsbtEncoding {
             require(digit >= 0) { "Invalid Base58 character: '$c' in address $address" }
             num = num.multiply(base).add(java.math.BigInteger.valueOf(digit.toLong()))
         }
-        // Convert to 25 bytes (1 version + 20 payload + 4 checksum)
-        val bytes = num.toByteArray()
-        // BigInteger may add a leading zero byte for positive sign
-        val padded = if (bytes.size < 25) ByteArray(25 - bytes.size) + bytes
-                     else if (bytes.size > 25) bytes.takeLast(25).toByteArray()
-                     else bytes
-        // Return bytes 1..20 (skip version byte, drop 4-byte checksum)
-        return padded.sliceArray(1..20)
+        // Each leading '1' encodes a zero byte; dropWhile strips BigInteger's sign byte
+        val leadingZeros = address.takeWhile { it == '1' }.length
+        val bytes = ByteArray(leadingZeros) + num.toByteArray().dropWhile { it == 0.toByte() }
+        require(bytes.size == 25) { "Invalid Base58Check address length: $address" }
+        require((bytes[0].toInt() and 0xff) in versions) { "Unexpected Base58Check version byte in address $address" }
+        val sha256 = java.security.MessageDigest.getInstance("SHA-256")
+        val checksum = sha256.digest(sha256.digest(bytes.copyOfRange(0, 21))).copyOfRange(0, 4)
+        require(checksum.contentEquals(bytes.copyOfRange(21, 25))) { "Invalid Base58Check checksum in address $address" }
+        return bytes.copyOfRange(1, 21)
     }
 
-    /* Converts between bit groups (e.g. 5-bit bech32 values to 8-bit bytes). */
+    /* Regroups 5-bit bech32 values into bytes. Per BIP-173 the leftover padding
+     * must be at most 4 bits and all zero. */
     private fun convertBits(data: List<Int>, fromBits: Int, toBits: Int): ByteArray {
         var acc = 0
         var bits = 0
@@ -236,6 +271,9 @@ object PsbtEncoding {
                 bits -= toBits
                 result.add(((acc shr bits) and maxv).toByte())
             }
+        }
+        require(bits < fromBits && ((acc shl (toBits - bits)) and maxv) == 0) {
+            "Invalid bech32 padding"
         }
         return result.toByteArray()
     }

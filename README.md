@@ -165,8 +165,8 @@ The thesis documents five fixed bugs in §4.5; these three are the ones with nam
 cd wallet-backend && ./gradlew test
 ```
 
-116 test methods across 12 classes in 5 backend modules (JUnit reports 140: four are parameterised
-over 28 cases), run by GitHub Actions on every push to master. The suite is offline and
+123 test methods across 13 classes in 5 backend modules (JUnit reports 181: eight are parameterised
+over 66 cases), run by GitHub Actions on every push to master. The suite is offline and
 deterministic; `RefreshStoreTest`, `DeviceRepositoryTest` and `PsbtRepositoryTest` use in-memory H2
 in PostgreSQL mode.
 
@@ -174,6 +174,7 @@ in PostgreSQL mode.
 |---|---|
 | [`PsbtBuilderRoundtripTest`](wallet-backend/psbt-service/src/test/kotlin/builder/PsbtBuilderRoundtripTest.kt) | Every generated PSBT reparses, and carries the records Trezor firmware requires |
 | [`PsbtEncodingTest`](wallet-backend/psbt-service/src/test/kotlin/builder/PsbtEncodingTest.kt) | Binary BIP-174 record encoding; bech32 against BIP-173 vectors |
+| [`AddressDecodingTest`](wallet-backend/psbt-service/src/test/kotlin/builder/AddressDecodingTest.kt) | Address checksum validation; BIP-173 and BIP-350 valid and invalid vectors, Base58Check |
 | [`PsbtBuilderTest`](wallet-backend/psbt-service/src/test/kotlin/builder/PsbtBuilderTest.kt) | Transaction vsize and fee estimation against the BIP-141 formula, singlesig and M-of-N |
 | [`TrezorParamsBuilderTest`](wallet-backend/psbt-service/src/test/kotlin/builder/TrezorParamsBuilderTest.kt) | PSBT → Trezor Connect parameter translation; BIP-32 vectors |
 | [`PsbtRepositoryTest`](wallet-backend/psbt-service/src/test/kotlin/db/PsbtRepositoryTest.kt) | PSBT state machine and signature accumulation |
@@ -186,10 +187,10 @@ in PostgreSQL mode.
 | [`WalletExplorerTest`](wallet-backend/explorer-service/src/test/kotlin/service/WalletExplorerTest.kt) | Balance and UTXO aggregation |
 
 **Pinned to published specification vectors:** BIP-32 (`TrezorParamsBuilderTest`), BIP-84
-(`AddressDerivationTest`), BIP-173 bech32 (`PsbtEncodingTest`). Passing these means the derivation
-and encoding agree with the reference implementations; a chance match on a 42-character address is
-not a realistic failure mode. The wallet independently derives the same address set as Sparrow for
-the same descriptor.
+(`AddressDerivationTest`), BIP-173 bech32 and BIP-350 bech32m (`PsbtEncodingTest`,
+`AddressDecodingTest`). Passing these means the derivation and encoding agree with the reference
+implementations; a chance match on a 42-character address is not a realistic failure mode. The
+wallet independently derives the same address set as Sparrow for the same descriptor.
 
 Testing is concentrated on the backend, where the consensus-critical logic lives; the Compose layer
 is exercised manually and against testnet.
@@ -197,6 +198,16 @@ is exercised manually and against testnet.
 **End-to-end:** verified on Bitcoin testnet with a complete 2-of-3 multisig transaction:
 import, address derivation, coin control, PSBT creation, two hardware signatures, broadcast,
 confirmation. Mainnet was deliberately not tested (thesis §4.6).
+
+## Limitations
+
+- Tested on Bitcoin testnet only. Mainnet was deliberately left untested.
+- The pending Trezor Connect request id lives in memory only. If Android kills the app while the
+  user is signing, the callback that arrives afterwards is rejected (the app fails closed) and the
+  user signs again.
+- Address checksum validation (BIP-173 bech32, BIP-350 bech32m, Base58Check) was added on
+  2026-09-25, after the thesis defense. The git tag `thesis-defended` points at the code as it was
+  defended.
 
 ## Design documents
 

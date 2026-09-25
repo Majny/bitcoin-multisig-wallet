@@ -203,7 +203,7 @@ class PsbtEncodingTest {
     fun `addressToScript decodes testnet P2WSH address from BIP-173`() {
         // BIP-173 test vector for testnet P2WSH. 32-byte witness program → OP_0 + 0x20 push prefix.
         val script = PsbtEncoding.addressToScript(
-            "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"
+            "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7"
         )
         assertEquals(
             "00201863143c14c5166804bd19203356da136c985678cd4d27a1b8c6329604903262",

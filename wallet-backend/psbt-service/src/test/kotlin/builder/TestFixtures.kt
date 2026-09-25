@@ -17,7 +17,7 @@ object TestFixtures {
      * not derived from any specific wallet key.
      */
     const val TESTNET_ADDR =
-        "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3qccfmv3"
+        "tb1qrp33g0q5c5txsp9arysrx4k6zdkfs4nce4xj0gdcccefvpysxf3q0sl5k7"
 
     /*
      * Generates a deterministic testnet xpub (tpub) from a hex-encoded seed.

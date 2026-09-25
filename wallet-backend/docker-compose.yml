@@ -57,47 +57,10 @@ services:
       JWT_ISSUER: wallet-auth
       JWT_AUDIENCE: wallet-gateway
       JWT_KID: "dev-kid-1"
-      # Local dev keys. Replace via .env or docker-compose.override.yml,
-      # or set JWT_DEV_ALLOW_GENERATE_KEYS=true to generate ephemeral ones.
-      JWT_RSA_PRIVATE_PEM: |
-        -----BEGIN PRIVATE KEY-----
-        MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQCXNLukkPFnBMQ6
-        egseiOI3xU9l24iWMome6sZCg+CQT2W3altOlJaivyNOkuL8eLAO3HxSnqYNCEHT
-        NBkx8DANVr3RHWp9GZ+UtXsnMTJktTJnJEFFZny21XZ/PM8/9W6XLmZ5HCVnoF1k
-        P1+VVJzobjUmC//RPRx6A9e+NhdTU6PYBZDHER8HJckbAQoIcHZt+h2MPsJa8LLU
-        4QcRqunnay684/Ks5TYv2KslAbCMqxkCPPD+uwx3dxjisJPytCTnaDa1a7QNTKGx
-        VkcUl4kJ06bGvNUw9DOEPL0VEYmaN7oKblhaMByUOo48/jJzWuGOPPo+iQyk+g+B
-        rrw7esQzAgMBAAECggEADbLNnYSZSIuvGii5V8K8Uwokl2YMQAzQpZDADzTMXbaO
-        6mipYGHOXdMlwZx43oX+iT7vYm36115pCQqeWuuKjU+cJbt3ZmFkyplAaklAnZmo
-        bDcY7k697xoN2kwdIiTvKAu5/xanytur6lH73yPJwILpFlfRWfIiSAMpT5NHiX+V
-        v04fgQdwqLMHn07n/HXo3EF9937NqCrkygvcRu43+EYfRfAi8jArMk2TylmNfBsi
-        TxpOJTChXc15Yi9ISZ8/RtaQM3bcj0Tt/Zh+jbFfbSzSjMGroRj/TbYXWmwZYBx4
-        lRYJkImZQQn+0HUQo56+CwCINdw0XiPXN4dbSUN3DQKBgQDNbP+vC1kF8fN0ScyW
-        Cir0pst6EOPhfXcufsjaIASe8Duk2x/rSrA4qbc8l3A0GalLUy4AlHxY2n42ViRa
-        sPfULEaOAbsDfbELnqBMO/9xty1gnrkbCtdrrLVH6O8PS2oZV7Q0U31HOvIEZLkP
-        deWolyHvbGI4Ug4QT7ixlJ5/1wKBgQC8boVkWbP/f+hvoVOHJtPoy5YlFqkHyuoy
-        dHbN0JQu/uiJEHucHHW8YADOKPYDMlxNNK6w1Inh+cjdqmUc+vUIJeamv10Xy5WU
-        67ddujZqslQw0G38Yw/S58nzSRKdcqujgKvkgcYlXlE7n6C5+oonOZOFGgty4IS9
-        1cX05NtDBQKBgQCUby01U5LI+/I5VdYRmFk/nIIsuqWe2qTSoOQK0NXl7pp6Xadr
-        wfUhjGiNzLNTwjMU7Y6w9pn/LinCo23zZio9UpzMoa17MUhLqBwV2ciTZ5PPXAFO
-        6/+KmyoGQubye0C3/SqGIMnGPW6BBDLAXCVNM59evEcggRIOcTx4fHYm0wKBgQCF
-        3n8mLBSVEGox5ItTGWKzoO+qqc6smpyH+/XrgqPEP5U0y2EGJ7H9grcPwEoHO2AX
-        +bWiK11KDguGb+gmDqTGhSa4kHuyzBAZHN3I2OKQKuFlTK7XAAnd7I6tKNzwvubx
-        4hg833XGVpufoGivuC8ubtk/VqGLm7ayp41bzrt3gQKBgQCAUvUWOojyM7nbUzgz
-        ifspT+efP3NoI9uUzjgBEoKesaH9t0Te36sS1+bqYZ2UPUPjq7V9CHo2nu6aKvjw
-        iecVDPAzbYlIy1ZUam2kNzR3DLyxuWeCaJgzEm5Q8U8Ig18D6Ey2F/0drMm+37g5
-        cjq1AkdOH5QQAKPBzzs+2WLFvA==
-        -----END PRIVATE KEY-----
-      JWT_RSA_PUBLIC_PEM: |
-        -----BEGIN PUBLIC KEY-----
-        MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAlzS7pJDxZwTEOnoLHoji
-        N8VPZduIljKJnurGQoPgkE9lt2pbTpSWor8jTpLi/HiwDtx8Up6mDQhB0zQZMfAw
-        DVa90R1qfRmflLV7JzEyZLUyZyRBRWZ8ttV2fzzPP/Vuly5meRwlZ6BdZD9flVSc
-        6G41Jgv/0T0cegPXvjYXU1Oj2AWQxxEfByXJGwEKCHB2bfodjD7CWvCy1OEHEarp
-        52suvOPyrOU2L9irJQGwjKsZAjzw/rsMd3cY4rCT8rQk52g2tWu0DUyhsVZHFJeJ
-        CdOmxrzVMPQzhDy9FRGJmje6Cm5YWjAclDqOPP4yc1rhjjz6PokMpPoPga68O3rE
-        MwIDAQAB
-        -----END PUBLIC KEY-----
+      # Local dev: auth-service generates an ephemeral RSA key pair at startup (tokens do not
+      # survive a restart). For fixed keys set JWT_RSA_PRIVATE_PEM / JWT_RSA_PUBLIC_PEM instead.
+      # The RSA key committed here before was for local development only and is no longer accepted.
+      JWT_DEV_ALLOW_GENERATE_KEYS: "true"
       AUTH_DB_URL: jdbc:postgresql://postgres:5432/wallet_auth
       AUTH_DB_USER: wallet
       AUTH_DB_PASSWORD: wallet
